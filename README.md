@@ -23,7 +23,12 @@ time away for an event title would be a downgrade you pay for all day.
 - The selected day's agenda under the grid, click any day to see it
 - The next event today, with a live countdown, in the panel header
 - The bar label announces what is next, minutes before it starts
+- A **Join** button on meetings that have a video link, shown only from 15
+  minutes before the start until 15 minutes after the end
+- Clicking any event opens it in your calendar
 - Per-calendar visibility, week start, and countdown lead time in a settings page
+- Google's working-location markers hidden by default, declined invitations
+  struck through
 - Everything the built-in Omarchy clock does: label formats, right click to
   cycle them, the year and life progress bars if you want them back
 - Theme aware, because it is a fork of the built-in clock
@@ -138,6 +143,15 @@ a shell script, a cron job of your own. No credentials, no network, no `gws`.
 }
 ```
 
+These four extra fields are optional. Omit them and everything still works:
+
+| Field | Effect |
+|---|---|
+| `meetingUrl` | Shows the **Join** button around the event's time. Must be `https`, anything else is dropped |
+| `eventUrl` | Clicking the row opens this. Must be `https` |
+| `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
+| `responseStatus` | `declined` is struck through, and can be hidden entirely |
+
 Rules a writer has to follow:
 
 - `dateKey` is `YYYY-MM-DD` in local time, and it is what the grid keys on.
@@ -161,6 +175,8 @@ Click the clock, then the gear icon in the panel header.
 |---|---|
 | Calendars | Show or hide each calendar. The list comes from your own events, so it needs no configuration |
 | Week starts on Monday | Off starts the week on Sunday |
+| Working location events | Google's work-from-home markers. Hidden by default because they are all-day rows describing no commitment |
+| Hide declined invitations | Off keeps them listed and struck through |
 | Year and life progress | Brings back the built-in clock's bars, off by default |
 | Bar label | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes |
 | Sync | Event count, source and last sync time, for diagnosing a quiet calendar |
@@ -199,6 +215,8 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | The panel says the calendar may be out of date | The file exists but `syncedAt` is old. Check the journal above |
 | An event shows up twice | Two of your calendars both carry it. Hide one in settings. The sync already drops exact duplicates by iCalUID and start time |
 | `The project ID you specified is already in use` during setup | Fixed in 0.1.1. Google Cloud project ids are unique across all of Google, and older versions hardcoded one. Update the plugin, or pass your own: `PROJECT_ID=something-unique sync/setup` |
+| Clicking an event opens your calendar but not the event | The link resolves only for the Google account the sync authenticated as. If your browser opens it in a profile signed into a different account, Google falls back to the calendar root. Route `google.com/calendar` to the profile holding that account |
+| The Join button never appears | It only shows from 15 minutes before the start until 15 minutes after the end, and only when the event has a video link |
 | Events are off by a day | Report it. Timezone handling resolves a named IANA zone precisely to avoid this, and there is a regression test for daylight saving transitions |
 
 ## Uninstall

@@ -57,3 +57,33 @@ class TestBuildDocument(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOptionalFields(unittest.TestCase):
+    def load(self):
+        return json.loads((FIXTURES / "calendar-events.json").read_text())
+
+    def test_a_document_without_the_optional_fields_is_still_valid(self):
+        # Third-party writers predate these fields. Upgrading must not break them.
+        doc = self.load()
+        for event in doc["events"]:
+            for field in contract.OPTIONAL_EVENT_FIELDS:
+                event.pop(field, None)
+        self.assertEqual(contract.validate(doc), [])
+
+    def test_optional_fields_are_type_checked_when_present(self):
+        doc = self.load()
+        doc["events"][0]["eventType"] = 42
+        problems = contract.validate(doc)
+        self.assertTrue(any("eventType" in p for p in problems))
+
+    def test_a_non_https_meeting_url_is_rejected(self):
+        doc = self.load()
+        doc["events"][0]["meetingUrl"] = "javascript:alert(1)"
+        problems = contract.validate(doc)
+        self.assertTrue(any("meetingUrl" in p for p in problems))
+
+    def test_an_empty_meeting_url_is_accepted(self):
+        doc = self.load()
+        doc["events"][0]["meetingUrl"] = ""
+        self.assertEqual(contract.validate(doc), [])

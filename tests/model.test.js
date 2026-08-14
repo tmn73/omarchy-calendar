@@ -278,3 +278,122 @@ test('truncateTitle does not leave a dangling space before the ellipsis', () => 
 test('truncateTitle tolerates null', () => {
   assert.equal(Model.truncateTitle(null, 10), '')
 })
+
+const TYPED = [
+  { id: 'a', calendarId: 'w', dateKey: '2026-08-10', eventType: 'default', responseStatus: 'accepted' },
+  { id: 'b', calendarId: 'w', dateKey: '2026-08-10', eventType: 'workingLocation', responseStatus: '' },
+  { id: 'c', calendarId: 'w', dateKey: '2026-08-10', eventType: 'default', responseStatus: 'declined' },
+  { id: 'd', calendarId: 'w', dateKey: '2026-08-10', eventType: 'outOfOffice', responseStatus: '' }
+]
+
+test('visibleEvents hides workingLocation by default', () => {
+  const ids = Model.visibleEvents(TYPED, []).map(e => e.id)
+  assert.deepEqual(ids, ['a', 'c', 'd'])
+})
+
+test('visibleEvents can show workingLocation when asked', () => {
+  const ids = Model.visibleEvents(TYPED, [], { hideWorkingLocation: false }).map(e => e.id)
+  assert.deepEqual(ids, ['a', 'b', 'c', 'd'])
+})
+
+test('visibleEvents hides declined only when asked', () => {
+  assert.deepEqual(Model.visibleEvents(TYPED, [], { hideDeclined: true }).map(e => e.id), ['a', 'd'])
+  assert.deepEqual(Model.visibleEvents(TYPED, [], { hideDeclined: false }).map(e => e.id), ['a', 'c', 'd'])
+})
+
+test('visibleEvents still applies the calendar filter alongside type filters', () => {
+  assert.deepEqual(Model.visibleEvents(TYPED, ['w']).map(e => e.id), [])
+})
+
+test('visibleEvents with no options behaves as the old two-argument call', () => {
+  const plain = [{ id: 'x', calendarId: 'w', dateKey: '2026-08-10' }]
+  assert.deepEqual(Model.visibleEvents(plain, []).map(e => e.id), ['x'])
+})
+
+test('isDeclined and isOutOfOffice read the right fields', () => {
+  assert.equal(Model.isDeclined(TYPED[2]), true)
+  assert.equal(Model.isDeclined(TYPED[0]), false)
+  assert.equal(Model.isDeclined(null), false)
+  assert.equal(Model.isOutOfOffice(TYPED[3]), true)
+  assert.equal(Model.isOutOfOffice(TYPED[0]), false)
+})
+
+test('safeUrl only lets https through', () => {
+  assert.equal(Model.safeUrl('https://meet.google.com/abc'), 'https://meet.google.com/abc')
+  assert.equal(Model.safeUrl('http://meet.google.com/abc'), '')
+  assert.equal(Model.safeUrl('javascript:alert(1)'), '')
+  assert.equal(Model.safeUrl('file:///etc/passwd'), '')
+  assert.equal(Model.safeUrl(''), '')
+  assert.equal(Model.safeUrl(null), '')
+})
+
+test('safeUrl rejects anything that could break out of an argument', () => {
+  assert.equal(Model.safeUrl('https://ok.com; rm -rf ~'), '')
+  assert.equal(Model.safeUrl('https://ok.com "quoted"'), '')
+  assert.equal(Model.safeUrl("https://ok.com'x"), '')
+  assert.equal(Model.safeUrl('https://ok.com<script>'), '')
+})
+
+test('meetingUrlFor is empty rather than undefined when absent', () => {
+  assert.equal(Model.meetingUrlFor({ id: 'x' }), '')
+  assert.equal(Model.meetingUrlFor(null), '')
+  assert.equal(Model.meetingUrlFor({ meetingUrl: 'https://z.com/1' }), 'https://z.com/1')
+})
+
+const meeting = (start, end, extra = {}) => ({
+  id: 's', title: 'Standup', allDay: false, dateKey: '2026-08-10',
+  start, end, meetingUrl: 'https://meet.google.com/x', ...extra
+})
+const TKEY = '2026-08-10'
+
+test('isJoinableNow opens 15 minutes before the start', () => {
+  const e = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00')
+  const at = t => Model.isJoinableNow(e, Date.parse(t), TKEY)
+  assert.equal(at('2026-08-10T08:44:00-05:00'), false)
+  assert.equal(at('2026-08-10T08:45:00-05:00'), true)
+})
+
+test('isJoinableNow stays open during the meeting', () => {
+  const e = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00')
+  assert.equal(Model.isJoinableNow(e, Date.parse('2026-08-10T09:15:00-05:00'), TKEY), true)
+})
+
+test('isJoinableNow keeps a 15 minute grace after the end', () => {
+  const e = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00')
+  const at = t => Model.isJoinableNow(e, Date.parse(t), TKEY)
+  assert.equal(at('2026-08-10T09:45:00-05:00'), true)
+  assert.equal(at('2026-08-10T09:46:00-05:00'), false)
+})
+
+test('isJoinableNow is false for a meeting on another day', () => {
+  const e = meeting('2026-08-14T09:00:00-05:00', '2026-08-14T09:30:00-05:00')
+  assert.equal(Model.isJoinableNow(e, Date.parse('2026-08-10T09:00:00-05:00'), TKEY), false)
+})
+
+test('isJoinableNow needs a usable link', () => {
+  const noLink = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00', { meetingUrl: '' })
+  const bad = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T09:30:00-05:00', { meetingUrl: 'javascript:x' })
+  const now = Date.parse('2026-08-10T09:05:00-05:00')
+  assert.equal(Model.isJoinableNow(noLink, now, TKEY), false)
+  assert.equal(Model.isJoinableNow(bad, now, TKEY), false)
+})
+
+test('isJoinableNow treats an all-day event as joinable for its whole day', () => {
+  const e = meeting('2026-08-10T00:00:00-05:00', '2026-08-11T00:00:00-05:00', { allDay: true })
+  assert.equal(Model.isJoinableNow(e, Date.parse('2026-08-10T20:00:00-05:00'), TKEY), true)
+  assert.equal(Model.isJoinableNow(e, Date.parse('2026-08-10T20:00:00-05:00'), '2026-08-11'), false)
+})
+
+test('isJoinableNow survives an unreadable or inverted time range', () => {
+  const bad = meeting('nope', 'nope')
+  assert.equal(Model.isJoinableNow(bad, Date.parse('2026-08-10T09:00:00-05:00'), TKEY), false)
+  const inverted = meeting('2026-08-10T09:00:00-05:00', '2026-08-10T08:00:00-05:00')
+  assert.equal(Model.isJoinableNow(inverted, Date.parse('2026-08-10T09:05:00-05:00'), TKEY), true)
+})
+
+test('eventUrlFor mirrors meetingUrlFor and is https only', () => {
+  assert.equal(Model.eventUrlFor({ eventUrl: 'https://calendar.google.com/e' }), 'https://calendar.google.com/e')
+  assert.equal(Model.eventUrlFor({ eventUrl: 'http://calendar.google.com/e' }), '')
+  assert.equal(Model.eventUrlFor({}), '')
+  assert.equal(Model.eventUrlFor(null), '')
+})

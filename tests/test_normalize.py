@@ -176,3 +176,73 @@ class TestNormalizeAll(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMeetingUrl(unittest.TestCase):
+    def test_hangout_link_is_used(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["hangoutLink"] = "https://meet.google.com/abc-defg-hij"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["meetingUrl"], "https://meet.google.com/abc-defg-hij")
+
+    def test_conference_data_video_entry_is_used_when_no_hangout_link(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["conferenceData"] = {
+            "entryPoints": [
+                {"entryPointType": "phone", "uri": "tel:+15551234"},
+                {"entryPointType": "video", "uri": "https://zoom.us/j/123"},
+            ]
+        }
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["meetingUrl"], "https://zoom.us/j/123")
+
+    def test_non_https_schemes_are_dropped(self):
+        # A meeting link comes from whoever sent the invitation, so anything
+        # the widget should not launch must never reach it.
+        for hostile in (
+            "http://meet.example.com/x",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "https://ok.example.com; rm -rf ~",
+        ):
+            event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+            event["hangoutLink"] = hostile
+            rows = normalize.normalize_event(event, CAL, BOGOTA)
+            self.assertEqual(rows[0]["meetingUrl"], "", hostile)
+
+    def test_missing_link_is_an_empty_string_not_none(self):
+        rows = normalize.normalize_event(
+            timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00"), CAL, BOGOTA
+        )
+        self.assertEqual(rows[0]["meetingUrl"], "")
+        self.assertEqual(rows[0]["eventUrl"], "")
+
+
+class TestEventTypeAndResponse(unittest.TestCase):
+    def test_event_type_is_carried(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["eventType"] = "workingLocation"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["eventType"], "workingLocation")
+
+    def test_own_response_status_is_picked_from_attendees(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["attendees"] = [
+            {"email": "someone@example.com", "responseStatus": "accepted"},
+            {"email": "me@example.com", "self": True, "responseStatus": "declined"},
+        ]
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["responseStatus"], "declined")
+
+    def test_no_attendees_means_no_response_status(self):
+        rows = normalize.normalize_event(
+            timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00"), CAL, BOGOTA
+        )
+        self.assertEqual(rows[0]["responseStatus"], "")
+
+    def test_every_row_of_a_multi_day_event_carries_the_extras(self):
+        event = timed("2026-08-10T23:00:00-05:00", "2026-08-11T01:00:00-05:00")
+        event["hangoutLink"] = "https://meet.google.com/x"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(r["meetingUrl"] == "https://meet.google.com/x" for r in rows))

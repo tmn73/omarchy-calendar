@@ -18,6 +18,8 @@ Column {
   property var hiddenCalendars: []
   property bool showYearProgress: false
   property bool weekStartsMonday: true
+  property bool showWorkingLocation: false
+  property bool hideDeclined: false
   property int announceLeadMinutes: 15
 
   property string syncedAt: ""
@@ -28,6 +30,8 @@ Column {
   signal calendarToggled(string calendarId)
   signal yearProgressToggled()
   signal weekStartToggled()
+  signal workingLocationToggled()
+  signal hideDeclinedToggled()
   signal leadMinutesPicked(int minutes)
 
   readonly property color muted: Qt.darker(foreground, 1.5)
@@ -157,6 +161,20 @@ Column {
     hint: qsTr("Off starts the week on Sunday")
     checked: root.weekStartsMonday
     onActivated: root.weekStartToggled()
+  }
+
+  ToggleRow {
+    label: qsTr("Working location events")
+    hint: qsTr("Google's work-from-home markers, hidden by default")
+    checked: root.showWorkingLocation
+    onActivated: root.workingLocationToggled()
+  }
+
+  ToggleRow {
+    label: qsTr("Hide declined invitations")
+    hint: qsTr("Off keeps them listed, struck through")
+    checked: root.hideDeclined
+    onActivated: root.hideDeclinedToggled()
   }
 
   ToggleRow {

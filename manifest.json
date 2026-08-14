@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tmn73.calendar",
   "name": "Calendar",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "tmn73",
   "description": "Your Google Calendar in the bar, with a month view and a countdown to what is next",
   "kinds": [

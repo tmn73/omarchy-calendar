@@ -10,6 +10,43 @@ from datetime import date, datetime, time, timedelta
 NO_TITLE = "(no title)"
 
 
+def _https_only(value):
+    """Keep a URL only if it is https.
+
+    Meeting links come from whoever sent the invitation, not from the user, so
+    anything else is dropped rather than handed to the widget to launch.
+    """
+    text = str(value or "").strip()
+    return text if text.startswith("https://") and " " not in text else ""
+
+
+def _meeting_url(gevent):
+    """The video link for an event, preferring the one Google resolves itself."""
+    direct = _https_only(gevent.get("hangoutLink"))
+    if direct:
+        return direct
+
+    conference = gevent.get("conferenceData") or {}
+    for entry in conference.get("entryPoints") or []:
+        if entry.get("entryPointType") == "video":
+            found = _https_only(entry.get("uri"))
+            if found:
+                return found
+    return ""
+
+
+def _response_status(gevent):
+    """The user's own answer to the invitation, blank when not invited.
+
+    Google marks the user's own row in `attendees` with self: true. An event
+    the user created alone has no attendees at all.
+    """
+    for attendee in gevent.get("attendees") or []:
+        if attendee.get("self"):
+            return str(attendee.get("responseStatus") or "")
+    return ""
+
+
 def normalize_all(gevents, calendar, tz):
     """Normalize a list of Google events, flattening the per-day rows."""
     rows = []
@@ -52,6 +89,11 @@ def normalize_event(gevent, calendar, tz):
     start_iso = start_dt.isoformat()
     end_iso = end_dt.isoformat()
 
+    meeting_url = _meeting_url(gevent)
+    event_url = _https_only(gevent.get("htmlLink"))
+    event_type = str(gevent.get("eventType") or "")
+    response_status = _response_status(gevent)
+
     return [
         {
             "id": gevent.get("id", ""),
@@ -64,6 +106,10 @@ def normalize_event(gevent, calendar, tz):
             "allDay": all_day,
             "title": title,
             "location": location,
+            "meetingUrl": meeting_url,
+            "eventUrl": event_url,
+            "eventType": event_type,
+            "responseStatus": response_status,
         }
         for day in _covered_days(start_dt, end_dt, all_day)
     ]

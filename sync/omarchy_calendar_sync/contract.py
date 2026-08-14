@@ -24,8 +24,23 @@ EVENT_FIELDS = (
     "location",
 )
 
+# Deliberately optional. The README promises that anything able to write this
+# file works, so khal, vdirsyncer and hand-rolled scripts are consumers of this
+# schema. Making a new field required would break every one of them on upgrade.
+# Validated for type when present, never demanded.
+OPTIONAL_EVENT_FIELDS = (
+    "meetingUrl",
+    "eventUrl",
+    "eventType",
+    "responseStatus",
+)
+
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+# https only. Meeting links arrive from whoever sent the invitation, so the
+# widget must never be handed a scheme it would be unwise to launch.
+_HTTPS_URL = re.compile(r"^https://[^\s]+$")
 
 
 def build_document(events, synced_at, source):
@@ -89,5 +104,14 @@ def _validate_event(index, event):
     for field in ("id", "calendarId", "calendarName", "start", "end", "title"):
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string")
+
+    for field in OPTIONAL_EVENT_FIELDS:
+        if field in event and not isinstance(event[field], str):
+            problems.append(f"{where}.{field} must be a string when present")
+
+    for field in ("meetingUrl", "eventUrl"):
+        value = event.get(field)
+        if isinstance(value, str) and value and not _HTTPS_URL.match(value):
+            problems.append(f"{where}.{field} must be an https URL")
 
     return problems

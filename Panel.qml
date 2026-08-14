@@ -124,7 +124,10 @@ Panel {
 
   function rebuildIndex() {
     var all = root.eventDoc ? root.eventDoc.events : []
-    root.visibleEventList = Model.visibleEvents(all, root.hiddenCalendars)
+    root.visibleEventList = Model.visibleEvents(all, root.hiddenCalendars, {
+      hideWorkingLocation: !root.showWorkingLocation,
+      hideDeclined: root.hideDeclined
+    })
     root.eventIndex = Model.indexEventsByDate(root.visibleEventList)
   }
 
@@ -138,6 +141,12 @@ Panel {
   // most people want in that slot is what is coming up next, not how much of
   // the year is gone.
   readonly property bool showYearProgress: setting("showYearProgress", false)
+
+  // Google's working-location markers arrive as all-day events and describe no
+  // commitment, so they are out by default. Declined invitations stay in by
+  // default: you probably still want to see what you said no to.
+  readonly property bool showWorkingLocation: setting("showWorkingLocation", false)
+  readonly property bool hideDeclined: setting("hideDeclined", false)
 
   // Hiding happens here rather than in the sync, so toggling a calendar back
   // on is instant instead of waiting for the next fetch. The sync keeps
@@ -170,7 +179,37 @@ Panel {
 
   property bool settingsOpen: false
 
+  function toggleWorkingLocation() {
+    persistSettings({ showWorkingLocation: !root.showWorkingLocation })
+  }
+
+  function toggleHideDeclined() {
+    persistSettings({ hideDeclined: !root.hideDeclined })
+  }
+
+  // Qt.openUrlExternally rather than the shell helper on purpose. That helper
+  // runs `bash -lc`, and a meeting link is supplied by whoever sent the
+  // invitation, so putting it through a shell would be a command injection.
+  // Model.safeUrl also refuses anything that is not plain https.
+  function openExternally(url) {
+    if (!url) return
+    Qt.openUrlExternally(url)
+    root.close()
+  }
+
+  function openMeeting(event) {
+    root.openExternally(Model.meetingUrlFor(event))
+  }
+
+  // Clicking the row opens the event itself. Joining is the button's job, so
+  // both actions stay reachable while a meeting is live.
+  function openEvent(event) {
+    root.openExternally(Model.eventUrlFor(event))
+  }
+
   onHiddenCalendarsChanged: root.rebuildIndex()
+  onShowWorkingLocationChanged: root.rebuildIndex()
+  onHideDeclinedChanged: root.rebuildIndex()
   onSettingsChanged: root.adoptSettings()
   Component.onCompleted: root.adoptSettings()
 
@@ -979,52 +1018,133 @@ Panel {
             Repeater {
               model: root.selectedEvents
 
-              Row {
+              // The hover wash lives on this wrapper, never inside the Row. A
+              // Row lays out every visible child, so an anchored background
+              // added as a Row child fights the layout and ejects the content.
+              Rectangle {
+                id: eventRow
                 required property var modelData
 
+                readonly property string meetingUrl: Model.meetingUrlFor(modelData)
+                readonly property bool declined: Model.isDeclined(modelData)
+                // Only around the actual time. A Join button on next week's
+                // meeting is noise that dilutes the one that matters.
+                readonly property bool joinable: Model.isJoinableNow(modelData, root.nowTick.getTime(), root.todayKey)
+                readonly property string eventUrl: Model.eventUrlFor(modelData)
+                readonly property bool openable: eventUrl !== ""
+
                 width: gridColumn.width
-                spacing: Style.space(4)
+                height: eventBody.height + Style.space(2)
+                radius: Style.cornerRadius
+                color: eventHover.hovered
+                  ? Qt.rgba(root.contentForeground.r, root.contentForeground.g,
+                            root.contentForeground.b, 0.08)
+                  : "transparent"
+
+                // Only rows that can actually do something respond to a click.
+                HoverHandler {
+                  id: eventHover
+                  enabled: eventRow.openable || eventRow.joinable
+                  cursorShape: Qt.PointingHandCursor
+                }
+
+                TapHandler {
+                  enabled: eventRow.openable
+                  onTapped: root.openEvent(eventRow.modelData)
+                }
+
+                Rectangle {
+                  id: joinButton
+                  visible: eventRow.joinable
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: joinLabel.implicitWidth + Style.space(8)
+                  height: joinLabel.implicitHeight + Style.space(3)
+                  radius: height / 2
+                  color: eventHover.hovered
+                    ? Style.selectedStateColor(root.contentForeground, Color.accent)
+                    : "transparent"
+                  border.width: Style.spacing.hairline
+                  border.color: eventHover.hovered
+                    ? "transparent"
+                    : Qt.darker(root.contentForeground, 2.0)
+
+                  // Its own handler, declared on the button, so the grab
+                  // happens here and the row's opener does not also fire.
+                  TapHandler {
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: root.openMeeting(eventRow.modelData)
+                  }
+
+                  Text {
+                    id: joinLabel
+                    anchors.centerIn: parent
+                    text: qsTr("Join")
+                    color: eventHover.hovered ? Color.background : Qt.darker(root.contentForeground, 1.4)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+
+                Row {
+                  id: eventBody
+                  anchors.left: parent.left
+                  anchors.right: eventRow.joinable ? joinButton.left : parent.right
+                  anchors.rightMargin: eventRow.joinable ? Style.space(3) : 0
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(4)
 
                 Rectangle {
                   width: Style.space(2)
                   height: eventLines.height
                   radius: width / 2
-                  color: modelData.color
+                  color: eventRow.declined
+                    ? Qt.darker(eventRow.modelData.color, 2.2)
+                    : eventRow.modelData.color
                 }
 
                 Text {
                   width: Style.space(44)
-                  text: modelData.allDay
+                  text: eventRow.modelData.allDay
                     ? qsTr("All day")
-                    : Qt.formatDateTime(new Date(modelData.start), "HH:mm")
-                  color: Qt.darker(root.contentForeground, 1.5)
+                    : Qt.formatDateTime(new Date(eventRow.modelData.start), "HH:mm")
+                  color: Qt.darker(root.contentForeground, eventRow.declined ? 2.2 : 1.5)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
+                  font.strikeout: eventRow.declined
                 }
 
                 Column {
                   id: eventLines
-                  width: parent.width - Style.space(54)
+                  width: eventBody.width - Style.space(54)
                   spacing: Style.space(1)
 
                   Text {
                     width: parent.width
-                    text: modelData.title
-                    color: root.contentForeground
+                    text: eventRow.modelData.title
+                    color: eventRow.declined
+                      ? Qt.darker(root.contentForeground, 2.0)
+                      : root.contentForeground
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.bodySmall
+                    font.strikeout: eventRow.declined
                     elide: Text.ElideRight
                   }
 
                   Text {
                     width: parent.width
-                    visible: modelData.location !== ""
-                    text: modelData.location
+                    visible: text !== ""
+                    text: {
+                      if (eventRow.declined) return qsTr("Declined")
+                      if (Model.isOutOfOffice(eventRow.modelData)) return qsTr("Out of office")
+                      return eventRow.modelData.location
+                    }
                     color: Qt.darker(root.contentForeground, 1.9)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
                     elide: Text.ElideRight
                   }
+                }
                 }
               }
             }
@@ -1063,6 +1183,8 @@ Panel {
             calendars: root.knownCalendars
             hiddenCalendars: root.hiddenCalendars
             showYearProgress: root.showYearProgress
+            showWorkingLocation: root.showWorkingLocation
+            hideDeclined: root.hideDeclined
             weekStartsMonday: root.weekStart === 1
             announceLeadMinutes: root.setting("announceLeadMinutes", 15)
 
@@ -1075,6 +1197,8 @@ Panel {
 
             onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
             onYearProgressToggled: root.toggleYearProgress()
+            onWorkingLocationToggled: root.toggleWorkingLocation()
+            onHideDeclinedToggled: root.toggleHideDeclined()
             onWeekStartToggled: root.toggleWeekStart()
             onLeadMinutesPicked: function(minutes) { root.setAnnounceLeadMinutes(minutes) }
           }

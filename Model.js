@@ -340,14 +340,83 @@ function toggleHiddenCalendar(hidden, calendarId) {
   return next
 }
 
-function visibleEvents(events, hidden) {
+// Google's "I am working from home" markers arrive as all-day events, so
+// without this they eat a line of every single day while describing no
+// commitment at all.
+var NOISY_EVENT_TYPES = ["workingLocation"]
+
+function isNoisyEventType(event) {
+  var type = event && event.eventType
+  if (!type) return false
+  return NOISY_EVENT_TYPES.indexOf(String(type)) !== -1
+}
+
+function isDeclined(event) {
+  return !!event && String(event.responseStatus || "") === "declined"
+}
+
+function isOutOfOffice(event) {
+  return !!event && String(event.eventType || "") === "outOfOffice"
+}
+
+// Only https is ever launched. A meeting link is supplied by whoever sent the
+// invitation, so treating it as trusted input would be a mistake.
+function safeUrl(url) {
+  var text = String(url || "").trim()
+  if (text.indexOf("https://") !== 0) return ""
+  if (/[\s"'<>]/.test(text)) return ""
+  return text
+}
+
+function meetingUrlFor(event) {
+  return event ? safeUrl(event.meetingUrl) : ""
+}
+
+// The event's own page, used when there is nothing to join. Older files and
+// third-party writers have no such field, which is why this is never assumed.
+function eventUrlFor(event) {
+  return event ? safeUrl(event.eventUrl) : ""
+}
+
+// How long before the start, and after the end, a meeting still counts as
+// joinable. A Join button on next Tuesday's meeting is noise that dilutes the
+// one that matters, so the affordance only appears around the actual time.
+var JOIN_LEAD_MINUTES = 15
+var JOIN_GRACE_MINUTES = 15
+
+function isJoinableNow(event, nowMs, todayKey) {
+  if (!meetingUrlFor(event)) return false
+
+  // An all-day event has no useful clock window, so it stays joinable for the
+  // whole day it belongs to.
+  if (event.allDay) return event.dateKey === todayKey
+
+  var startMs = Date.parse(event.start)
+  var endMs = Date.parse(event.end)
+  if (isNaN(startMs)) return false
+  if (isNaN(endMs) || endMs < startMs) endMs = startMs
+
+  var opensAt = startMs - JOIN_LEAD_MINUTES * 60 * 1000
+  var closesAt = endMs + JOIN_GRACE_MINUTES * 60 * 1000
+  return nowMs >= opensAt && nowMs <= closesAt
+}
+
+// `options` is optional so older callers keep working: no options means only
+// the calendar filter applies, exactly as before.
+function visibleEvents(events, hidden, options) {
   if (!events || !events.length) return []
-  if (!hidden || !hidden.length) return events
+
+  var opts = options || {}
+  var dropNoisy = opts.hideWorkingLocation !== false
+  var dropDeclined = opts.hideDeclined === true
 
   var visible = []
   for (var i = 0; i < events.length; i++) {
-    if (isCalendarHidden(hidden, events[i].calendarId)) continue
-    visible.push(events[i])
+    var event = events[i]
+    if (isCalendarHidden(hidden, event.calendarId)) continue
+    if (dropNoisy && isNoisyEventType(event)) continue
+    if (dropDeclined && isDeclined(event)) continue
+    visible.push(event)
   }
   return visible
 }
@@ -521,6 +590,13 @@ if (typeof module !== "undefined") {
     isCalendarHidden: isCalendarHidden,
     toggleHiddenCalendar: toggleHiddenCalendar,
     visibleEvents: visibleEvents,
+    isNoisyEventType: isNoisyEventType,
+    isDeclined: isDeclined,
+    isOutOfOffice: isOutOfOffice,
+    safeUrl: safeUrl,
+    meetingUrlFor: meetingUrlFor,
+    eventUrlFor: eventUrlFor,
+    isJoinableNow: isJoinableNow,
     eventsForDateKey: eventsForDateKey,
     eventColors: eventColors,
     syncState: syncState
