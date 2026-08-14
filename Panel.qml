@@ -1048,11 +1048,6 @@ Panel {
                   cursorShape: Qt.PointingHandCursor
                 }
 
-                TapHandler {
-                  enabled: eventRow.openable
-                  onTapped: root.openEvent(eventRow.modelData)
-                }
-
                 Rectangle {
                   id: joinButton
                   visible: eventRow.joinable
@@ -1061,13 +1056,18 @@ Panel {
                   width: joinLabel.implicitWidth + Style.space(8)
                   height: joinLabel.implicitHeight + Style.space(3)
                   radius: height / 2
-                  color: eventHover.hovered
+                  color: joinHover.hovered
                     ? Style.selectedStateColor(root.contentForeground, Color.accent)
                     : "transparent"
                   border.width: Style.spacing.hairline
-                  border.color: eventHover.hovered
+                  border.color: joinHover.hovered
                     ? "transparent"
                     : Qt.darker(root.contentForeground, 2.0)
+
+                  HoverHandler {
+                    id: joinHover
+                    cursorShape: Qt.PointingHandCursor
+                  }
 
                   // Its own handler, declared on the button, so the grab
                   // happens here and the row's opener does not also fire.
@@ -1080,7 +1080,7 @@ Panel {
                     id: joinLabel
                     anchors.centerIn: parent
                     text: qsTr("Join")
-                    color: eventHover.hovered ? Color.background : Qt.darker(root.contentForeground, 1.4)
+                    color: joinHover.hovered ? Color.background : Qt.darker(root.contentForeground, 1.4)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
                   }
@@ -1093,6 +1093,15 @@ Panel {
                   anchors.rightMargin: eventRow.joinable ? Style.space(3) : 0
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(4)
+
+                  // Deliberately here and not on the row: this stops at the
+                  // Join button's left edge, so the two hit areas cannot
+                  // overlap. Two TapHandlers over one point would both fire
+                  // and open two tabs.
+                  TapHandler {
+                    enabled: eventRow.openable
+                    onTapped: root.openEvent(eventRow.modelData)
+                  }
 
                 Rectangle {
                   width: Style.space(2)

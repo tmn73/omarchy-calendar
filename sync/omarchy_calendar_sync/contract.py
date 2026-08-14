@@ -40,7 +40,8 @@ _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 # https only. Meeting links arrive from whoever sent the invitation, so the
 # widget must never be handed a scheme it would be unwise to launch.
-_HTTPS_URL = re.compile(r"^https://[^\s]+$")
+# Kept in step with normalize._https_only and Model.safeUrl.
+_HTTPS_URL = re.compile(r"^https://[^\s\"'<>]+$")
 
 
 def build_document(events, synced_at, source):

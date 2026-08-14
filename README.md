@@ -176,7 +176,7 @@ Click the clock, then the gear icon in the panel header.
 | Calendars | Show or hide each calendar. The list comes from your own events, so it needs no configuration |
 | Week starts on Monday | Off starts the week on Sunday |
 | Working location events | Google's work-from-home markers. Hidden by default because they are all-day rows describing no commitment |
-| Hide declined invitations | Off keeps them listed and struck through |
+| Declined invitations | On lists them struck through, off hides them entirely |
 | Year and life progress | Brings back the built-in clock's bars, off by default |
 | Bar label | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes |
 | Sync | Event count, source and last sync time, for diagnosing a quiet calendar |

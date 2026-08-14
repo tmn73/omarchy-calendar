@@ -171,9 +171,11 @@ Column {
   }
 
   ToggleRow {
-    label: qsTr("Hide declined invitations")
-    hint: qsTr("Off keeps them listed, struck through")
-    checked: root.hideDeclined
+    // Every row on this page reads "checked means shown". Phrasing this one as
+    // "Hide ..." inverted that and made the page contradict itself.
+    label: qsTr("Declined invitations")
+    hint: qsTr("Shown struck through when on")
+    checked: !root.hideDeclined
     onActivated: root.hideDeclinedToggled()
   }
 

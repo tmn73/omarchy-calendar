@@ -246,3 +246,30 @@ class TestEventTypeAndResponse(unittest.TestCase):
         rows = normalize.normalize_event(event, CAL, BOGOTA)
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(r["meetingUrl"] == "https://meet.google.com/x" for r in rows))
+
+
+class TestUrlGuardMatchesTheWidget(unittest.TestCase):
+    """The widget's Model.safeUrl rejects quotes and angle brackets.
+
+    A sync that is more permissive writes a URL the widget then silently
+    refuses, which shows up as a missing button and nothing else.
+    """
+
+    def test_quotes_and_angle_brackets_are_refused(self):
+        for hostile in (
+            'https://ok.example.com/"x',
+            "https://ok.example.com/'x",
+            "https://ok.example.com/<x",
+            "https://ok.example.com/>x",
+            "https://ok.example.com/\tx",
+        ):
+            event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+            event["hangoutLink"] = hostile
+            rows = normalize.normalize_event(event, CAL, BOGOTA)
+            self.assertEqual(rows[0]["meetingUrl"], "", hostile)
+
+    def test_an_ordinary_link_still_passes(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["hangoutLink"] = "https://meet.google.com/abc-defg-hij?authuser=1"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["meetingUrl"], "https://meet.google.com/abc-defg-hij?authuser=1")

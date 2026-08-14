@@ -17,7 +17,14 @@ def _https_only(value):
     anything else is dropped rather than handed to the widget to launch.
     """
     text = str(value or "").strip()
-    return text if text.startswith("https://") and " " not in text else ""
+    if not text.startswith("https://"):
+        return ""
+    # Must match Model.safeUrl exactly. When the widget is stricter than the
+    # sync, a URL is written, then silently refused, and there is nothing to
+    # debug: no button, no error.
+    if any(char in text for char in ' \t\n"\'<>'):
+        return ""
+    return text
 
 
 def _meeting_url(gevent):
