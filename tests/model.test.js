@@ -397,3 +397,31 @@ test('eventUrlFor mirrors meetingUrlFor and is https only', () => {
   assert.equal(Model.eventUrlFor({}), '')
   assert.equal(Model.eventUrlFor(null), '')
 })
+
+test('commandPathFromUrl strips the file scheme and shortens home', () => {
+  assert.equal(
+    Model.commandPathFromUrl('file:///home/tmn/.config/omarchy/plugins/tmn73.calendar/sync/setup', '/home/tmn'),
+    '~/.config/omarchy/plugins/tmn73.calendar/sync/setup'
+  )
+})
+
+test('commandPathFromUrl leaves a path outside home alone', () => {
+  assert.equal(
+    Model.commandPathFromUrl('file:///opt/omarchy-calendar/sync/setup', '/home/tmn'),
+    '/opt/omarchy-calendar/sync/setup'
+  )
+})
+
+test('commandPathFromUrl tolerates a missing home or url', () => {
+  assert.equal(Model.commandPathFromUrl('file:///srv/x/sync/setup', ''), '/srv/x/sync/setup')
+  assert.equal(Model.commandPathFromUrl('', '/home/tmn'), '')
+  assert.equal(Model.commandPathFromUrl(null, null), '')
+})
+
+test('commandPathFromUrl does not shorten a home-lookalike prefix', () => {
+  // /home/tmn2 must not become ~2
+  assert.equal(
+    Model.commandPathFromUrl('file:///home/tmn2/plugin/sync/setup', '/home/tmn'),
+    '/home/tmn2/plugin/sync/setup'
+  )
+})

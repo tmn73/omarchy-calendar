@@ -26,6 +26,8 @@ Column {
   property string sourceLabel: ""
   property int eventCount: 0
   property string syncState: "missing"
+  property string setupCommand: ""
+  property bool setupCommandCopied: false
 
   signal calendarToggled(string calendarId)
   signal yearProgressToggled()
@@ -33,6 +35,7 @@ Column {
   signal workingLocationToggled()
   signal hideDeclinedToggled()
   signal leadMinutesPicked(int minutes)
+  signal setupCommandCopyRequested()
 
   readonly property color muted: Qt.darker(foreground, 1.5)
   readonly property color faint: Qt.darker(foreground, 1.9)
@@ -241,12 +244,28 @@ Column {
 
   Text {
     width: parent.width
-    color: root.faint
+    color: root.syncState === "missing" && syncHover.hovered ? root.foreground : root.faint
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     wrapMode: Text.WordWrap
+
+    HoverHandler {
+      id: syncHover
+      enabled: root.syncState === "missing"
+      cursorShape: Qt.PointingHandCursor
+    }
+
+    TapHandler {
+      enabled: root.syncState === "missing"
+      onTapped: root.setupCommandCopyRequested()
+    }
+
     text: {
-      if (root.syncState === "missing") return qsTr("No events file yet. Run sync/setup to connect a calendar.")
+      if (root.syncState === "missing") {
+        return root.setupCommandCopied
+          ? qsTr("Copied. Paste it in a terminal:\n%1").arg(root.setupCommand)
+          : qsTr("No calendar connected yet. Click to copy, then run:\n%1").arg(root.setupCommand)
+      }
       if (root.syncState === "version") return qsTr("The events file was written by a newer version of this plugin.")
 
       var line = root.eventCount + qsTr(" events from ") + root.sourceLabel

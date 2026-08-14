@@ -79,6 +79,13 @@ Panel {
   // Matches the sync timer's interval. Model.syncState allows four of these
   // to elapse before calling the file stale, so one missed run stays quiet.
   readonly property int syncIntervalSeconds: 300
+
+  // Spelled out in full because the people who need it are the ones who
+  // installed from the marketplace listing and never opened the README.
+  // Resolved from this file's own location, so it is right whether the plugin
+  // was installed by `omarchy plugin add` or cloned somewhere by hand.
+  readonly property string setupCommand: Model.commandPathFromUrl(
+    Qt.resolvedUrl("sync/setup"), Quickshell.env("HOME") || "")
   readonly property string syncState: eventVersionMismatch
     ? "version"
     : Model.syncState(eventDoc, Date.now(), syncIntervalSeconds)
@@ -377,6 +384,27 @@ Panel {
     onLoaded: root.applyEvents(text())
     onLoadFailed: root.applyEvents("")
     onFileChanged: reload()
+  }
+
+  // Copying beats reading a long path back to yourself. Argv array rather than
+  // a shell string, so there is nothing to quote.
+  Process {
+    id: setupCommandCopier
+    command: ["wl-copy", "--", root.setupCommand]
+  }
+
+  property bool setupCommandCopied: false
+
+  function copySetupCommand() {
+    setupCommandCopier.running = true
+    root.setupCommandCopied = true
+    copiedReset.restart()
+  }
+
+  Timer {
+    id: copiedReset
+    interval: 2000
+    onTriggered: root.setupCommandCopied = false
   }
 
   SystemClock {
@@ -1161,14 +1189,30 @@ Panel {
             // An empty day and a sync that never ran look identical unless
             // we say which one it is.
             Text {
+              id: emptyState
               width: parent.width
               visible: root.selectedEvents.length === 0
-              color: Qt.darker(root.contentForeground, 1.9)
+              color: root.syncState === "missing" && emptyHover.hovered
+                ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                : Qt.darker(root.contentForeground, 1.9)
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
+
+              HoverHandler {
+                id: emptyHover
+                enabled: root.syncState === "missing"
+                cursorShape: Qt.PointingHandCursor
+              }
+
+              TapHandler {
+                enabled: root.syncState === "missing"
+                onTapped: root.copySetupCommand()
+              }
               text: root.syncState === "missing"
-                ? qsTr("No calendar synced yet. Run sync/setup.")
+                ? (root.setupCommandCopied
+                  ? qsTr("Copied. Paste it in a terminal:\n%1").arg(root.setupCommand)
+                  : qsTr("No calendar synced yet. Click to copy, then run:\n%1").arg(root.setupCommand))
                 : root.syncState === "version"
                   ? qsTr("Events file was written by a newer version. Update the plugin.")
                   : root.syncState === "stale"
@@ -1198,6 +1242,9 @@ Panel {
             announceLeadMinutes: root.setting("announceLeadMinutes", 15)
 
             syncState: root.syncState
+            setupCommand: root.setupCommand
+            setupCommandCopied: root.setupCommandCopied
+            onSetupCommandCopyRequested: root.copySetupCommand()
             eventCount: root.eventDoc && root.eventDoc.events ? root.eventDoc.events.length : 0
             sourceLabel: root.eventDoc ? String(root.eventDoc.source || "") : ""
             syncedAt: root.eventDoc && root.eventDoc.syncedAt

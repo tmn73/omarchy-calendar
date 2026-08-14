@@ -368,6 +368,17 @@ function safeUrl(url) {
   return text
 }
 
+// Turn the QML file URL of a bundled script into something a person can paste.
+// Derived rather than hardcoded: `omarchy plugin add` uses the manifest id, but
+// a hand-cloned checkout can live anywhere, and a wrong path in the one message
+// a new user sees is worse than no message.
+function commandPathFromUrl(fileUrl, home) {
+  var text = String(fileUrl || "")
+  if (text.indexOf("file://") === 0) text = text.substring(7)
+  if (home && text.indexOf(home + "/") === 0) text = "~" + text.substring(home.length)
+  return text
+}
+
 function meetingUrlFor(event) {
   return event ? safeUrl(event.meetingUrl) : ""
 }
@@ -594,6 +605,7 @@ if (typeof module !== "undefined") {
     isDeclined: isDeclined,
     isOutOfOffice: isOutOfOffice,
     safeUrl: safeUrl,
+    commandPathFromUrl: commandPathFromUrl,
     meetingUrlFor: meetingUrlFor,
     eventUrlFor: eventUrlFor,
     isJoinableNow: isJoinableNow,

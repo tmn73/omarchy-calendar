@@ -67,7 +67,10 @@ Then:
 omarchy restart shell
 ```
 
-You now have a working calendar with no events in it. Give it a source next.
+**Installing is not the whole job.** At this point you have a working clock and
+an empty calendar, because nothing is feeding it yet. Connect Google Calendar
+below, or point any other source at the file. The widget says as much when you
+open it, with the command to run.
 
 ## Sync your Google Calendar
 
