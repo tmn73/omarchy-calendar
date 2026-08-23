@@ -79,7 +79,12 @@ class Gws:
         calendars = [
             {
                 "id": item["id"],
-                "name": item.get("summary") or item["id"],
+                # A renamed subscription (ICS feeds especially, whose
+                # summary is whatever the feed called itself) keeps the
+                # user's name in summaryOverride, so prefer that.
+                "name": item.get("summaryOverride")
+                or item.get("summary")
+                or item["id"],
                 "color": item.get("backgroundColor") or FALLBACK_COLOR,
             }
             for item in payload.get("items", [])
