@@ -83,6 +83,11 @@ class TestCalendars(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
         self.assertEqual(client.calendars()[0]["color"], gws.FALLBACK_COLOR)
 
+    def test_summary_override_wins_over_summary(self):
+        body = json.dumps({"items": [{"id": "x@import.calendar.google.com", "summary": "Calendar", "summaryOverride": "Fastell Calendar"}]})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
+        self.assertEqual(client.calendars()[0]["name"], "Fastell Calendar")
+
     def test_missing_summary_falls_back_to_id(self):
         body = json.dumps({"items": [{"id": "x@example.com", "backgroundColor": "#ffffff"}]})
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
