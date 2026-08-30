@@ -214,6 +214,176 @@ Panel {
     root.openExternally(Model.eventUrlFor(event))
   }
 
+  // ---- Create / edit / delete, via gws (sync/setup grants the write scope
+  // that needs). The sync pipeline stays entirely read-only and untouched;
+  // this talks to Google directly, on its own Process, using the same
+  // profile the sync already logged into (see syncConfig below).
+  property bool eventFormOpen: false
+  // null while creating; the event object being edited otherwise. Reused
+  // for the confirm dialog too (delete needs no form, just this).
+  property var eventFormEditing: null
+  property string eventFormError: ""
+  property bool eventFormBusy: false
+  property var pendingDelete: null
+
+  // calendar-sync.json, defaulted exactly like sync/omarchy_calendar_sync/
+  // config.py -- one profile serves both reading and writing, so setup only
+  // has to happen once.
+  property var syncConfig: Model.resolveSyncConfig(null, Quickshell.env("HOME") || "")
+
+  function applySyncConfig(raw) {
+    root.syncConfig = Model.resolveSyncConfig(raw, Quickshell.env("HOME") || "")
+  }
+
+  // knownCalendars is derived from your own events (see its own comment),
+  // so it is empty before the first sync or if you have never had an event
+  // on a non-primary calendar. "primary" always works regardless, so it is
+  // always offered even when the derived list has not caught up yet.
+  function calendarChoices() {
+    var list = root.knownCalendars.slice()
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === "primary") return list
+    }
+    return [{ id: "primary", name: "primary", color: "" }].concat(list)
+  }
+
+  function openCreateForm() {
+    root.eventFormEditing = null
+    root.eventFormError = ""
+    root.eventFormOpen = true
+  }
+
+  function openEditForm(event) {
+    root.eventFormEditing = event
+    root.eventFormError = ""
+    root.eventFormOpen = true
+  }
+
+  function closeEventForm() {
+    root.eventFormOpen = false
+    root.eventFormEditing = null
+    root.eventFormError = ""
+  }
+
+  // Merges a freshly written event into the live document in place, rather
+  // than waiting up to 5 minutes for the sync to notice. The next real sync
+  // still replaces eventDoc wholesale from disk, which is what reconciles
+  // this back to Google's canonical copy -- nothing here needs to remember
+  // that it was optimistic.
+  function mergeLocalEvent(event, previousId) {
+    if (!root.eventDoc) root.eventDoc = { version: 1, syncedAt: new Date().toISOString(), source: "local", events: [] }
+    if (!Array.isArray(root.eventDoc.events)) root.eventDoc.events = []
+
+    var events = root.eventDoc.events.slice()
+    var replaceId = previousId !== undefined ? previousId : event.id
+    var replaced = false
+    for (var i = 0; i < events.length; i++) {
+      if (events[i].id === replaceId) { events[i] = event; replaced = true; break }
+    }
+    if (!replaced) events.push(event)
+
+    root.eventDoc = { version: root.eventDoc.version, syncedAt: root.eventDoc.syncedAt, source: root.eventDoc.source, events: events }
+    root.rebuildIndex()
+  }
+
+  function removeLocalEvent(eventId) {
+    if (!root.eventDoc || !Array.isArray(root.eventDoc.events)) return
+    var events = root.eventDoc.events.filter(function(e) { return e.id !== eventId })
+    root.eventDoc = { version: root.eventDoc.version, syncedAt: root.eventDoc.syncedAt, source: root.eventDoc.source, events: events }
+    root.rebuildIndex()
+  }
+
+  // fields: { title, location, allDay, dateKey, endDateKey, startTime, endTime }
+  function submitEventForm(fields, calendarId, calendarName, calendarColor) {
+    var draft = Model.buildEventBody(fields)
+    if (!draft.ok) { root.eventFormError = draft.error; return }
+
+    root.eventFormError = ""
+    root.eventFormBusy = true
+
+    var editing = root.eventFormEditing
+    var argv = editing
+      ? Model.gwsPatchArgv(root.syncConfig.gwsPath, editing.calendarId, editing.id, draft.body)
+      : Model.gwsInsertArgv(root.syncConfig.gwsPath, calendarId, draft.body)
+
+    root._pendingWrite = editing
+      ? { action: "patch", calendarId: editing.calendarId, calendarName: calendarName, color: calendarColor, previousId: editing.id }
+      : { action: "insert", calendarId: calendarId, calendarName: calendarName, color: calendarColor }
+
+    gwsWriteRequest.environment = ({ GOOGLE_WORKSPACE_CLI_CONFIG_DIR: root.syncConfig.profile })
+    gwsWriteRequest.command = argv
+    gwsWriteRequest.running = true
+  }
+
+  function requestDelete(event) {
+    root.pendingDelete = event
+  }
+
+  function confirmDelete() {
+    var event = root.pendingDelete
+    root.pendingDelete = null
+    if (!event) return
+
+    root.eventFormError = ""
+    root.eventFormBusy = true
+    root._pendingWrite = { action: "delete", eventId: event.id }
+    gwsWriteRequest.environment = ({ GOOGLE_WORKSPACE_CLI_CONFIG_DIR: root.syncConfig.profile })
+    gwsWriteRequest.command = Model.gwsDeleteArgv(root.syncConfig.gwsPath, event.calendarId, event.id)
+    gwsWriteRequest.running = true
+  }
+
+  property var _pendingWrite: null
+
+  FileView {
+    id: syncConfigFile
+    path: (Quickshell.env("HOME") || "") + "/.config/omarchy/calendar-sync.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applySyncConfig(text())
+    onLoadFailed: root.applySyncConfig("")
+    onFileChanged: reload()
+  }
+
+  // One Process reused for every write, guarded by eventFormBusy so a
+  // second submit cannot race the first -- same reuse-over-parallel
+  // reasoning as futbar's scoreboard pool, just with a single slot since a
+  // human only ever confirms one form at a time.
+  Process {
+    id: gwsWriteRequest
+    stdout: StdioCollector { id: gwsWriteOut; waitForEnd: true }
+    stderr: StdioCollector { id: gwsWriteErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.eventFormBusy = false
+      var pending = root._pendingWrite
+      root._pendingWrite = null
+      if (!pending) return
+
+      if (exitCode !== 0) {
+        var message = gwsWriteErr.text.trim() || gwsWriteOut.text.trim() || ("gws exited " + exitCode)
+        root.eventFormError = message.split("\n")[0]
+        return
+      }
+
+      if (pending.action === "delete") {
+        root.removeLocalEvent(pending.eventId)
+        return
+      }
+
+      try {
+        var apiEvent = JSON.parse(gwsWriteOut.text)
+        var row = Model.normalizeApiEvent(apiEvent, pending.calendarId, pending.calendarName, pending.color)
+        root.mergeLocalEvent(row, pending.previousId)
+        root.closeEventForm()
+      } catch (error) {
+        // The write almost certainly succeeded (gws exited 0) -- only
+        // reading its own echo back failed, so say that rather than
+        // implying the event itself is in doubt.
+        root.eventFormError = "Saved, but couldn't read the confirmation back"
+        root.closeEventForm()
+      }
+    }
+  }
+
   onHiddenCalendarsChanged: root.rebuildIndex()
   onShowWorkingLocationChanged: root.rebuildIndex()
   onHideDeclinedChanged: root.rebuildIndex()
@@ -1028,19 +1198,38 @@ Panel {
           //      the selection survives stepping to another month and an
           //      undated list would then be a quiet lie.
           Column {
-            visible: !root.settingsOpen
+            visible: !root.settingsOpen && !root.eventFormOpen
             width: gridColumn.width
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Style.space(4)
 
-            Text {
+            Item {
               width: parent.width
-              text: Qt.formatDate(root.selectedDate, "dddd d MMMM").toUpperCase()
-              color: Qt.darker(root.contentForeground, 1.4)
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
-              font.letterSpacing: 1
-              font.bold: true
+              height: dayLabel.implicitHeight
+
+              Text {
+                id: dayLabel
+                anchors.left: parent.left
+                anchors.right: newEventButton.left
+                text: Qt.formatDate(root.selectedDate, "dddd d MMMM").toUpperCase()
+                color: Qt.darker(root.contentForeground, 1.4)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+                font.letterSpacing: 1
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              PanelActionButton {
+                id: newEventButton
+                anchors.right: parent.right
+                anchors.verticalCenter: dayLabel.verticalCenter
+                iconText: "󰐕"
+                tooltipText: "New event"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.openCreateForm()
+              }
             }
 
             Repeater {
@@ -1069,10 +1258,10 @@ Panel {
                             root.contentForeground.b, 0.08)
                   : "transparent"
 
-                // Only rows that can actually do something respond to a click.
+                // Always enabled now: edit/delete apply to every event, even
+                // one with no link to open and nothing live to join.
                 HoverHandler {
                   id: eventHover
-                  enabled: eventRow.openable || eventRow.joinable
                   cursorShape: Qt.PointingHandCursor
                 }
 
@@ -1114,11 +1303,52 @@ Panel {
                   }
                 }
 
+                // Hover-revealed rather than always shown: every row can be
+                // edited or deleted, so showing both permanently on every
+                // day's whole agenda would be more clutter than the Join
+                // button (only live for a narrow window) ever is. Anchored
+                // regardless of visibility so eventBody's reserved width
+                // does not jump the moment the mouse arrives.
+                //
+                // Reveal via opacity/enabled, not visible: eventHover is a
+                // HoverHandler on eventRow, which contains this Row, so
+                // tying `visible` to it produced a real binding loop
+                // ("Binding loop detected for property 'visible'") that
+                // made the buttons intermittently unclickable -- toggling
+                // opacity instead keeps the geometry this row already
+                // depends on (see comment above) stable and out of the
+                // loop, and `enabled` still blocks clicks while hidden.
+                Row {
+                  id: eventActions
+                  opacity: eventHover.hovered ? 1 : 0
+                  enabled: eventHover.hovered
+                  anchors.right: eventRow.joinable ? joinButton.left : parent.right
+                  anchors.rightMargin: eventRow.joinable ? Style.space(4) : 0
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(2)
+
+                  PanelActionButton {
+                    iconText: "󰏫"
+                    tooltipText: "Edit"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.openEditForm(eventRow.modelData)
+                  }
+
+                  PanelActionButton {
+                    iconText: "󰩹"
+                    tooltipText: "Delete"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.requestDelete(eventRow.modelData)
+                  }
+                }
+
                 Row {
                   id: eventBody
                   anchors.left: parent.left
-                  anchors.right: eventRow.joinable ? joinButton.left : parent.right
-                  anchors.rightMargin: eventRow.joinable ? Style.space(3) : 0
+                  anchors.right: eventActions.left
+                  anchors.rightMargin: Style.space(3)
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(4)
 
@@ -1258,8 +1488,52 @@ Panel {
             onWeekStartToggled: root.toggleWeekStart()
             onLeadMinutesPicked: function(minutes) { root.setAnnounceLeadMinutes(minutes) }
           }
+
+          // ---- Create/edit form, shown in place of the grid the same way
+          //      settings is. Same "reads state, emits intent" split.
+          EventForm {
+            visible: root.eventFormOpen
+            width: gridColumn.width
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+
+            editing: root.eventFormEditing
+            defaultDateKey: root.selectedDayKey
+            calendars: root.calendarChoices()
+            errorText: root.eventFormError
+            busy: root.eventFormBusy
+
+            onSubmitted: function(fields, calendarId, calendarName, calendarColor) {
+              root.submitEventForm(fields, calendarId, calendarName, calendarColor)
+            }
+            onCanceled: root.closeEventForm()
+          }
         }
       }
+    }
+
+    // Declared inside KeyboardPanel (as a sibling of PanelKeyCatcher above),
+    // not at the file's top level under `root`: root itself is never given
+    // an explicit size anywhere in this file -- the actual visible popup
+    // surface is sized by KeyboardPanel's own contentWidth/contentHeight.
+    // A first attempt anchored this to `root` (then tried anchoring
+    // directly to the `panel` id, which isn't a QQuickItem and can't be
+    // anchored to at all) and ended up 0x0 and invisible while still
+    // logically "opened" -- every click just silently reopened an
+    // invisible, zero-size confirm dialog. Declaring it in here instead
+    // gives it the same real, correctly-sized implicit parent
+    // PanelKeyCatcher already uses via its own `anchors.fill: parent`.
+    ConfirmDialog {
+      id: deleteConfirm
+      opened: root.pendingDelete !== null
+      message: root.pendingDelete ? ("Delete “" + root.pendingDelete.title + "”?") : ""
+      confirmText: "Delete"
+      cancelText: "Cancel"
+      anchors.fill: parent
+      onConfirmed: root.confirmDelete()
+      onCanceled: root.pendingDelete = null
     }
   }
 }

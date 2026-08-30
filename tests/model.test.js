@@ -425,3 +425,160 @@ test('commandPathFromUrl does not shorten a home-lookalike prefix', () => {
     '/home/tmn2/plugin/sync/setup'
   )
 })
+
+// ---- Create / edit / delete ----
+
+test('buildEventBody requires a title', () => {
+  const result = Model.buildEventBody({ title: '  ', dateKey: '2026-08-10', allDay: true })
+  assert.equal(result.ok, false)
+  assert.match(result.error, /title/i)
+})
+
+test('buildEventBody requires a date', () => {
+  const result = Model.buildEventBody({ title: 'Standup', allDay: true })
+  assert.equal(result.ok, false)
+})
+
+test('buildEventBody rejects a multi-day span', () => {
+  const result = Model.buildEventBody({
+    title: 'Trip', dateKey: '2026-08-10', endDateKey: '2026-08-12', allDay: true
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.error, /multi-day/i)
+})
+
+test('buildEventBody builds an all-day event with an exclusive end date', () => {
+  const result = Model.buildEventBody({ title: 'Holiday', dateKey: '2026-08-10', allDay: true })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.body, {
+    summary: 'Holiday',
+    start: { date: '2026-08-10' },
+    end: { date: '2026-08-11' }
+  })
+})
+
+test('buildEventBody requires both times for a timed event', () => {
+  assert.equal(Model.buildEventBody({ title: 'X', dateKey: '2026-08-10', startTime: '09:00' }).ok, false)
+  assert.equal(Model.buildEventBody({ title: 'X', dateKey: '2026-08-10', endTime: '09:00' }).ok, false)
+})
+
+test('buildEventBody rejects an end time at or before the start', () => {
+  const same = Model.buildEventBody({
+    title: 'X', dateKey: '2026-08-10', startTime: '09:00', endTime: '09:00'
+  })
+  assert.equal(same.ok, false)
+
+  const before = Model.buildEventBody({
+    title: 'X', dateKey: '2026-08-10', startTime: '09:00', endTime: '08:00'
+  })
+  assert.equal(before.ok, false)
+})
+
+test('buildEventBody builds a timed event with an offset datetime', () => {
+  const result = Model.buildEventBody({
+    title: 'Standup', location: 'Room 4', dateKey: '2026-08-10', startTime: '9:00', endTime: '09:30'
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.body.summary, 'Standup')
+  assert.equal(result.body.location, 'Room 4')
+  assert.match(result.body.start.dateTime, /^2026-08-10T09:00:00[+-]\d{2}:\d{2}$/)
+  assert.match(result.body.end.dateTime, /^2026-08-10T09:30:00[+-]\d{2}:\d{2}$/)
+})
+
+test('buildEventBody omits location when blank', () => {
+  const result = Model.buildEventBody({ title: 'X', dateKey: '2026-08-10', allDay: true })
+  assert.equal('location' in result.body, false)
+})
+
+test('parseHHMM accepts common shapes and rejects garbage', () => {
+  assert.deepEqual(Model.parseHHMM('9:30'), { hour: 9, minute: 30 })
+  assert.deepEqual(Model.parseHHMM('09:30'), { hour: 9, minute: 30 })
+  assert.deepEqual(Model.parseHHMM('930'), { hour: 9, minute: 30 })
+  assert.equal(Model.parseHHMM('25:00'), null)
+  assert.equal(Model.parseHHMM('9:99'), null)
+  assert.equal(Model.parseHHMM('noon'), null)
+  assert.equal(Model.parseHHMM(''), null)
+})
+
+test('offsetDateTime always carries an explicit +HH:MM or -HH:MM offset', () => {
+  const iso = Model.offsetDateTime(2026, 7, 10, 19, 15)
+  assert.match(iso, /^2026-08-10T19:15:00[+-]\d{2}:\d{2}$/)
+})
+
+test('normalizeApiEvent maps a timed event into the widget row shape', () => {
+  const row = Model.normalizeApiEvent({
+    id: 'evt1',
+    summary: 'Standup',
+    location: 'Room 4',
+    start: { dateTime: '2026-08-10T09:00:00-05:00' },
+    end: { dateTime: '2026-08-10T09:30:00-05:00' },
+    htmlLink: 'https://www.google.com/calendar/event?eid=xyz',
+    hangoutLink: 'https://meet.google.com/abc-defg-hij'
+  }, 'work@example.com', 'Work', '#f83a22')
+
+  assert.equal(row.id, 'evt1')
+  assert.equal(row.calendarId, 'work@example.com')
+  assert.equal(row.calendarName, 'Work')
+  assert.equal(row.color, '#f83a22')
+  assert.equal(row.dateKey, '2026-08-10')
+  assert.equal(row.allDay, false)
+  assert.equal(row.title, 'Standup')
+  assert.equal(row.eventUrl, 'https://www.google.com/calendar/event?eid=xyz')
+  assert.equal(row.meetingUrl, 'https://meet.google.com/abc-defg-hij')
+})
+
+test('normalizeApiEvent maps an all-day event and drops an unsafe url', () => {
+  const row = Model.normalizeApiEvent({
+    id: 'evt2',
+    summary: 'Holiday',
+    start: { date: '2026-08-10' },
+    end: { date: '2026-08-11' },
+    htmlLink: 'javascript:alert(1)'
+  }, 'primary', 'primary', '')
+
+  assert.equal(row.allDay, true)
+  assert.equal(row.dateKey, '2026-08-10')
+  assert.equal(row.eventUrl, '')
+})
+
+test('resolveSyncConfig falls back to the documented defaults', () => {
+  assert.deepEqual(Model.resolveSyncConfig(null, '/home/tmn'), {
+    profile: '/home/tmn/.config/gws-omarchy-calendar',
+    gwsPath: 'gws'
+  })
+  assert.deepEqual(Model.resolveSyncConfig('not json', '/home/tmn'), {
+    profile: '/home/tmn/.config/gws-omarchy-calendar',
+    gwsPath: 'gws'
+  })
+})
+
+test('resolveSyncConfig reads profile and gwsPath when present', () => {
+  assert.deepEqual(
+    Model.resolveSyncConfig('{"profile":"/custom/profile","gwsPath":"/usr/local/bin/gws"}', '/home/tmn'),
+    { profile: '/custom/profile', gwsPath: '/usr/local/bin/gws' }
+  )
+})
+
+test('gws*Argv build plain argv arrays with no shell involved', () => {
+  const insert = Model.gwsInsertArgv('gws', 'primary', { summary: 'X' })
+  assert.deepEqual(insert, [
+    'gws', 'calendar', 'events', 'insert',
+    '--params', '{"calendarId":"primary"}',
+    '--json', '{"summary":"X"}',
+    '--format', 'json'
+  ])
+
+  const patch = Model.gwsPatchArgv('gws', 'primary', 'evt1', { summary: 'Y' })
+  assert.deepEqual(patch, [
+    'gws', 'calendar', 'events', 'patch',
+    '--params', '{"calendarId":"primary","eventId":"evt1"}',
+    '--json', '{"summary":"Y"}',
+    '--format', 'json'
+  ])
+
+  const del = Model.gwsDeleteArgv('gws', 'primary', 'evt1')
+  assert.deepEqual(del, [
+    'gws', 'calendar', 'events', 'delete',
+    '--params', '{"calendarId":"primary","eventId":"evt1"}'
+  ])
+})
