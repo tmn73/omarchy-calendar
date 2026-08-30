@@ -95,6 +95,7 @@ Panel {
   property string selectedDayKey: todayKey
   readonly property var selectedEvents: Model.eventsForDateKey(eventIndex, selectedDayKey)
   readonly property date selectedDate: Model.dateFromKey(selectedDayKey, today)
+  readonly property string eventTimeFormat: String(setting("eventTimeFormat", "HH:mm") || "HH:mm")
 
   function selectDay(key) {
     root.selectedDayKey = String(key)
@@ -231,6 +232,32 @@ Panel {
   readonly property int cellSpacing: Style.space(2)
   readonly property int weekColumnWidth: Style.space(32)
   readonly property int gutterWidth: Style.space(14)
+  readonly property int eventTimeColumnWidth: Math.ceil(Math.max(
+    allDayTimeMetrics.tightBoundingRect.width,
+    morningTimeMetrics.tightBoundingRect.width,
+    eveningTimeMetrics.tightBoundingRect.width
+  )) + Style.space(2)
+
+  TextMetrics {
+    id: allDayTimeMetrics
+    font.family: root.contentFontFamily
+    font.pixelSize: Style.font.bodySmall
+    text: qsTr("All day")
+  }
+
+  TextMetrics {
+    id: morningTimeMetrics
+    font.family: root.contentFontFamily
+    font.pixelSize: Style.font.bodySmall
+    text: Qt.formatDateTime(new Date(2000, 0, 1, 0, 59), root.eventTimeFormat)
+  }
+
+  TextMetrics {
+    id: eveningTimeMetrics
+    font.family: root.contentFontFamily
+    font.pixelSize: Style.font.bodySmall
+    text: Qt.formatDateTime(new Date(2000, 0, 1, 23, 59), root.eventTimeFormat)
+  }
 
   function open() {
     refresh()
@@ -1141,10 +1168,11 @@ Panel {
                 }
 
                 Text {
-                  width: Style.space(44)
+                  id: eventTime
+                  width: root.eventTimeColumnWidth
                   text: eventRow.modelData.allDay
                     ? qsTr("All day")
-                    : Qt.formatDateTime(new Date(eventRow.modelData.start), "HH:mm")
+                    : Qt.formatDateTime(new Date(eventRow.modelData.start), root.eventTimeFormat)
                   color: Qt.darker(root.contentForeground, eventRow.declined ? 2.2 : 1.5)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -1153,7 +1181,7 @@ Panel {
 
                 Column {
                   id: eventLines
-                  width: eventBody.width - Style.space(54)
+                  width: Math.max(0, eventBody.width - eventTime.width - Style.space(10))
                   spacing: Style.space(1)
 
                   Text {

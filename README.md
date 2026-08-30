@@ -54,7 +54,11 @@ remove the `omarchy.clock` entry from `bar.layout.center` and point
     "centerAnchor": "tmn73.calendar",
     "layout": {
       "center": [
-        { "id": "tmn73.calendar", "format": "dddd HH:mm" }
+        {
+          "id": "tmn73.calendar",
+          "format": "dddd HH:mm",
+          "eventTimeFormat": "HH:mm"
+        }
       ]
     }
   }
@@ -182,6 +186,7 @@ Click the clock, then the gear icon in the panel header.
 | Declined invitations | On lists them struck through, off hides them entirely |
 | Year and life progress | Brings back the built-in clock's bars, off by default |
 | Bar label | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes |
+| Event times | Set `eventTimeFormat` in `shell.json` to a Qt date-time format such as `HH:mm` or `h:mm AP` |
 | Sync | Event count, source and last sync time, for diagnosing a quiet calendar |
 
 Hiding a calendar is instant and does not change what the sync fetches, so
