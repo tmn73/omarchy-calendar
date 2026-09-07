@@ -246,11 +246,11 @@ Panel {
   }
 
   function close() {
-    setCenterHoverRevealSuppressed(false)
-    // Dismissing the panel mid-edit would otherwise leave the inputs up,
-    // waiting behind a closed popup for the next time it opens.
+    // Hide the panel first: this is the critical operation and must not be
+    // skipped if the cosmetic hover-reveal call below ever throws.
     if (root.editingLife) root.cancelEditingLife()
     root.controller.hide()
+    setCenterHoverRevealSuppressed(false)
   }
 
   function toggle() {
@@ -266,9 +266,14 @@ Panel {
 
   // Summoning by hotkey moves no pointer, so a hover the bar was still
   // holding must not keep the center indicators revealed behind the panel.
+  // The bar exposes a writable method on the plugin facade; on older bars that
+  // predate the facade the property was writable directly. Prefer the method.
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function") {
+      root.bar.setCenterHoverRevealSuppressed(value)
+    } else if (root.bar && "centerHoverRevealSuppressed" in root.bar) {
       root.bar.centerHoverRevealSuppressed = value
+    }
   }
 
   function refresh() {
