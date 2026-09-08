@@ -246,11 +246,14 @@ Panel {
   }
 
   function close() {
+    // Put the panel away before anything else. The popup is a full-screen
+    // overlay holding keyboard focus, so a throw anywhere above this line
+    // leaves the desktop with no way to take a key or a click back.
+    root.controller.hide()
     setCenterHoverRevealSuppressed(false)
     // Dismissing the panel mid-edit would otherwise leave the inputs up,
     // waiting behind a closed popup for the next time it opens.
     if (root.editingLife) root.cancelEditingLife()
-    root.controller.hide()
   }
 
   function toggle() {
@@ -267,7 +270,9 @@ Panel {
   // Summoning by hotkey moves no pointer, so a hover the bar was still
   // holding must not keep the center indicators revealed behind the panel.
   function setCenterHoverRevealSuppressed(value) {
-    if (root.bar && "centerHoverRevealSuppressed" in root.bar)
+    if (root.bar && typeof root.bar.setCenterHoverRevealSuppressed === "function")
+      root.bar.setCenterHoverRevealSuppressed(value)
+    else if (root.bar && "centerHoverRevealSuppressed" in root.bar)
       root.bar.centerHoverRevealSuppressed = value
   }
 
