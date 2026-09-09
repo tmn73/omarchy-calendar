@@ -60,6 +60,12 @@ class TestWriteAtomic(unittest.TestCase):
             cli.write_atomic(path, {"hello": "world"})
             self.assertEqual([p.name for p in Path(tmp).iterdir()], ["out.json"])
 
+    def test_events_file_is_owner_readable_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.json"
+            cli.write_atomic(path, {"hello": "world"})
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
 
 class TestRun(unittest.TestCase):
     def test_writes_a_valid_document(self):

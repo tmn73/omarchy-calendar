@@ -31,6 +31,7 @@ def write_atomic(path, doc):
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temp_name, path)
+        os.chmod(path, 0o600)
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
