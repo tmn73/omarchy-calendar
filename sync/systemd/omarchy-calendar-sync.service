@@ -8,7 +8,7 @@ Type=oneshot
 # A user service starts with a minimal PATH, so a gws installed by bun,
 # cargo or pipx would be invisible. sync/setup writes an absolute path
 # into calendar-sync.json; this list is the fallback for everyone else.
-Environment=PATH=%h/.local/bin:%h/.cache/.bun/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/share/mise/shims:%h/.local/bin:%h/.cache/.bun/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.config/omarchy/plugins/tmn73.calendar/sync/omarchy-calendar-sync
 # A failed run is deliberately allowed to surface as a failed unit. The
 # sync leaves the previous events file intact either way, and a user

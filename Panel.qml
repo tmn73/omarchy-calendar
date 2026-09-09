@@ -588,6 +588,7 @@ Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   width: parent.width - Style.space(70)
                   text: root.upcomingEvent ? root.upcomingEvent.title : qsTr("Nothing else today")
+                  textFormat: Text.PlainText
                   color: root.upcomingEvent
                     ? root.contentForeground
                     : Qt.darker(root.contentForeground, 1.9)
@@ -1164,6 +1165,7 @@ Panel {
                   Text {
                     width: parent.width
                     text: eventRow.modelData.title
+                    textFormat: Text.PlainText
                     color: eventRow.declined
                       ? Qt.darker(root.contentForeground, 2.0)
                       : root.contentForeground
@@ -1181,6 +1183,7 @@ Panel {
                       if (Model.isOutOfOffice(eventRow.modelData)) return qsTr("Out of office")
                       return eventRow.modelData.location
                     }
+                    textFormat: Text.PlainText
                     color: Qt.darker(root.contentForeground, 1.9)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption

@@ -61,10 +61,18 @@ class Gws:
         return code, stdout, stderr
 
     def version(self):
-        _, stdout, _ = self._run(["--version"])
+        code, stdout, stderr = self._run(["--version"])
+        if code != 0:
+            detail = (stderr or stdout or "").strip()
+            raise GwsApiError(
+                f"gws --version exited {code}"
+                + (f": {detail}" if detail else "")
+            )
         match = _VERSION.search(stdout)
         if not match:
-            raise GwsApiError(f"cannot parse gws version from {stdout!r}")
+            raise GwsApiError(
+                f"cannot parse gws version from {stdout!r} (stderr={stderr!r})"
+            )
         return tuple(int(part) for part in match.groups())
 
     def check(self):
