@@ -236,7 +236,24 @@ if count == 0:
 
 step "Recording where gws and your credentials live"
 # The timer runs without your shell PATH, so the bare name is not enough.
+# mise shims are absolute paths that still need node/mise on PATH; record the
+# shim (or a real binary if mise can resolve one) and keep mise shims in the
+# unit PATH so systemd can exec it.
 gws_path=$(command -v gws)
+if command -v mise >/dev/null 2>&1; then
+  real=$(mise which gws 2>/dev/null || true)
+  if [ -n "$real" ] && [ -x "$real" ]; then
+    gws_path=$real
+  fi
+fi
+if [ -z "$gws_path" ] || [ ! -x "$gws_path" ]; then
+  echo "  gws is not an executable path: ${gws_path:-empty}"
+  exit 1
+fi
+if ! env -i HOME="$HOME" PATH="$(dirname "$gws_path"):$HOME/.local/share/mise/shims:/usr/bin:/bin" "$gws_path" --version >/dev/null 2>&1; then
+  echo "  warning: gws --version failed under a systemd-like PATH."
+  echo "  recorded path: $gws_path"
+fi
 config="$HOME/.config/omarchy/calendar-sync.json"
 mkdir -p "$(dirname "$config")"
 python3 - "$config" "$gws_path" "$PROFILE" <<'PYEOF'

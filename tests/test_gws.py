@@ -49,6 +49,16 @@ class TestVersion(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"--version": (0, "gws 0.13.2\nnote\n", "")}))
         self.assertEqual(client.version(), (0, 13, 2))
 
+    def test_version_nonzero_exit_surfaces_stderr(self):
+        client = gws.Gws(
+            "/tmp/profile",
+            runner=FakeRunner({"--version": (127, "", "exec: node: not found")}),
+        )
+        with self.assertRaises(gws.GwsApiError) as raised:
+            client.version()
+        self.assertIn("exited 127", str(raised.exception))
+        self.assertIn("node: not found", str(raised.exception))
+
     def test_missing_binary_raises(self):
         def runner(argv, env):
             raise FileNotFoundError("gws")
