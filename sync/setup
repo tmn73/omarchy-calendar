@@ -18,7 +18,7 @@ PROFILE="${PROFILE:-$HOME/.config/gws-omarchy-calendar}"
 GCLOUD_CONFIG="${GCLOUD_CONFIG:-omarchy-calendar}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_BIN="$SCRIPT_DIR/omarchy-calendar-sync"
-SCOPE="https://www.googleapis.com/auth/calendar.readonly"
+SCOPE="https://www.googleapis.com/auth/calendar"
 
 step() { printf '\n==> %s\n' "$1"; }
 
@@ -122,14 +122,15 @@ Open:
   https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID
 
   Click "Add or remove scopes"
-  Filter for:  calendar.readonly
+  Filter for:  calendar
   Tick:        $SCOPE
-               ("See and download any calendar you can access")
+               ("See, edit, share, and permanently delete all the
+               calendars you can access using Google Calendar")
   Update, then Save
 
   If Save is greyed out, fill in "How will the scopes be used?" with
-  something like: Read-only display of my own calendar in a desktop
-  status bar widget.
+  something like: Display my calendar and let me create, edit, and
+  delete my own events from a desktop status bar widget.
 
 Do not skip this. A scope that is not declared here is not offered on the
 consent screen at all, so there is no box to tick, Google grants only your
@@ -213,7 +214,7 @@ unticked. Run this script again and tick it.
 EOF
   exit 1
 fi
-echo "  calendar.readonly granted"
+echo "  calendar (read/write) granted"
 
 step "Verifying calendar access"
 # Surface a real error rather than reading `items` out of an error body and

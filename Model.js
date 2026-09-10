@@ -563,6 +563,161 @@ function syncState(doc, nowMs, intervalSeconds) {
   return (nowMs - syncedMs) > thresholdMs ? "stale" : "ok"
 }
 
+// ---- Create / edit / delete, via `gws`. Everything below stays pure and
+// argv-only: Panel.qml owns the actual Process, this just decides what to
+// run and how to read back what it prints. No shell strings anywhere, same
+// reasoning as openExternally's comment above -- calendar content (a title,
+// a location) is attacker-controlled the moment it round-trips through a
+// shared calendar, so it never touches a shell.
+
+// Builds a UTC-offset ISO8601 datetime ("2026-08-10T19:15:00-05:00") from
+// local date/time parts, using this machine's own offset for that instant
+// (so DST transitions resolve correctly). Google's API accepts an explicit
+// offset in place of a separate IANA `timeZone` field, which sidesteps
+// needing a zone *name* -- QML has no clean way to ask Qt for one.
+function offsetDateTime(year, month, day, hour, minute) {
+  var date = new Date(year, month, day, hour, minute, 0)
+  var offsetMin = -date.getTimezoneOffset()
+  var sign = offsetMin >= 0 ? "+" : "-"
+  var abs = Math.abs(offsetMin)
+  return dateKey(year, month, day) + "T" + pad2(hour) + ":" + pad2(minute) + ":00"
+    + sign + pad2(Math.floor(abs / 60)) + ":" + pad2(abs % 60)
+}
+
+// Validates and shapes a create/edit form into a Google Calendar API event
+// body. Returns { ok: false, error } for anything a human needs to fix
+// before this is worth sending, so the caller never has to guess why a
+// request would fail before it is even built.
+//
+// `fields`: { title, location, allDay, dateKey, endDateKey, startTime
+// ("HH:MM"), endTime ("HH:MM") }. `endDateKey` defaults to `dateKey` --
+// multi-day events are deliberately not supported by this form (the sync's
+// per-day row expansion has no inverse here), so a longer span is rejected
+// rather than silently truncated to one day.
+function buildEventBody(fields) {
+  var f = fields || {}
+  var title = String(f.title || "").trim()
+  if (title === "") return { ok: false, error: "Title is required" }
+
+  var startKey = String(f.dateKey || "")
+  var endKey = String(f.endDateKey || f.dateKey || "")
+  var start = dateFromKey(startKey, null)
+  var end = dateFromKey(endKey, null)
+  if (!start || !end) return { ok: false, error: "Pick a date" }
+  if (endKey !== startKey) return { ok: false, error: "Multi-day events aren't supported here -- edit it in Google Calendar" }
+
+  var body = { summary: title }
+  if (String(f.location || "").trim() !== "") body.location = String(f.location).trim()
+
+  if (f.allDay) {
+    // The API's all-day `end.date` is exclusive, so a one-day event's own
+    // end date is the *next* day, not the day it's on.
+    var next = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1)
+    body.start = { date: startKey }
+    body.end = { date: dateKey(next.getFullYear(), next.getMonth(), next.getDate()) }
+    return { ok: true, body: body }
+  }
+
+  var startParts = parseHHMM(f.startTime)
+  var endParts = parseHHMM(f.endTime)
+  if (!startParts) return { ok: false, error: "Pick a start time" }
+  if (!endParts) return { ok: false, error: "Pick an end time" }
+
+  var startDt = offsetDateTime(start.getFullYear(), start.getMonth(), start.getDate(), startParts.hour, startParts.minute)
+  var endDt = offsetDateTime(start.getFullYear(), start.getMonth(), start.getDate(), endParts.hour, endParts.minute)
+  if (Date.parse(endDt) <= Date.parse(startDt)) return { ok: false, error: "End time must be after start time" }
+
+  body.start = { dateTime: startDt }
+  body.end = { dateTime: endDt }
+  return { ok: true, body: body }
+}
+
+// "9:30", "09:30", "930" -> {hour, minute}; anything else -> null. Typing a
+// time by hand is fiddly enough without also demanding a leading zero.
+function parseHHMM(raw) {
+  var s = String(raw || "").trim()
+  var m = s.match(/^(\d{1,2}):?(\d{2})$/)
+  if (!m) return null
+  var hour = parseInt(m[1], 10)
+  var minute = parseInt(m[2], 10)
+  if (isNaN(hour) || isNaN(minute) || hour > 23 || minute > 59) return null
+  return { hour: hour, minute: minute }
+}
+
+// Maps a raw Calendar API event (as `gws ... insert/patch --format json`
+// prints it) to this widget's own row shape -- the same fields the sync
+// writes to calendar-events.json, documented in the README -- so a freshly
+// created/edited event can be merged straight into eventDoc without waiting
+// for the next sync. calendarId/calendarName/color come from the caller
+// (the form's own calendar picker), since the API response only echoes
+// calendarId indirectly (via the request URL, which gws doesn't repeat back).
+function normalizeApiEvent(apiEvent, calendarId, calendarName, color) {
+  var e = apiEvent || {}
+  var start = e.start || {}
+  var end = e.end || {}
+  var allDay = start.date !== undefined
+  var startIso = allDay ? (start.date + "T00:00:00") : (start.dateTime || "")
+  var endIso = allDay ? (end.date + "T00:00:00") : (end.dateTime || "")
+  var startDate = allDay ? dateFromKey(start.date, new Date()) : new Date(startIso)
+
+  return {
+    id: String(e.id || ""),
+    calendarId: calendarId,
+    calendarName: calendarName,
+    color: color || "",
+    dateKey: keyForDate(startDate),
+    start: startIso,
+    end: endIso,
+    allDay: allDay,
+    title: String(e.summary || ""),
+    location: String(e.location || ""),
+    eventUrl: safeUrl(e.htmlLink || ""),
+    meetingUrl: safeUrl(e.hangoutLink || "")
+  }
+}
+
+// `~/.config/omarchy/calendar-sync.json` has the same two keys the Python
+// sync reads (sync/omarchy_calendar_sync/config.py) with the same defaults,
+// so a write profile set up for reading events is also the one writes go
+// through -- one login, one place it is remembered.
+function resolveSyncConfig(rawText, homeDir) {
+  var home = String(homeDir || "")
+  var profile = home + "/.config/gws-omarchy-calendar"
+  var gwsPath = "gws"
+
+  if (rawText) {
+    try {
+      var parsed = JSON.parse(rawText)
+      if (parsed && typeof parsed.profile === "string" && parsed.profile !== "") profile = parsed.profile
+      if (parsed && typeof parsed.gwsPath === "string" && parsed.gwsPath !== "") gwsPath = parsed.gwsPath
+    } catch (error) { /* fall back to defaults below */ }
+  }
+
+  return { profile: profile, gwsPath: gwsPath }
+}
+
+// argv for the three write operations. Always an array, never a shell
+// string -- gws itself takes `--json`/`--params` as plain arguments, so
+// there is nothing to quote in the first place.
+function gwsInsertArgv(gwsPath, calendarId, body) {
+  return [gwsPath, "calendar", "events", "insert",
+    "--params", JSON.stringify({ calendarId: calendarId }),
+    "--json", JSON.stringify(body),
+    "--format", "json"]
+}
+
+function gwsPatchArgv(gwsPath, calendarId, eventId, body) {
+  return [gwsPath, "calendar", "events", "patch",
+    "--params", JSON.stringify({ calendarId: calendarId, eventId: eventId }),
+    "--json", JSON.stringify(body),
+    "--format", "json"]
+}
+
+function gwsDeleteArgv(gwsPath, calendarId, eventId) {
+  return [gwsPath, "calendar", "events", "delete",
+    "--params", JSON.stringify({ calendarId: calendarId, eventId: eventId })]
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     dateKey: dateKey,
@@ -611,6 +766,14 @@ if (typeof module !== "undefined") {
     isJoinableNow: isJoinableNow,
     eventsForDateKey: eventsForDateKey,
     eventColors: eventColors,
-    syncState: syncState
+    syncState: syncState,
+    offsetDateTime: offsetDateTime,
+    buildEventBody: buildEventBody,
+    parseHHMM: parseHHMM,
+    normalizeApiEvent: normalizeApiEvent,
+    resolveSyncConfig: resolveSyncConfig,
+    gwsInsertArgv: gwsInsertArgv,
+    gwsPatchArgv: gwsPatchArgv,
+    gwsDeleteArgv: gwsDeleteArgv
   }
 }
