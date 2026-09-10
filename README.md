@@ -78,7 +78,7 @@ open it, with the command to run.
 ~/.config/omarchy/plugins/tmn73.calendar/sync/setup
 ```
 
-Run it in a real terminal. It pauses for input, and four steps have to be done
+Run it in a real terminal. It pauses for input, and five steps have to be done
 by hand in the Google Cloud Console.
 
 **You need your own Google OAuth client.** There is no shared one, and that is
@@ -96,16 +96,21 @@ The script automates what has an API:
 - the scoped login, and verifying the scope was actually granted
 - the systemd timer
 
-It stops and waits for the four things Google exposes no API for: the consent
-screen, declaring the calendar scope, publishing the app, and creating the
+It stops and waits for the five things Google exposes no API for: the consent
+screen, declaring the calendar scope, filling the branding domains, publishing the app, and creating the
 Desktop OAuth client. Each one prints the exact URL and the exact values.
 
-Two of those steps are traps, and the script says so at the time:
+Three of those steps are traps, and the script says so at the time:
 
 - **Declaring the scope under Data Access is not optional.** A scope that is
   not declared there is never offered on the consent screen, so there is no box
   to tick, Google silently grants only your email address, and every sync then
   fails with `403 insufficient scopes` while the login reports success.
+- **Filling the branding domains is not optional either.** Skip it and the
+  "Publish app" button in the next step stays greyed out, with nothing but a
+  hover tooltip explaining why. Google doesn't verify these fields for personal
+  use — they just have to be filled in with something syntactically valid,
+  which is why the script has you use `example.com`.
 - **Publish the app.** While it sits in Testing, Google expires refresh tokens
   after seven days and your calendar quietly stops updating. Unverified
   production apps show a one time warning screen and then work indefinitely.

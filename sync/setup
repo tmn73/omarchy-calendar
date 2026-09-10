@@ -4,8 +4,8 @@
 # Automates: GCP project creation, Calendar API enablement, gws profile
 # layout, the scoped login, and the systemd timer.
 # Cannot automate: the OAuth consent screen, declaring the calendar scope,
-# publishing to production, and creating the Desktop OAuth client. Google
-# exposes no API for any of those.
+# filling the branding domains, publishing to production, and creating the
+# Desktop OAuth client. Google exposes no API for any of those.
 
 set -euo pipefail
 
@@ -39,7 +39,7 @@ if [ ! -t 0 ]; then
   cat <<'EOF'
 Warning: stdin is not a terminal.
 
-Four of the steps below have to be done by hand in the Google Cloud Console,
+Five of the steps below have to be done by hand in the Google Cloud Console,
 and this run cannot pause to wait for you. Run this directly in a terminal for
 the guided flow.
 
@@ -100,7 +100,7 @@ gcloud config set project "$PROJECT_ID"
 step "Enabling the Calendar API"
 gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID"
 
-step "Manual step 1 of 4: configure the OAuth consent screen"
+step "Manual step 1 of 5: configure the OAuth consent screen"
 cat <<EOF
 Open:
   https://console.cloud.google.com/auth/overview?project=$PROJECT_ID
@@ -116,7 +116,7 @@ Open:
 EOF
 pause
 
-step "Manual step 2 of 4: declare the calendar scope"
+step "Manual step 2 of 5: declare the calendar scope"
 cat <<EOF
 Open:
   https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID
@@ -139,7 +139,29 @@ for personal use, which stays under the unverified cap.
 EOF
 pause
 
-step "Manual step 3 of 4: publish the app"
+step "Manual step 3 of 5: fill the OAuth domain requirements"
+cat <<EOF
+Open:
+  https://console.cloud.google.com/auth/branding?project=$PROJECT_ID
+
+  As of writing this the domain isn't actually verified - what matters is that
+  the domain must be written syntactically correct.
+
+  Under "App domain" fill it in:
+    Application home page:            https://example.com
+    Application privacy policy link:  https://example.com
+
+  Under "Authorized domains" fill in:
+    Authorized domain 1 *:            example.com
+
+  At the bottom click "Save"
+
+Do not skip this. If the domains are not declared you will not be able to
+complete the next step - publishing the app.
+EOF
+pause
+
+step "Manual step 4 of 5: publish the app"
 cat <<EOF
 Open:
   https://console.cloud.google.com/auth/audience?project=$PROJECT_ID
@@ -155,7 +177,7 @@ warning screen and then work indefinitely for personal use.
 EOF
 pause
 
-step "Manual step 4 of 4: create a Desktop OAuth client"
+step "Manual step 5 of 5: create a Desktop OAuth client"
 cat <<EOF
 Open:
   https://console.cloud.google.com/auth/clients?project=$PROJECT_ID
