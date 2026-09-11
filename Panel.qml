@@ -587,6 +587,10 @@ Panel {
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
                   width: parent.width - Style.space(70)
+                  // Supplied by whoever sent the invitation, so never rich
+                  // text: Qt's default AutoText parses markup out of a summary
+                  // and fetches any resource it names.
+                  textFormat: Text.PlainText
                   text: root.upcomingEvent ? root.upcomingEvent.title : qsTr("Nothing else today")
                   color: root.upcomingEvent
                     ? root.contentForeground
@@ -1163,6 +1167,7 @@ Panel {
 
                   Text {
                     width: parent.width
+                    textFormat: Text.PlainText
                     text: eventRow.modelData.title
                     color: eventRow.declined
                       ? Qt.darker(root.contentForeground, 2.0)
@@ -1176,6 +1181,7 @@ Panel {
                   Text {
                     width: parent.width
                     visible: text !== ""
+                    textFormat: Text.PlainText
                     text: {
                       if (eventRow.declined) return qsTr("Declined")
                       if (Model.isOutOfOffice(eventRow.modelData)) return qsTr("Out of office")
