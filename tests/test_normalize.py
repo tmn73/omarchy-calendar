@@ -112,13 +112,17 @@ class TestAllDayEvents(unittest.TestCase):
             [r["dateKey"] for r in rows], ["2026-08-17", "2026-08-18", "2026-08-19"]
         )
 
-    def test_end_date_equal_to_start_date_produces_no_rows(self):
+    def test_end_date_equal_to_start_date_still_occupies_its_day(self):
+        # Not what the API documents, but what it returns for some one-day
+        # markers. The event is visible in Google Calendar, so hiding it here
+        # would be a silent disagreement with what the user can see.
         rows = normalize.normalize_event(all_day("2026-08-17", "2026-08-17"), CAL, BOGOTA)
-        self.assertEqual(rows, [])
+        self.assertEqual([r["dateKey"] for r in rows], ["2026-08-17"])
+        self.assertTrue(rows[0]["allDay"])
 
-    def test_end_date_before_start_date_produces_no_rows(self):
+    def test_end_date_before_start_date_still_occupies_its_start(self):
         rows = normalize.normalize_event(all_day("2026-08-17", "2026-08-16"), CAL, BOGOTA)
-        self.assertEqual(rows, [])
+        self.assertEqual([r["dateKey"] for r in rows], ["2026-08-17"])
 
 
 class TestFiltering(unittest.TestCase):

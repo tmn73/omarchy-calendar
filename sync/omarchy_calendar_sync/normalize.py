@@ -83,13 +83,17 @@ def normalize_event(gevent, calendar, tz):
     except (KeyError, ValueError, TypeError):
         return []
 
-    if all_day:
-        # Google's all-day end.date must be strictly after start.date.
-        if end_dt.date() <= start_dt.date():
-            return []
-    elif end_dt < start_dt:
-        # A zero-length timed event (end == start) is a legal marker.
+    if not all_day and end_dt < start_dt:
+        # A zero-length timed event (end == start) is a legal marker; one that
+        # ends before it begins is not.
         return []
+
+    # An all-day end.date is documented as exclusive and strictly after the
+    # start, but the API does hand back events that break that -- a one-day
+    # marker can arrive as start 2026-10-02, end 2026-10-02. Dropping those
+    # hid an event the user can see in Google Calendar, with nothing logged.
+    # _covered_days already clamps `last` up to `first`, which yields exactly
+    # the one day such an event occupies.
 
     title = (gevent.get("summary") or "").strip() or NO_TITLE
     location = gevent.get("location") or ""
