@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tmn73.calendar",
   "name": "Calendar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "tmn73",
   "license": "MIT",
   "description": "Your Google Calendar in the bar. Your next meeting at a glance, and one click to join it.",
@@ -20,7 +20,8 @@
     "defaults": {
       "format": "dddd HH:mm",
       "formatAlt": "d MMMM 'W'ww yyyy",
-      "verticalFormat": "HH\n-\nmm"
+      "verticalFormat": "HH\n-\nmm",
+      "eventTimeFormat": "HH:mm"
     },
     "schema": [
       {
@@ -40,6 +41,12 @@
         "type": "string",
         "label": "Vertical bar format",
         "defaultValue": "HH\n-\nmm"
+      },
+      {
+        "key": "eventTimeFormat",
+        "type": "string",
+        "label": "Event time format",
+        "defaultValue": "HH:mm"
       },
       {
         "key": "birthYear",
