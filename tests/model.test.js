@@ -313,6 +313,14 @@ test('visibleEvents prefers the authenticated users copy of a duplicate', () => 
   assert.deepEqual(Model.visibleEvents(copies, []).map(e => e.id), ['mine'])
 })
 
+test('the same event seen from two calendars is listed once', () => {
+  const copies = [
+    { id: 'copy-a', iCalUID: 'same@google.com', dateKey: '2026-08-10', isSelf: false },
+    { id: 'copy-b', iCalUID: 'same@google.com', dateKey: '2026-08-10', isSelf: false }
+  ]
+  assert.equal(Model.visibleEvents(copies, []).length, 1)
+})
+
 test('visibleEvents can show every duplicate calendar copy', () => {
   const copies = [
     { id: 'opaque', iCalUID: 'same@google.com', dateKey: '2026-08-10', isSelf: false },
