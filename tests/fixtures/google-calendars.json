@@ -1,6 +1,6 @@
 {
   "items": [
     { "id": "a@example.com", "summary": "Personal", "backgroundColor": "#f83a22", "primary": true },
-    { "id": "b@example.com", "summary": "Phases of the Moon", "backgroundColor": "#fad165" }
+    { "id": "b@example.com", "summary": "Phases of the Moon", "backgroundColor": "#fad165", "primary": false }
   ]
 }

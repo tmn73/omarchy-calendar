@@ -240,6 +240,28 @@ class TestEventTypeAndResponse(unittest.TestCase):
         )
         self.assertEqual(rows[0]["responseStatus"], "")
 
+    def test_primary_calendar_event_is_marked_as_mine(self):
+        rows = normalize.normalize_event(
+            timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00"),
+            {**CAL, "primary": True},
+            BOGOTA,
+        )
+        self.assertTrue(rows[0]["isSelf"])
+
+    def test_attendee_self_marks_shared_calendar_event_as_mine(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["attendees"] = [{"self": True, "responseStatus": "accepted"}]
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertTrue(rows[0]["isSelf"])
+
+    def test_shared_calendar_event_without_self_metadata_is_not_mine(self):
+        rows = normalize.normalize_event(
+            timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00"),
+            CAL,
+            BOGOTA,
+        )
+        self.assertFalse(rows[0]["isSelf"])
+
     def test_every_row_of_a_multi_day_event_carries_the_extras(self):
         event = timed("2026-08-10T23:00:00-05:00", "2026-08-11T01:00:00-05:00")
         event["hangoutLink"] = "https://meet.google.com/x"

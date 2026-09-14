@@ -135,11 +135,9 @@ def run(client, cfg, now, out_path, local_tz):
         time_min, time_max = config_module.window_bounds(cfg, now)
 
         rows = []
-        seen = set()
         for calendar in calendars:
             raw = client.events(calendar["id"], time_min, time_max)
-            fresh = _drop_duplicates(raw, seen)
-            rows.extend(normalize.normalize_all(fresh, calendar, local_tz))
+            rows.extend(normalize.normalize_all(raw, calendar, local_tz))
 
         source = "gws/" + ".".join(str(part) for part in client.version())
     except GwsError as error:

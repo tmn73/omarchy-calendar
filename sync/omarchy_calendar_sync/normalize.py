@@ -54,6 +54,19 @@ def _response_status(gevent):
     return ""
 
 
+def _is_self(gevent, calendar):
+    if calendar.get("primary") is True:
+        return True
+    for attendee in gevent.get("attendees") or []:
+        if attendee.get("self") is True:
+            return True
+    return any(
+        owner.get("self") is True
+        for owner in (gevent.get("organizer"), gevent.get("creator"))
+        if isinstance(owner, dict)
+    )
+
+
 def normalize_all(gevents, calendar, tz):
     """Normalize a list of Google events, flattening the per-day rows."""
     rows = []
@@ -104,6 +117,7 @@ def normalize_event(gevent, calendar, tz):
     return [
         {
             "id": gevent.get("id", ""),
+            "iCalUID": gevent.get("iCalUID", ""),
             "calendarId": calendar["id"],
             "calendarName": calendar["name"],
             "color": calendar["color"],
@@ -117,6 +131,7 @@ def normalize_event(gevent, calendar, tz):
             "eventUrl": event_url,
             "eventType": event_type,
             "responseStatus": response_status,
+            "isSelf": _is_self(gevent, calendar),
         }
         for day in _covered_days(start_dt, end_dt, all_day)
     ]

@@ -29,6 +29,8 @@ EVENT_FIELDS = (
 # schema. Making a new field required would break every one of them on upgrade.
 # Validated for type when present, never demanded.
 OPTIONAL_EVENT_FIELDS = (
+    "iCalUID",
+    "isSelf",
     "meetingUrl",
     "eventUrl",
     "eventType",
@@ -106,7 +108,10 @@ def _validate_event(index, event):
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string")
 
-    for field in OPTIONAL_EVENT_FIELDS:
+    if "isSelf" in event and not isinstance(event["isSelf"], bool):
+        problems.append(f"{where}.isSelf must be a boolean when present")
+
+    for field in (field for field in OPTIONAL_EVENT_FIELDS if field != "isSelf"):
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string when present")
 

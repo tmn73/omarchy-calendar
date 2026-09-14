@@ -244,7 +244,7 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
             titles = json.loads(out.read_text())["events"]
             self.assertEqual(len(titles), 5)
 
-    def test_the_same_event_seen_from_two_calendars_is_listed_once(self):
+    def test_the_same_event_seen_from_two_calendars_keeps_both_copies(self):
         shared = gevent("shared@google.com", "2026-08-10T19:15:00-05:00", "Impuestos")
         calendars = [
             {"id": "a@example.com", "name": "Alpha", "color": "#f83a22"},
@@ -260,6 +260,7 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
                 BOGOTA,
             )
             events = json.loads(out.read_text())["events"]
-            self.assertEqual(len(events), 1)
-            # First calendar by name wins, so the surviving copy is stable.
-            self.assertEqual(events[0]["calendarName"], "Alpha")
+            self.assertEqual(len(events), 2)
+            self.assertEqual(
+                [event["calendarName"] for event in events], ["Alpha", "Beta"]
+            )

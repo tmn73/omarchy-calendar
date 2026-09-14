@@ -73,8 +73,18 @@ class TestCalendars(unittest.TestCase):
         self.assertEqual(
             calendars,
             [
-                {"id": "a@example.com", "name": "Personal", "color": "#f83a22"},
-                {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165"},
+                {
+                    "id": "a@example.com",
+                    "name": "Personal",
+                    "color": "#f83a22",
+                    "primary": True,
+                },
+                {
+                    "id": "b@example.com",
+                    "name": "Phases of the Moon",
+                    "color": "#fad165",
+                    "primary": False,
+                },
             ],
         )
 

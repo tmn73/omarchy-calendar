@@ -154,6 +154,7 @@ These four extra fields are optional. Omit them and everything still works:
 | `eventUrl` | Clicking the row opens this. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
+| `isSelf` | Marks a copy belonging to the authenticated user when duplicate calendar entries are merged |
 
 Rules a writer has to follow:
 
@@ -216,7 +217,7 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | `gws is not installed or not on PATH` from the timer, but it works in your terminal | `gwsPath` is not absolute. `sync/setup` writes it for you |
 | The panel says "No calendar synced yet" | The events file does not exist. The sync has never completed |
 | The panel says the calendar may be out of date | The file exists but `syncedAt` is old. Check the journal above |
-| An event shows up twice | Two of your calendars both carry it. Hide one in settings. The sync already drops exact duplicates by iCalUID and start time |
+| An event shows up twice | Duplicate copies are merged by iCalUID, start time and day, preferring the authenticated user's copy. Turn off **Merge duplicate events** in Display to show every copy |
 | `The project ID you specified is already in use` during setup | Fixed in 0.1.1. Google Cloud project ids are unique across all of Google, and older versions hardcoded one. Update the plugin, or pass your own: `PROJECT_ID=something-unique sync/setup` |
 | Clicking an event opens your calendar but not the event | The link resolves only for the Google account the sync authenticated as. If your browser opens it in a profile signed into a different account, Google falls back to the calendar root. Route `google.com/calendar` to the profile holding that account |
 | The Join button never appears | It only shows from 15 minutes before the start until 15 minutes after the end, and only when the event has a video link |

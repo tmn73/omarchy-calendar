@@ -133,7 +133,8 @@ Panel {
     var all = root.eventDoc ? root.eventDoc.events : []
     root.visibleEventList = Model.visibleEvents(all, root.hiddenCalendars, {
       hideWorkingLocation: !root.showWorkingLocation,
-      hideDeclined: root.hideDeclined
+      hideDeclined: root.hideDeclined,
+      dedupeCalendars: root.dedupeCalendars
     })
     root.eventIndex = Model.indexEventsByDate(root.visibleEventList)
   }
@@ -154,6 +155,7 @@ Panel {
   // default: you probably still want to see what you said no to.
   readonly property bool showWorkingLocation: setting("showWorkingLocation", false)
   readonly property bool hideDeclined: setting("hideDeclined", false)
+  readonly property bool dedupeCalendars: setting("dedupeCalendars", true)
 
   // Hiding happens here rather than in the sync, so toggling a calendar back
   // on is instant instead of waiting for the next fetch. The sync keeps
@@ -194,6 +196,10 @@ Panel {
     persistSettings({ hideDeclined: !root.hideDeclined })
   }
 
+  function toggleDedupeCalendars() {
+    persistSettings({ dedupeCalendars: !root.dedupeCalendars })
+  }
+
   // Qt.openUrlExternally rather than the shell helper on purpose. That helper
   // runs `bash -lc`, and a meeting link is supplied by whoever sent the
   // invitation, so putting it through a shell would be a command injection.
@@ -217,6 +223,7 @@ Panel {
   onHiddenCalendarsChanged: root.rebuildIndex()
   onShowWorkingLocationChanged: root.rebuildIndex()
   onHideDeclinedChanged: root.rebuildIndex()
+  onDedupeCalendarsChanged: root.rebuildIndex()
   onSettingsChanged: root.adoptSettings()
   Component.onCompleted: root.adoptSettings()
 
@@ -1243,6 +1250,7 @@ Panel {
             showYearProgress: root.showYearProgress
             showWorkingLocation: root.showWorkingLocation
             hideDeclined: root.hideDeclined
+            dedupeCalendars: root.dedupeCalendars
             weekStartsMonday: root.weekStart === 1
             announceLeadMinutes: root.setting("announceLeadMinutes", 15)
 
@@ -1260,6 +1268,7 @@ Panel {
             onYearProgressToggled: root.toggleYearProgress()
             onWorkingLocationToggled: root.toggleWorkingLocation()
             onHideDeclinedToggled: root.toggleHideDeclined()
+            onDedupeCalendarsToggled: root.toggleDedupeCalendars()
             onWeekStartToggled: root.toggleWeekStart()
             onLeadMinutesPicked: function(minutes) { root.setAnnounceLeadMinutes(minutes) }
           }

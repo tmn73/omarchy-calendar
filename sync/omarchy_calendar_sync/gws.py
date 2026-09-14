@@ -81,6 +81,7 @@ class Gws:
                 "id": item["id"],
                 "name": item.get("summary") or item["id"],
                 "color": item.get("backgroundColor") or FALLBACK_COLOR,
+                "primary": item.get("primary", False),
             }
             for item in payload.get("items", [])
         ]

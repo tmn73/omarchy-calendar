@@ -305,6 +305,41 @@ test('visibleEvents still applies the calendar filter alongside type filters', (
   assert.deepEqual(Model.visibleEvents(TYPED, ['w']).map(e => e.id), [])
 })
 
+test('visibleEvents prefers the authenticated users copy of a duplicate', () => {
+  const copies = [
+    { id: 'opaque', iCalUID: 'same@google.com', dateKey: '2026-08-10', title: '(no title)', isSelf: false },
+    { id: 'mine', iCalUID: 'same@google.com', dateKey: '2026-08-10', title: 'My meeting', isSelf: true }
+  ]
+  assert.deepEqual(Model.visibleEvents(copies, []).map(e => e.id), ['mine'])
+})
+
+test('visibleEvents can show every duplicate calendar copy', () => {
+  const copies = [
+    { id: 'opaque', iCalUID: 'same@google.com', dateKey: '2026-08-10', isSelf: false },
+    { id: 'mine', iCalUID: 'same@google.com', dateKey: '2026-08-10', isSelf: true }
+  ]
+  assert.deepEqual(
+    Model.visibleEvents(copies, [], { dedupeCalendars: false }).map(e => e.id),
+    ['opaque', 'mine']
+  )
+})
+
+test('visibleEvents does not dedupe events without an iCalUID', () => {
+  const copies = [
+    { id: 'opaque-a', dateKey: '2026-08-10', isSelf: false },
+    { id: 'opaque-b', dateKey: '2026-08-10', isSelf: false }
+  ]
+  assert.deepEqual(Model.visibleEvents(copies, []).map(e => e.id), ['opaque-a', 'opaque-b'])
+})
+
+test('visibleEvents keeps each day of a multi-day event', () => {
+  const days = [
+    { id: 'multi', iCalUID: 'multi@google.com', dateKey: '2026-08-10', start: '2026-08-10T09:00:00-05:00', isSelf: true },
+    { id: 'multi', iCalUID: 'multi@google.com', dateKey: '2026-08-11', start: '2026-08-10T09:00:00-05:00', isSelf: true }
+  ]
+  assert.deepEqual(Model.visibleEvents(days, []).map(e => e.dateKey), ['2026-08-10', '2026-08-11'])
+})
+
 test('visibleEvents with no options behaves as the old two-argument call', () => {
   const plain = [{ id: 'x', calendarId: 'w', dateKey: '2026-08-10' }]
   assert.deepEqual(Model.visibleEvents(plain, []).map(e => e.id), ['x'])

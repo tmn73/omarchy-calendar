@@ -77,6 +77,15 @@ class TestOptionalFields(unittest.TestCase):
         problems = contract.validate(doc)
         self.assertTrue(any("eventType" in p for p in problems))
 
+    def test_is_self_is_optional_and_must_be_boolean_when_present(self):
+        doc = self.load()
+        self.assertEqual(contract.validate(doc), [])
+        doc["events"][0]["isSelf"] = True
+        self.assertEqual(contract.validate(doc), [])
+        doc["events"][0]["isSelf"] = "yes"
+        problems = contract.validate(doc)
+        self.assertTrue(any("isSelf" in p for p in problems))
+
     def test_a_non_https_meeting_url_is_rejected(self):
         doc = self.load()
         doc["events"][0]["meetingUrl"] = "javascript:alert(1)"

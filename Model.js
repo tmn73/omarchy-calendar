@@ -359,6 +359,31 @@ function isOutOfOffice(event) {
   return !!event && String(event.eventType || "") === "outOfOffice"
 }
 
+function occurrenceKey(event) {
+  if (!event || !event.iCalUID) return null
+  return String(event.iCalUID) + '|' + String(event.start || '') + '|' + String(event.dateKey || '')
+}
+
+function preferSelfCopy(events) {
+  var selected = []
+  var positions = {}
+
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    var key = occurrenceKey(event)
+    if (key === null) {
+      selected.push(event)
+    } else if (positions[key] === undefined) {
+      positions[key] = selected.length
+      selected.push(event)
+    } else if (event.isSelf === true) {
+      selected[positions[key]] = event
+    }
+  }
+
+  return selected
+}
+
 // Only https is ever launched. A meeting link is supplied by whoever sent the
 // invitation, so treating it as trusted input would be a mistake.
 function safeUrl(url) {
@@ -420,6 +445,7 @@ function visibleEvents(events, hidden, options) {
   var opts = options || {}
   var dropNoisy = opts.hideWorkingLocation !== false
   var dropDeclined = opts.hideDeclined === true
+  var dedupeCalendars = opts.dedupeCalendars !== false
 
   var visible = []
   for (var i = 0; i < events.length; i++) {
@@ -429,7 +455,7 @@ function visibleEvents(events, hidden, options) {
     if (dropDeclined && isDeclined(event)) continue
     visible.push(event)
   }
-  return visible
+  return dedupeCalendars ? preferSelfCopy(visible) : visible
 }
 
 // ---- The next thing coming up.
@@ -601,6 +627,7 @@ if (typeof module !== "undefined") {
     isCalendarHidden: isCalendarHidden,
     toggleHiddenCalendar: toggleHiddenCalendar,
     visibleEvents: visibleEvents,
+    occurrenceKey: occurrenceKey,
     isNoisyEventType: isNoisyEventType,
     isDeclined: isDeclined,
     isOutOfOffice: isOutOfOffice,

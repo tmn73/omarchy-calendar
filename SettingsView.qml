@@ -20,6 +20,7 @@ Column {
   property bool weekStartsMonday: true
   property bool showWorkingLocation: false
   property bool hideDeclined: false
+  property bool dedupeCalendars: true
   property int announceLeadMinutes: 15
 
   property string syncedAt: ""
@@ -34,6 +35,7 @@ Column {
   signal weekStartToggled()
   signal workingLocationToggled()
   signal hideDeclinedToggled()
+  signal dedupeCalendarsToggled()
   signal leadMinutesPicked(int minutes)
   signal setupCommandCopyRequested()
 
@@ -187,6 +189,13 @@ Column {
     hint: qsTr("The upstream clock's bars, off by default")
     checked: root.showYearProgress
     onActivated: root.yearProgressToggled()
+  }
+
+  ToggleRow {
+    label: qsTr("Merge duplicate events")
+    hint: qsTr("Off shows a copy from every calendar")
+    checked: root.dedupeCalendars
+    onActivated: root.dedupeCalendarsToggled()
   }
 
   // ---- Bar
