@@ -154,8 +154,8 @@ These optional fields can be omitted and everything still works:
 | `eventUrl` | Clicking the row opens this. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
+| `iCalUID` | Event UID used alongside start time and dateKey to merge duplicate calendar occurrences |
 | `isSelf` | Marks a copy belonging to the authenticated user when duplicate calendar entries are merged |
-
 Rules a writer has to follow:
 
 - `dateKey` is `YYYY-MM-DD` in local time, and it is what the grid keys on.

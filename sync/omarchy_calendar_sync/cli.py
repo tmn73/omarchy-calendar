@@ -110,22 +110,6 @@ def occurrence_key(gevent):
     return (uid, start.get("dateTime") or start.get("date"))
 
 
-def _drop_duplicates(gevents, seen):
-    """Filter events already seen in an earlier calendar. Mutates `seen`.
-
-    First occurrence wins. Calendars arrive sorted by name, so which copy
-    survives is stable across runs rather than depending on Google's order.
-    """
-    fresh = []
-    for gevent in gevents:
-        key = occurrence_key(gevent)
-        if key is not None:
-            if key in seen:
-                continue
-            seen.add(key)
-        fresh.append(gevent)
-    return fresh
-
 
 def run(client, cfg, now, out_path, local_tz):
     """Fetch, normalize, write. Returns a process exit code."""

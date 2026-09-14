@@ -176,8 +176,8 @@ Column {
   }
 
   ToggleRow {
-    // Every row on this page reads "checked means shown". Phrasing this one as
-    // "Hide ..." inverted that and made the page contradict itself.
+    // The invitations row reads "checked means shown". Phrasing it as
+    // "Hide ..." would invert that and contradict the other switches.
     label: qsTr("Declined invitations")
     hint: qsTr("Shown struck through when on")
     checked: !root.hideDeclined
