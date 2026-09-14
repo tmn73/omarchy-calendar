@@ -146,7 +146,7 @@ a shell script, a cron job of your own. No credentials, no network, no `gws`.
 }
 ```
 
-These four extra fields are optional. Omit them and everything still works:
+These optional fields can be omitted and everything still works:
 
 | Field | Effect |
 |---|---|
