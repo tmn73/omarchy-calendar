@@ -165,3 +165,10 @@ class TestBackendSelection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWriteSupport(unittest.TestCase):
+    def test_eds_cannot_write(self):
+        from omarchy_calendar_sync.eds import Eds
+
+        self.assertFalse(Eds.can_write)

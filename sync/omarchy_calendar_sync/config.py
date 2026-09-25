@@ -15,6 +15,10 @@ DEFAULTS = {
     # "gws" reads Google directly and needs a Google Cloud project;
     # "eds" reads Evolution Data Server and needs none. See the README.
     "backend": "gws",
+    # Opt-in. sync/setup --write sets it, together with the calendar.events
+    # scope. Off, the sync publishes no writable calendars and the panel
+    # shows no way to change an event.
+    "write": False,
     # eds only: the address whose invitation answers count as "yours".
     # Blank means responseStatus is left unset rather than guessed.
     "identity": "",

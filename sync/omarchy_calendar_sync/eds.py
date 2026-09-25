@@ -140,6 +140,10 @@ class Eds:
 
     SOURCE_NAME = "eds"
 
+    # No create, update or delete on this backend yet, so the sync publishes
+    # no writable calendars and the panel offers no edits.
+    can_write = False
+
     def __init__(self, settle_seconds=SETTLE_SECONDS, identity=""):
         self._settle = settle_seconds
         self._identity = identity

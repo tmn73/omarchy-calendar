@@ -136,6 +136,10 @@ def _validate_event(index, event):
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string when present")
 
+    # Optional and boolean, so it is not in OPTIONAL_EVENT_FIELDS.
+    if "recurring" in event and not isinstance(event["recurring"], bool):
+        problems.append(f"{where}.recurring must be a boolean when present")
+
     for field in ("meetingUrl", "eventUrl"):
         value = event.get(field)
         if isinstance(value, str) and value and not _HTTPS_URL.match(value):

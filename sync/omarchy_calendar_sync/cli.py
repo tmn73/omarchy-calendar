@@ -159,7 +159,16 @@ def run(client, cfg, now, out_path, local_tz):
         return EXIT_SYNC_FAILED
 
     rows.sort(key=lambda row: (row["dateKey"], row["start"], row["title"]))
-    doc = contract.build_document(rows, now.isoformat(), source)
+    # The panel offers edits only for these. Only when the user turned
+    # writing on and the backend can write; otherwise the key is absent.
+    writable = []
+    if cfg.get("write") and getattr(client, "can_write", False):
+        writable = [
+            {"id": c["id"], "name": c["name"], "color": c["color"]}
+            for c in calendars
+            if c.get("writable")
+        ]
+    doc = contract.build_document(rows, now.isoformat(), source, writable)
 
     problems = contract.validate(doc)
     if problems:

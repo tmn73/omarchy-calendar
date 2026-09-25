@@ -298,3 +298,35 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0]["calendarName"], "me@example.com")
             self.assertEqual(events[0]["title"], "Impuestos")
+
+
+class TestWritableCalendars(unittest.TestCase):
+    CALS = [
+        {"id": "me@example.com", "name": "Me", "color": "#7bd148", "primary": True, "writable": True},
+        {"id": "team@example.com", "name": "Team", "color": "#f83a22", "writable": False},
+    ]
+
+    def sync_with(self, cfg_changes, can_write=True):
+        client = FakeGws(calendars=self.CALS, events=[])
+        client.can_write = can_write
+        cfg = {**config.DEFAULTS, **cfg_changes}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.json"
+            cli.run(client, cfg, NOW, out, BOGOTA)
+            return json.loads(out.read_text())
+
+    def test_writable_calendars_are_listed_when_writing_is_on(self):
+        doc = self.sync_with({"write": True})
+        self.assertEqual(
+            doc["writableCalendars"],
+            [{"id": "me@example.com", "name": "Me", "color": "#7bd148"}],
+        )
+
+    def test_no_writable_calendars_when_writing_is_off(self):
+        self.assertNotIn("writableCalendars", self.sync_with({"write": False}))
+
+    def test_no_writable_calendars_when_the_backend_cannot_write(self):
+        self.assertNotIn("writableCalendars", self.sync_with({"write": True}, can_write=False))
+
+    def test_writing_is_off_by_default(self):
+        self.assertIs(config.DEFAULTS["write"], False)

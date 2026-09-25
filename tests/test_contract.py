@@ -108,3 +108,10 @@ class TestOptionalFields(unittest.TestCase):
         writable = [{"id": "a@example.com", "name": "A", "color": "#000000"}]
         doc = contract.build_document([], "2026-09-25T00:00:00+00:00", "gws/0.13.2", writable)
         self.assertEqual(doc["writableCalendars"], writable)
+
+    def test_recurring_is_optional_and_must_be_a_boolean(self):
+        doc = self.load()
+        doc["events"][0]["recurring"] = True
+        self.assertEqual(contract.validate(doc), [])
+        doc["events"][0]["recurring"] = "yes"
+        self.assertTrue(any("recurring" in p for p in contract.validate(doc)))

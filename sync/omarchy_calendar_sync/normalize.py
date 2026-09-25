@@ -105,7 +105,7 @@ def normalize_event(gevent, calendar, tz):
     event_type = str(gevent.get("eventType") or "")
     response_status = _response_status(gevent)
 
-    return [
+    rows = [
         {
             "id": gevent.get("id", ""),
             "calendarId": calendar["id"],
@@ -124,6 +124,12 @@ def normalize_event(gevent, calendar, tz):
         }
         for day in _covered_days(start_dt, end_dt, all_day)
     ]
+    if gevent.get("recurringEventId"):
+        # Only on occurrences of a series, so the rows of a single event keep
+        # their exact shape. The edit form says it changes this one only.
+        for row in rows:
+            row["recurring"] = True
+    return rows
 
 
 def _parse_endpoint(node, tz):
