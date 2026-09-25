@@ -132,9 +132,11 @@ New setup: answer yes when `sync/setup` asks, or run `sync/setup --write`.
 Already set up:
 
 1. In the Cloud Console, under **Data Access**, add `calendar.events` next to `calendar.readonly`.
-2. Log in again with both scopes:
+2. Log in again with both scopes. The `rm` drops the cached token, which would
+   keep being served without the new scope:
 
    ```bash
+   rm -f ~/.config/gws-omarchy-calendar/token_cache.json
    GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-omarchy-calendar gws auth login \
      --scopes https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/calendar.events
    ```
