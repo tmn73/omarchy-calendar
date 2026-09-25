@@ -93,10 +93,20 @@ Panel {
   readonly property var writableCalendars: (eventDoc && eventDoc.writableCalendars) || []
   readonly property bool canWrite: writableCalendars.length > 0
   property bool formOpen: false
-  property var formEditing: null
+  // The form the event form opens with: a get's reply, or a new one.
+  property var formInitial: null
   property bool writeBusy: false
   property string writeError: ""
+  // What the running command is for: "edit" and "delete" run a get first,
+  // "save" and "remove" are the writes.
+  property string pendingPurpose: ""
+  // The event a plain delete waits to confirm, as a form.
   property var pendingDelete: null
+  // The open two-answer question, if any; see ask().
+  property string choiceMessage: ""
+  property string choiceFirst: ""
+  property string choiceSecond: ""
+  property var choiceCallback: null
 
   // Only ever this file, next to this plugin. Never a path from the events
   // file: any program can write that file.
@@ -518,26 +528,121 @@ Panel {
     command: ["wl-copy", "--", root.writeSetupCommand]
   }
 
-  function openForm(event) {
-    if (!root.canWrite) return
+  function openForm(form) {
+    if (!root.canWrite || !form) return
     root.settingsOpen = false
-    root.formEditing = event
     root.writeError = ""
+    root.formInitial = form
     root.formOpen = true
-    Qt.callLater(function() { eventForm.reset() })
+  }
+
+  function newEvent() {
+    if (!root.canWrite) return
+    root.openForm(Model.newEventForm(
+      root.selectedDayKey,
+      Model.defaultFormTimes(root.selectedDayKey, root.nowTick),
+      root.writableCalendars[0].id))
   }
 
   function closeForm() {
     root.formOpen = false
-    root.formEditing = null
+    root.formInitial = null
     root.writeError = ""
     Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
   }
 
-  function runWrite(request) {
+  // Edit and delete both read the whole event first: the file carries no
+  // guests, repeat or description, and a delete needs to know about both.
+  function editEvent(row) {
+    root.runEvent({ action: "get", calendarId: row.calendarId, eventId: row.id }, "edit")
+  }
+
+  function deleteEvent(row) {
+    root.runEvent({ action: "get", calendarId: row.calendarId, eventId: row.id }, "delete")
+  }
+
+  // One question with two answers; callback("first" or "second").
+  function ask(message, firstText, secondText, callback) {
+    root.choiceMessage = message
+    root.choiceFirst = firstText
+    root.choiceSecond = secondText
+    root.choiceCallback = callback
+  }
+
+  function answerChoice(answer) {
+    var callback = root.choiceCallback
+    root.choiceMessage = ""
+    root.choiceCallback = null
+    if (callback && answer) callback(answer)
+  }
+
+  function saveForm(form) {
+    var initial = root.formInitial || {}
+    var choice = { scope: "this", sendUpdates: "none" }
+    var series = String(form.recurringEventId || "") !== ""
+    // A new repeat can only be a series edit, so it is not a question.
+    if (series && form.repeat !== initial.repeat) choice.scope = "all"
+    var askScope = series && form.repeat === initial.repeat
+
+    function run() {
+      root.runEvent({
+        action: String(form.eventId || "") !== "" ? "update" : "create",
+        scope: choice.scope,
+        sendUpdates: choice.sendUpdates,
+        event: form
+      }, "save")
+    }
+
+    function askInvitations() {
+      if (Model.otherGuests(form).length === 0) return run()
+      root.ask(qsTr("Send invitation emails to the guests?"), qsTr("Send"), qsTr("Don't send"),
+        function(answer) { choice.sendUpdates = answer === "first" ? "all" : "none"; run() })
+    }
+
+    if (askScope)
+      root.ask(qsTr("Edit a recurring event"), qsTr("This event"), qsTr("All events"),
+        function(answer) { choice.scope = answer === "first" ? "this" : "all"; askInvitations() })
+    else
+      askInvitations()
+  }
+
+  function startDelete(form) {
+    var choice = { scope: "this", sendUpdates: "none" }
+    var series = String(form.recurringEventId || "") !== ""
+    var guests = Model.otherGuests(form).length > 0
+
+    function run() {
+      root.runEvent({
+        action: "delete",
+        calendarId: form.calendarId,
+        eventId: form.eventId,
+        recurringEventId: form.recurringEventId || "",
+        scope: choice.scope,
+        sendUpdates: choice.sendUpdates
+      }, "remove")
+    }
+
+    function askCancellations() {
+      if (!guests) return run()
+      root.ask(qsTr("Send cancellation emails to the guests?"), qsTr("Send"), qsTr("Don't send"),
+        function(answer) { choice.sendUpdates = answer === "first" ? "all" : "none"; run() })
+    }
+
+    if (series)
+      root.ask(qsTr("Delete a recurring event"), qsTr("This event"), qsTr("All events"),
+        function(answer) { choice.scope = answer === "first" ? "this" : "all"; askCancellations() })
+    else if (guests)
+      askCancellations()
+    else
+      // No question to ask, so the plain confirm, with its title.
+      root.pendingDelete = { form: form, run: run }
+  }
+
+  function runEvent(request, purpose) {
     if (root.writeBusy) return
     root.writeBusy = true
     root.writeError = ""
+    root.pendingPurpose = purpose
     // Argv, not a shell string: the title is typed by the user and can hold
     // anything.
     writeProcess.command = [root.eventCommand, JSON.stringify(request)]
@@ -547,13 +652,18 @@ Panel {
   function onWriteReply(text) {
     root.writeBusy = false
     root.pendingDelete = null
+    var purpose = root.pendingPurpose
+    root.pendingPurpose = ""
     var reply = Model.parseWriteReply(text)
     if (!reply.ok) {
       root.writeError = reply.error
       return
     }
-    // The command rewrote the events file; the file watch shows the change.
-    if (root.formOpen) root.closeForm()
+    if (purpose === "edit") root.openForm(reply.event)
+    else if (purpose === "delete") root.startDelete(reply.event)
+    // A write: the command rewrote the events file, and the file watch shows
+    // the change.
+    else if (root.formOpen) root.closeForm()
   }
 
   Process {
@@ -601,7 +711,8 @@ Panel {
       // ConfirmDialog takes no keys, so Escape backs out of a pending delete
       // before it closes the panel.
       onCloseRequested: {
-        if (root.pendingDelete !== null) root.pendingDelete = null
+        if (root.choiceMessage !== "") root.answerChoice(null)
+        else if (root.pendingDelete !== null) root.pendingDelete = null
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -612,7 +723,7 @@ Panel {
         else if (t === "}") root.moveYear(1)
         else if (t === "t" || t === "T") root.goToToday()
         else if (t === "w" || t === "W") root.toggleWeekStart()
-        else if ((t === "n" || t === "N") && root.canWrite) root.openForm(null)
+        else if ((t === "n" || t === "N") && root.canWrite) root.newEvent()
       }
 
       Flickable {
@@ -1203,6 +1314,8 @@ Panel {
                 anchors.verticalCenter: parent.verticalCenter
                 text: showsError
                   ? root.writeError
+                  : root.writeBusy && !root.formOpen
+                  ? qsTr("LOADING…")
                   : Qt.formatDate(root.selectedDate, "dddd d MMMM").toUpperCase()
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
@@ -1222,7 +1335,7 @@ Panel {
                 tooltipText: "New event (N)"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
-                onClicked: root.openForm(null)
+                onClicked: root.newEvent()
               }
             }
 
@@ -1340,16 +1453,12 @@ Panel {
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(2)
 
-                  // The form edits one day, so an event over several days
-                  // can be deleted here but not edited.
                   PanelActionButton {
-                    visible: !Model.isMultiDay(eventRow.modelData,
-                                               root.eventDoc ? root.eventDoc.events : [])
                     iconText: "󰏫"
                     tooltipText: "Edit"
                     foreground: root.contentForeground
                     fontFamily: root.contentFontFamily
-                    onClicked: root.openForm(eventRow.modelData)
+                    onClicked: root.editEvent(eventRow.modelData)
                   }
 
                   PanelActionButton {
@@ -1357,7 +1466,7 @@ Panel {
                     tooltipText: "Delete"
                     foreground: root.contentForeground
                     fontFamily: root.contentFontFamily
-                    onClicked: root.pendingDelete = eventRow.modelData
+                    onClicked: root.deleteEvent(eventRow.modelData)
                   }
                 }
 
@@ -1513,27 +1622,28 @@ Panel {
           }
 
           // ---- New or edited event, shown in place of the grid and the
-          //      agenda like the settings page. The form emits the fields;
-          //      this panel runs the write command.
-          EventForm {
-            id: eventForm
-            visible: root.formOpen
+          //      agenda like the settings page. A Loader, so every open gets
+          //      a fresh form: the shell's menus drop their bindings once
+          //      used, and nothing may carry over from the last event.
+          Loader {
+            active: root.formOpen && root.formInitial !== null
+            visible: active
             width: gridColumn.width
             anchors.horizontalCenter: parent.horizontalCenter
-            foreground: root.contentForeground
-            fontFamily: root.contentFontFamily
-            editing: root.formEditing
-            defaultDateKey: root.selectedDayKey
-            defaultStart: Model.defaultFormTimes(root.selectedDayKey, root.nowTick).start
-            defaultEnd: Model.defaultFormTimes(root.selectedDayKey, root.nowTick).end
-            calendars: root.writableCalendars
-            errorText: root.writeError
-            busy: root.writeBusy
-            onSubmitted: function(fields) {
-              root.runWrite(Model.writeRequest(
-                root.formEditing ? "update" : "create", fields, root.formEditing))
+
+            sourceComponent: EventForm {
+              width: gridColumn.width
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              timeFormat: root.eventTimeFormat
+              weekStart: root.weekStart
+              calendars: root.writableCalendars
+              initialForm: root.formInitial
+              errorText: root.writeError
+              busy: root.writeBusy
+              onSubmitted: function(form) { root.saveForm(form) }
+              onCanceled: root.closeForm()
             }
-            onCanceled: root.closeForm()
           }
 
           // ---- Settings, shown in place of the grid. Everything it changes
@@ -1588,12 +1698,25 @@ Panel {
       anchors.fill: parent
       opened: root.pendingDelete !== null
       message: root.pendingDelete
-        ? "Delete \"" + (root.pendingDelete.title || "(No title)") + "\"?"
+        ? "Delete \"" + (root.pendingDelete.form.title || "(No title)") + "\"?"
         : ""
       confirmText: "Delete"
       fontFamily: root.contentFontFamily
-      onConfirmed: root.runWrite(Model.writeRequest("delete", null, root.pendingDelete))
+      onConfirmed: root.pendingDelete.run()
       onCanceled: root.pendingDelete = null
+    }
+
+    // "Send invitation emails?", "This event or all events?": see ask().
+    ChoiceDialog {
+      anchors.fill: parent
+      opened: root.choiceMessage !== ""
+      message: root.choiceMessage
+      firstText: root.choiceFirst
+      secondText: root.choiceSecond
+      fontFamily: root.contentFontFamily
+      onFirst: root.answerChoice("first")
+      onSecond: root.answerChoice("second")
+      onCanceled: root.answerChoice(null)
     }
   }
 }

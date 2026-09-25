@@ -628,15 +628,6 @@ function isWritable(event, writableCalendars) {
   return false
 }
 
-// A multi-day event is one row per day it covers, all with the same id.
-function isMultiDay(event, events) {
-  if (!event || !events) return false
-  var count = 0
-  for (var i = 0; i < events.length; i++)
-    if (events[i].id === event.id && events[i].calendarId === event.calendarId) count++
-  return count > 1
-}
-
 function clockText(minutes) {
   var h = Math.floor(minutes / 60) % 24
   var m = minutes % 60
@@ -652,24 +643,6 @@ function defaultFormTimes(dateKeyText, now) {
     start = Math.min(Math.ceil((minutes + 1) / 30) * 30, 23 * 60 + 30)
   }
   return { start: clockText(start), end: clockText(start + 30) }
-}
-
-// The JSON the write command reads. See sync/omarchy_calendar_sync/writes.py.
-function writeRequest(action, fields, event) {
-  if (action === "delete")
-    return { action: "delete", calendarId: event.calendarId, eventId: event.id }
-  var request = {
-    action: action,
-    calendarId: fields.calendarId,
-    title: fields.title,
-    dateKey: fields.dateKey,
-    allDay: !!fields.allDay,
-    start: fields.start,
-    end: fields.end,
-    location: fields.location
-  }
-  if (action === "update") request.eventId = event.id
-  return request
 }
 
 // For running a file next to this one. commandPathFromUrl shortens to ~
@@ -845,9 +818,7 @@ if (typeof module !== "undefined") {
     isValidEmail: isValidEmail,
     addGuest: addGuest,
     isWritable: isWritable,
-    isMultiDay: isMultiDay,
     defaultFormTimes: defaultFormTimes,
-    writeRequest: writeRequest,
     localPathFromUrl: localPathFromUrl,
     parseWriteReply: parseWriteReply,
     dateKey: dateKey,
