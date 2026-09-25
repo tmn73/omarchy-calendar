@@ -86,6 +86,22 @@ Panel {
   // was installed by `omarchy plugin add` or cloned somewhere by hand.
   readonly property string setupCommand: Model.commandPathFromUrl(
     Qt.resolvedUrl("sync/setup"), Quickshell.env("HOME") || "")
+  readonly property string writeSetupCommand: root.setupCommand + " --write"
+
+  // ---- Writing. The sync lists the calendars the panel may change; with no
+  //      list there is no "+", no pencil and no trash can.
+  readonly property var writableCalendars: (eventDoc && eventDoc.writableCalendars) || []
+  readonly property bool canWrite: writableCalendars.length > 0
+  property bool formOpen: false
+  property var formEditing: null
+  property bool writeBusy: false
+  property string writeError: ""
+  property var pendingDelete: null
+
+  // Only ever this file, next to this plugin. Never a path from the events
+  // file: any program can write that file.
+  readonly property string writeCommand: Model.localPathFromUrl(
+    Qt.resolvedUrl("sync/omarchy-calendar-write"))
   readonly property string syncState: eventVersionMismatch
     ? "version"
     : Model.syncState(eventDoc, Date.now(), syncIntervalSeconds)
@@ -338,6 +354,7 @@ Panel {
     // Dismissing the panel mid-edit would otherwise leave the inputs up,
     // waiting behind a closed popup for the next time it opens.
     if (root.editingLife) root.cancelEditingLife()
+    if (root.formOpen) root.closeForm()
   }
 
   function toggle() {
@@ -496,6 +513,57 @@ Panel {
     onTriggered: root.setupCommandCopied = false
   }
 
+  Process {
+    id: writeSetupCopier
+    command: ["wl-copy", "--", root.writeSetupCommand]
+  }
+
+  function openForm(event) {
+    if (!root.canWrite) return
+    root.settingsOpen = false
+    root.formEditing = event
+    root.writeError = ""
+    root.formOpen = true
+    Qt.callLater(function() { eventForm.reset() })
+  }
+
+  function closeForm() {
+    root.formOpen = false
+    root.formEditing = null
+    root.writeError = ""
+    Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  }
+
+  function runWrite(request) {
+    if (root.writeBusy) return
+    root.writeBusy = true
+    root.writeError = ""
+    // Argv, not a shell string: the title is typed by the user and can hold
+    // anything.
+    writeProcess.command = [root.writeCommand, JSON.stringify(request)]
+    writeProcess.running = true
+  }
+
+  function onWriteReply(text) {
+    root.writeBusy = false
+    root.pendingDelete = null
+    var reply = Model.parseWriteReply(text)
+    if (!reply.ok) {
+      root.writeError = reply.error
+      return
+    }
+    // The command rewrote the events file; the file watch shows the change.
+    if (root.formOpen) root.closeForm()
+  }
+
+  Process {
+    id: writeProcess
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.onWriteReply(text)
+    }
+  }
+
   SystemClock {
     id: clock
     precision: SystemClock.Minutes
@@ -523,13 +591,19 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: root.editingLife
+      // Off while typing in the form, so an "n" in a title stays an "n".
+      blocked: root.editingLife || root.formOpen
       onMoveRequested: function(dx, dy) {
         if (dx !== 0) root.moveMonth(dx)
         if (dy !== 0) root.moveYear(dy)
       }
       onActivateRequested: root.goToToday()
-      onCloseRequested: root.close()
+      // ConfirmDialog takes no keys, so Escape backs out of a pending delete
+      // before it closes the panel.
+      onCloseRequested: {
+        if (root.pendingDelete !== null) root.pendingDelete = null
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
         if (t === "[") root.moveMonth(-1)
@@ -538,6 +612,7 @@ Panel {
         else if (t === "}") root.moveYear(1)
         else if (t === "t" || t === "T") root.goToToday()
         else if (t === "w" || t === "W") root.toggleWeekStart()
+        else if ((t === "n" || t === "N") && root.canWrite) root.openForm(null)
       }
 
       Flickable {
@@ -855,7 +930,7 @@ Panel {
           //      the seven day columns. Always six rows, so the popup is
           //      exactly as tall in February as it is in August.
           Item {
-            visible: !root.settingsOpen
+            visible: !root.settingsOpen && !root.formOpen
             width: parent.width
             height: gridColumn.y + gridColumn.height
 
@@ -1052,7 +1127,7 @@ Panel {
           //      The label is centered and fixed-width, so it holds still
           //      from "MAY" to "SEPTEMBER".
           Item {
-            visible: !root.settingsOpen
+            visible: !root.settingsOpen && !root.formOpen
             width: parent.width
             height: monthNav.height
 
@@ -1107,19 +1182,48 @@ Panel {
           //      the selection survives stepping to another month and an
           //      undated list would then be a quiet lie.
           Column {
-            visible: !root.settingsOpen
+            visible: !root.settingsOpen && !root.formOpen
             width: gridColumn.width
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Style.space(4)
 
-            Text {
+            // The day's heading, with "+" at the right when writing is on. A
+            // failed delete has no form to report into, so its error takes
+            // the heading's place until the next write.
+            Item {
               width: parent.width
-              text: Qt.formatDate(root.selectedDate, "dddd d MMMM").toUpperCase()
-              color: root.quiet(0.72)
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
-              font.letterSpacing: 1
-              font.bold: true
+              height: Math.max(dayHeading.implicitHeight,
+                               addEventButton.visible ? addEventButton.height : 0)
+
+              Text {
+                id: dayHeading
+                readonly property bool showsError: root.writeError !== "" && !root.formOpen
+                anchors.left: parent.left
+                anchors.right: addEventButton.visible ? addEventButton.left : parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: showsError
+                  ? root.writeError
+                  : Qt.formatDate(root.selectedDate, "dddd d MMMM").toUpperCase()
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                color: showsError ? Color.urgent : root.quiet(0.72)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+                font.letterSpacing: 1
+                font.bold: true
+              }
+
+              PanelActionButton {
+                id: addEventButton
+                visible: root.canWrite
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                iconText: "󰐕"
+                tooltipText: "New event (N)"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.openForm(null)
+              }
             }
 
             Repeater {
@@ -1162,6 +1266,9 @@ Panel {
                 readonly property bool joinable: Model.isJoinableNow(modelData, root.nowTick.getTime(), root.todayKey)
                 readonly property string eventUrl: Model.eventUrlFor(modelData)
                 readonly property bool openable: eventUrl !== ""
+                // Pencil and trash can on hover, for your own calendars only.
+                readonly property bool writable: Model.isWritable(modelData, root.writableCalendars)
+                readonly property bool showActions: eventHover.hovered && writable && !root.writeBusy
 
                 width: gridColumn.width
                 height: eventBody.height + Style.space(2)
@@ -1174,10 +1281,14 @@ Panel {
                     : "transparent"
 
                 // Only rows that can actually do something respond to a click.
+                // A writable row hovers too, for its pencil and trash can,
+                // but the hand cursor stays for rows a click opens.
                 HoverHandler {
                   id: eventHover
-                  enabled: eventRow.openable || eventRow.joinable
-                  cursorShape: Qt.PointingHandCursor
+                  enabled: eventRow.openable || eventRow.joinable || eventRow.writable
+                  cursorShape: eventRow.openable || eventRow.joinable
+                    ? Qt.PointingHandCursor
+                    : Qt.ArrowCursor
                 }
 
                 Rectangle {
@@ -1221,9 +1332,39 @@ Panel {
                 // "in 36min" on the next event, "25min left" on the one under
                 // way. On the row rather than in a line of its own, so it is
                 // never in doubt which event it counts to.
+                Row {
+                  id: rowActions
+                  visible: eventRow.showActions
+                  anchors.right: eventRow.joinable ? joinButton.left : parent.right
+                  anchors.rightMargin: eventRow.joinable ? Style.space(4) : Style.space(2)
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Style.space(2)
+
+                  // The form edits one day, so an event over several days
+                  // can be deleted here but not edited.
+                  PanelActionButton {
+                    visible: !Model.isMultiDay(eventRow.modelData,
+                                               root.eventDoc ? root.eventDoc.events : [])
+                    iconText: "󰏫"
+                    tooltipText: "Edit"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.openForm(eventRow.modelData)
+                  }
+
+                  PanelActionButton {
+                    iconText: "󰩺"
+                    tooltipText: "Delete"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.pendingDelete = eventRow.modelData
+                  }
+                }
+
                 Text {
                   id: rowTimer
-                  visible: text !== "" && !eventRow.declined
+                  // The actions take the timer's place while hovered.
+                  visible: text !== "" && !eventRow.declined && !eventRow.showActions
                   anchors.right: eventRow.joinable ? joinButton.left : parent.right
                   anchors.rightMargin: eventRow.joinable ? Style.space(4) : Style.space(2)
                   anchors.verticalCenter: parent.verticalCenter
@@ -1238,10 +1379,14 @@ Panel {
                 Row {
                   id: eventBody
                   anchors.left: parent.left
-                  anchors.right: rowTimer.visible
-                    ? rowTimer.left
-                    : (eventRow.joinable ? joinButton.left : parent.right)
-                  anchors.rightMargin: rowTimer.visible || eventRow.joinable ? Style.space(3) : 0
+                  anchors.right: rowActions.visible
+                    ? rowActions.left
+                    : rowTimer.visible
+                      ? rowTimer.left
+                      : (eventRow.joinable ? joinButton.left : parent.right)
+                  anchors.rightMargin: rowActions.visible || rowTimer.visible || eventRow.joinable
+                    ? Style.space(3)
+                    : 0
                   anchors.verticalCenter: parent.verticalCenter
                   spacing: Style.space(4)
                   opacity: eventRow.phase === "past" ? 0.45 : 1
@@ -1367,6 +1512,30 @@ Panel {
 
           }
 
+          // ---- New or edited event, shown in place of the grid and the
+          //      agenda like the settings page. The form emits the fields;
+          //      this panel runs the write command.
+          EventForm {
+            id: eventForm
+            visible: root.formOpen
+            width: gridColumn.width
+            anchors.horizontalCenter: parent.horizontalCenter
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
+            editing: root.formEditing
+            defaultDateKey: root.selectedDayKey
+            defaultStart: Model.defaultFormTimes(root.selectedDayKey, root.nowTick).start
+            defaultEnd: Model.defaultFormTimes(root.selectedDayKey, root.nowTick).end
+            calendars: root.writableCalendars
+            errorText: root.writeError
+            busy: root.writeBusy
+            onSubmitted: function(fields) {
+              root.runWrite(Model.writeRequest(
+                root.formEditing ? "update" : "create", fields, root.formEditing))
+            }
+            onCanceled: root.closeForm()
+          }
+
           // ---- Settings, shown in place of the grid. Everything it changes
           //      is owned by this panel and persisted to shell.json here, so
           //      the view stays a pure read-and-emit surface.
@@ -1390,6 +1559,12 @@ Panel {
             setupCommand: root.setupCommand
             setupCommandCopied: root.setupCommandCopied
             onSetupCommandCopyRequested: root.copySetupCommand()
+            canWrite: root.canWrite
+            onWriteSetupCopyRequested: {
+              writeSetupCopier.running = true
+              root.setupCommandCopied = true
+              copiedReset.restart()
+            }
             eventCount: root.eventDoc && root.eventDoc.events ? root.eventDoc.events.length : 0
             sourceLabel: root.eventDoc ? String(root.eventDoc.source || "") : ""
             syncedAt: root.eventDoc && root.eventDoc.syncedAt
@@ -1405,6 +1580,20 @@ Panel {
           }
         }
       }
+    }
+
+    // Inside KeyboardPanel, so it gets the popup's real size. Under the root
+    // item it rendered at 0x0 and stayed invisible (found in #9).
+    ConfirmDialog {
+      anchors.fill: parent
+      opened: root.pendingDelete !== null
+      message: root.pendingDelete
+        ? "Delete \"" + (root.pendingDelete.title || "(No title)") + "\"?"
+        : ""
+      confirmText: "Delete"
+      fontFamily: root.contentFontFamily
+      onConfirmed: root.runWrite(Model.writeRequest("delete", null, root.pendingDelete))
+      onCanceled: root.pendingDelete = null
     }
   }
 }
