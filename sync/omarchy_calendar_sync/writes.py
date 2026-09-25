@@ -1,14 +1,15 @@
-"""The rules for one write from the panel: the request, Google's body, and
-the rows that replace the old ones in the events file.
+"""The rules for one request from the panel, and the rows that replace an
+event's old rows in the events file.
 
-Pure functions only, so every rule is testable without gws or a file.
+Pure functions only, so every rule is testable without gws or a file. The
+event body itself is built in event_form.
 """
-
-from datetime import datetime, timedelta
 
 from . import normalize
 
-ACTIONS = ("create", "update", "delete")
+ACTIONS = ("get", "create", "update", "delete")
+SCOPES = ("this", "all")
+SEND_UPDATES = ("all", "none")
 
 
 class WriteRequestError(ValueError):
@@ -16,50 +17,46 @@ class WriteRequestError(ValueError):
 
 
 def parse_request(raw, writable_ids):
-    """Check the request the panel sent, and return it."""
+    """Check the request the panel sent, and return it in one flat shape.
+
+    create and update carry the form in "event"; get and delete carry the
+    ids at the top. The result always has action, calendarId, eventId,
+    recurringEventId, scope, sendUpdates and event.
+    """
     if not isinstance(raw, dict):
         raise WriteRequestError("The request must be a JSON object.")
     action = raw.get("action")
     if action not in ACTIONS:
         raise WriteRequestError(f"Unknown action {action!r}.")
-    if raw.get("calendarId") not in writable_ids:
-        raise WriteRequestError("You cannot write to this calendar.")
-    if action in ("update", "delete") and not raw.get("eventId"):
-        raise WriteRequestError("The event id is missing.")
-    return raw
 
+    event = raw.get("event") if action in ("create", "update") else None
+    if action in ("create", "update") and not isinstance(event, dict):
+        raise WriteRequestError("The event is missing.")
+    ids = event if event is not None else raw
 
-def build_body(request, tz):
-    """Google's event body for a create or an update.
+    scope = raw.get("scope") or "this"
+    if scope not in SCOPES:
+        raise WriteRequestError(f"Unknown scope {scope!r}.")
+    send_updates = raw.get("sendUpdates") or "none"
+    if send_updates not in SEND_UPDATES:
+        raise WriteRequestError(f"Unknown sendUpdates {send_updates!r}.")
 
-    Only the form's fields, so a patch leaves everything else untouched.
-    """
-    day = _day(request.get("dateKey"))
-    body = {
-        "summary": str(request.get("title") or ""),
-        "location": str(request.get("location") or ""),
+    request = {
+        "action": action,
+        "calendarId": ids.get("calendarId"),
+        "eventId": ids.get("eventId") or "",
+        "recurringEventId": ids.get("recurringEventId") or "",
+        "scope": scope,
+        "sendUpdates": send_updates,
+        "event": event,
     }
-
-    if request.get("allDay"):
-        body["start"] = {"date": day.isoformat()}
-        # Google's all-day end date is exclusive: a one-day event ends the
-        # day after it starts.
-        body["end"] = {"date": (day + timedelta(days=1)).isoformat()}
-        return body
-
-    start = _at(day, request.get("start"), tz, "start")
-    end = _at(day, request.get("end"), tz, "end")
-    if end <= start and str(request.get("end")) == "00:00":
-        # "23:00 to 00:00" means until midnight, which is the next day.
-        end = end + timedelta(days=1)
-    if end <= start:
-        raise WriteRequestError("The end must be after the start.")
-
-    # combine() with a ZoneInfo gives the offset of the event's own date,
-    # so an event across a daylight saving change keeps the right hour.
-    body["start"] = {"dateTime": start.isoformat()}
-    body["end"] = {"dateTime": end.isoformat()}
-    return body
+    if request["calendarId"] not in writable_ids:
+        raise WriteRequestError("The panel cannot edit this calendar.")
+    if action != "create" and not request["eventId"]:
+        raise WriteRequestError("The event id is missing.")
+    if scope == "all" and not request["recurringEventId"]:
+        raise WriteRequestError("This event is not part of a series.")
+    return request
 
 
 def splice(doc, calendar, event_id, resource, tz):
@@ -77,18 +74,3 @@ def splice(doc, calendar, event_id, resource, tz):
         kept.extend(normalize.normalize_event(resource, calendar, tz))
     kept.sort(key=lambda row: (row["dateKey"], row["start"], row["title"]))
     return {**doc, "events": kept}
-
-
-def _day(text):
-    try:
-        return datetime.strptime(str(text or ""), "%Y-%m-%d").date()
-    except ValueError:
-        raise WriteRequestError("The date must look like YYYY-MM-DD.") from None
-
-
-def _at(day, text, tz, name):
-    try:
-        clock = datetime.strptime(str(text or ""), "%H:%M").time()
-    except ValueError:
-        raise WriteRequestError(f"The {name} time must look like HH:MM.") from None
-    return datetime.combine(day, clock, tzinfo=tz)

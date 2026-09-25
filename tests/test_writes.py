@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo
 from omarchy_calendar_sync import writes
 
 BOGOTA = ZoneInfo("America/Bogota")
-PARIS = ZoneInfo("Europe/Paris")
 ME = {"id": "me@example.com", "name": "Me", "color": "#7bd148"}
 
 
@@ -48,62 +47,40 @@ def resource(event_id, start, end, title="Lunch"):
     }
 
 
-class TestBody(unittest.TestCase):
-    def test_timed_body_carries_the_local_offset(self):
-        body = writes.build_body(request(), BOGOTA)
-        self.assertEqual(body["start"], {"dateTime": "2026-09-26T12:00:00-05:00"})
-        self.assertEqual(body["end"], {"dateTime": "2026-09-26T12:30:00-05:00"})
-
-    def test_offset_follows_daylight_saving_on_the_events_own_date(self):
-        summer = writes.build_body(request(dateKey="2026-10-24"), PARIS)
-        winter = writes.build_body(request(dateKey="2026-10-26"), PARIS)
-        self.assertTrue(summer["start"]["dateTime"].endswith("+02:00"))
-        self.assertTrue(winter["start"]["dateTime"].endswith("+01:00"))
-
-    def test_all_day_body_ends_the_next_day(self):
-        body = writes.build_body(request(allDay=True), BOGOTA)
-        self.assertEqual(body["start"], {"date": "2026-09-26"})
-        self.assertEqual(body["end"], {"date": "2026-09-27"})
-
-    def test_an_end_at_midnight_means_the_next_day(self):
-        body = writes.build_body(request(start="23:00", end="00:00"), BOGOTA)
-        self.assertEqual(body["end"], {"dateTime": "2026-09-27T00:00:00-05:00"})
-
-    def test_an_end_before_the_start_is_refused(self):
-        with self.assertRaises(writes.WriteRequestError):
-            writes.build_body(request(start="12:00", end="11:00"), BOGOTA)
-
-    def test_a_bad_date_or_time_is_refused(self):
-        with self.assertRaises(writes.WriteRequestError):
-            writes.build_body(request(dateKey="26/09/2026"), BOGOTA)
-        with self.assertRaises(writes.WriteRequestError):
-            writes.build_body(request(start="noon"), BOGOTA)
-
-    def test_the_title_is_sent_verbatim(self):
-        title = 'Say "hi" <b>now</b>\nplease'
-        self.assertEqual(writes.build_body(request(title=title), BOGOTA)["summary"], title)
-
-    def test_the_body_carries_only_the_form_fields(self):
-        body = writes.build_body(request(), BOGOTA)
-        self.assertEqual(set(body), {"summary", "location", "start", "end"})
-
-
 class TestParseRequest(unittest.TestCase):
+    def parse(self, raw):
+        return writes.parse_request(raw, [ME["id"]])
+
+    def test_a_create_takes_its_calendar_from_the_event(self):
+        request = self.parse({"action": "create", "event": {"calendarId": ME["id"]}})
+        self.assertEqual((request["calendarId"], request["scope"], request["sendUpdates"]), (ME["id"], "this", "none"))
+
     def test_a_read_only_calendar_is_refused(self):
         with self.assertRaises(writes.WriteRequestError):
-            writes.parse_request(request(calendarId="other@example.com"), [ME["id"]])
+            self.parse({"action": "create", "event": {"calendarId": "other@example.com"}})
 
-    def test_update_and_delete_need_an_event_id(self):
-        for action in ("update", "delete"):
-            with self.assertRaises(writes.WriteRequestError):
-                writes.parse_request(request(action=action), [ME["id"]])
-
-    def test_an_unknown_action_is_refused(self):
+    def test_update_get_and_delete_need_an_event_id(self):
         with self.assertRaises(writes.WriteRequestError):
-            writes.parse_request(request(action="move"), [ME["id"]])
+            self.parse({"action": "update", "event": {"calendarId": ME["id"]}})
+        for action in ("get", "delete"):
+            with self.assertRaises(writes.WriteRequestError):
+                self.parse({"action": action, "calendarId": ME["id"]})
 
-    def test_a_valid_request_passes(self):
-        self.assertEqual(writes.parse_request(request(), [ME["id"]])["action"], "create")
+    def test_an_unknown_action_scope_or_send_updates_is_refused(self):
+        for raw in (
+            {"action": "move", "calendarId": ME["id"], "eventId": "x"},
+            {"action": "delete", "calendarId": ME["id"], "eventId": "x", "scope": "following"},
+            {"action": "delete", "calendarId": ME["id"], "eventId": "x", "sendUpdates": "externalOnly"},
+        ):
+            with self.assertRaises(writes.WriteRequestError):
+                self.parse(raw)
+
+    def test_all_events_needs_a_series(self):
+        with self.assertRaises(writes.WriteRequestError):
+            self.parse({"action": "delete", "calendarId": ME["id"], "eventId": "x", "scope": "all"})
+        request = self.parse({"action": "update", "scope": "all",
+                              "event": {"calendarId": ME["id"], "eventId": "x_1", "recurringEventId": "x"}})
+        self.assertEqual(request["recurringEventId"], "x")
 
 
 class TestSplice(unittest.TestCase):

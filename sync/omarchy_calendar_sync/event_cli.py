@@ -1,19 +1,21 @@
 """The one command the panel runs to read or change an event.
 
-In: one JSON argument (see writes.parse_request). Out: one JSON line on
-stdout, {"ok": true, "eventId": ...} or {"ok": false, "error": ...}, and
-exit 0 or 1. The panel shows the error as it is, so every message is
-written for a person.
+In: one JSON argument (see writes.parse_request and the event form in
+event_form). Out: one JSON line on stdout, and exit 0 or 1:
+{"ok": true, "event": {...}} for get, {"ok": true, "eventId": ...} for a
+write, {"ok": false, "error": ...} on failure. The panel shows the error
+as it is, so every message is written for a person.
 """
 
+import contextlib
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config as config_module
-from . import contract, writes
-from .cli import build_client, resolve_local_timezone, write_atomic
+from . import cli, contract, event_form, writes
 from .errors import SyncError
 from .gws import GwsAuthError, GwsNotFound
 
@@ -36,8 +38,12 @@ def start_background_sync():
     )
 
 
-def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync):
-    """Run one write. Returns (exit code, reply)."""
+def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sync_now=None):
+    """Run one request. Returns (exit code, reply).
+
+    start_sync starts a sync in the background. sync_now runs one inline,
+    for the writes a splice cannot express: anything that touches a series.
+    """
     if not cfg.get("write"):
         return 1, _fail(WRITE_OFF)
     if not getattr(client, "can_write", False):
@@ -51,17 +57,9 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync):
     try:
         request = writes.parse_request(raw, [c.get("id") for c in writable])
         calendar = next(c for c in writable if c.get("id") == request["calendarId"])
-        action = request["action"]
-        if action == "delete":
-            client.delete(calendar["id"], request["eventId"])
-            event_id, resource = request["eventId"], None
-        else:
-            body = writes.build_body(request, tz)
-            if action == "create":
-                resource = client.create(calendar["id"], body)
-            else:
-                resource = client.update(calendar["id"], request["eventId"], body)
-            event_id = resource.get("id") or request.get("eventId", "")
+        if request["action"] == "get":
+            return 0, {"ok": True, "event": _get(client, request, tz)}
+        event_id, resource, series = _write(client, request, tz)
     except writes.WriteRequestError as error:
         return 1, _fail(str(error))
     except GwsNotFound:
@@ -73,16 +71,69 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync):
     except SyncError as error:
         return 1, _fail(str(error))
 
+    if series and sync_now is not None:
+        sync_now()
+        return 0, {"ok": True, "eventId": event_id}
+
     try:
         spliced = writes.splice(doc, calendar, event_id, resource, tz)
         if not contract.validate(spliced):
-            write_atomic(Path(doc_path), spliced)
+            cli.write_atomic(Path(doc_path), spliced)
     except (KeyError, TypeError, ValueError, OSError):
         # Google has the change. The background sync below writes the file.
         pass
 
     start_sync()
     return 0, {"ok": True, "eventId": event_id}
+
+
+def _get(client, request, tz):
+    resource = client.get(request["calendarId"], request["eventId"])
+    master = None
+    if resource.get("recurringEventId"):
+        # The repeat rule lives only on the series' master.
+        master = client.get(request["calendarId"], resource["recurringEventId"])
+    return event_form.resource_to_form(resource, request["calendarId"], tz, master)
+
+
+def _write(client, request, tz):
+    """Send one create, update or delete. Returns (eventId, reply, series).
+
+    `series` is True when the write touched a series, so the caller runs a
+    full sync instead of a splice.
+    """
+    calendar_id = request["calendarId"]
+    send_updates = request["sendUpdates"]
+    all_events = request["scope"] == "all"
+
+    if request["action"] == "delete":
+        target = request["recurringEventId"] if all_events else request["eventId"]
+        client.delete(calendar_id, target, send_updates=send_updates)
+        return target, None, all_events
+
+    form = request["event"]
+    if request["action"] == "create":
+        body = event_form.form_to_body(form, tz)
+        resource = client.create(calendar_id, body, send_updates=send_updates)
+        return resource.get("id", ""), resource, bool(resource.get("recurrence"))
+
+    # An update reads the event first: what it had decides whether a removed
+    # Meet or a removed repeat has to be sent as a removal.
+    target = request["recurringEventId"] if all_events else request["eventId"]
+    current = client.get(calendar_id, target)
+    had_meet = event_form.resource_to_form(current, calendar_id, tz)["meet"]
+    had_rule = bool(current.get("recurrence"))
+    body = event_form.form_to_body(form, tz, had_meet, had_rule)
+    if all_events:
+        body = event_form.onto_series(body, current, tz)
+    elif request["recurringEventId"]:
+        # One occurrence cannot carry a rule. A new repeat is a series edit,
+        # and the panel sends it with scope "all".
+        body.pop("recurrence", None)
+
+    resource = client.update(calendar_id, target, body, send_updates=send_updates)
+    series = all_events or had_rule or bool(resource.get("recurrence"))
+    return request["eventId"] if not all_events else target, resource, series
 
 
 def main(argv=None):
@@ -96,12 +147,23 @@ def main(argv=None):
 
     try:
         cfg = config_module.load()
-        client = build_client(cfg)
+        client = cli.build_client(cfg)
     except config_module.ConfigError as error:
         return _emit(1, _fail(f"Config error: {error}"))
 
-    code, reply = perform(raw, cfg, client, contract.CONTRACT_PATH, resolve_local_timezone())
+    tz = cli.resolve_local_timezone()
+    code, reply = perform(
+        raw, cfg, client, contract.CONTRACT_PATH, tz,
+        sync_now=lambda: _sync_inline(client, cfg, tz),
+    )
     return _emit(code, reply)
+
+
+def _sync_inline(client, cfg, tz):
+    # The sync prints its summary on stdout, and stdout is the reply the
+    # panel parses, so the summary goes to stderr.
+    with contextlib.redirect_stdout(sys.stderr):
+        cli.run(client, cfg, datetime.now(timezone.utc), contract.CONTRACT_PATH, tz)
 
 
 def _emit(code, reply):

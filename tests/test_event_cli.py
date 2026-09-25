@@ -15,19 +15,26 @@ ON = {"write": True}
 class FakeClient:
     can_write = True
 
-    def __init__(self, reply=None, raises=None):
+    def __init__(self, stored=None, reply=None, raises=None):
+        self.stored = stored or {}
         self.reply, self.raises, self.calls = reply, raises, []
 
-    def create(self, calendar_id, body):
-        self.calls.append(("create", calendar_id, body))
+    def get(self, calendar_id, event_id):
+        self.calls.append(("get", event_id))
+        if self.raises:
+            raise self.raises
+        return self.stored[event_id]
+
+    def create(self, calendar_id, body, send_updates="none"):
+        self.calls.append(("create", body, send_updates))
         return self._answer()
 
-    def update(self, calendar_id, event_id, body):
-        self.calls.append(("update", calendar_id, event_id, body))
+    def update(self, calendar_id, event_id, body, send_updates="none"):
+        self.calls.append(("update", event_id, body, send_updates))
         return self._answer()
 
-    def delete(self, calendar_id, event_id):
-        self.calls.append(("delete", calendar_id, event_id))
+    def delete(self, calendar_id, event_id, send_updates="none"):
+        self.calls.append(("delete", event_id, send_updates))
         if self.raises:
             raise self.raises
 
@@ -39,122 +46,192 @@ class FakeClient:
 
 def old_row(event_id="ev1"):
     return {
-        "id": event_id,
-        "calendarId": ME["id"],
-        "calendarName": "Me",
-        "color": "#7bd148",
-        "dateKey": "2026-09-26",
-        "start": "2026-09-26T09:00:00-05:00",
-        "end": "2026-09-26T10:00:00-05:00",
-        "allDay": False,
-        "title": "Old",
-        "location": "",
+        "id": event_id, "calendarId": ME["id"], "calendarName": "Me", "color": "#7bd148",
+        "dateKey": "2026-09-26", "start": "2026-09-26T09:00:00-05:00",
+        "end": "2026-09-26T10:00:00-05:00", "allDay": False, "title": "Old", "location": "",
     }
 
 
-def create_request(**fields):
+def form(**fields):
     base = {
-        "action": "create",
-        "calendarId": ME["id"],
-        "title": "Lunch",
-        "dateKey": "2026-09-26",
-        "allDay": False,
-        "start": "12:00",
-        "end": "12:30",
-        "location": "",
+        "calendarId": ME["id"], "eventId": "", "recurringEventId": "", "title": "Lunch",
+        "allDay": False, "startDate": "2026-09-26", "startTime": "12:00",
+        "endDate": "2026-09-26", "endTime": "12:30", "location": "", "description": "",
+        "guests": [], "meet": False, "meetUrl": "", "repeat": "none", "rrule": [],
+        "reminders": {"useDefault": True, "overrides": []}, "busy": True,
+        "visibility": "default", "colorId": "", "guestsCanModify": False,
+        "guestsCanInviteOthers": True, "guestsCanSeeOtherGuests": True,
     }
     base.update(fields)
     return base
 
 
-REPLY = {
-    "id": "new1",
-    "status": "confirmed",
-    "summary": "Lunch",
-    "start": {"dateTime": "2026-09-26T12:00:00-05:00"},
-    "end": {"dateTime": "2026-09-26T12:30:00-05:00"},
-}
+def resource(event_id, day="2026-09-26", title="Lunch", **extra):
+    return {
+        "id": event_id, "status": "confirmed", "summary": title,
+        "start": {"dateTime": day + "T12:00:00-05:00"},
+        "end": {"dateTime": day + "T12:30:00-05:00"}, **extra,
+    }
+
+
+MASTER = resource("s", recurrence=["RRULE:FREQ=WEEKLY;BYDAY=SA"])
+OCCURRENCE = resource("s_20261010", day="2026-10-10", recurringEventId="s")
 
 
 class TestPerform(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "calendar-events.json"
-        self.syncs = []
-        doc = {
-            "version": 1,
-            "syncedAt": "2026-09-25T00:00:00+00:00",
-            "source": "gws/0.13.2",
-            "events": [old_row()],
-            "writableCalendars": [ME],
-        }
+        self.background, self.inline = [], []
+        doc = {"version": 1, "syncedAt": "2026-09-25T00:00:00+00:00", "source": "gws/0.13.2",
+               "events": [old_row()], "writableCalendars": [ME]}
         self.path.write_text(json.dumps(doc))
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_write(self, raw, client, cfg=ON):
-        return event_cli.perform(raw, cfg, client, self.path, BOGOTA, lambda: self.syncs.append(1))
+    def run_event(self, raw, client, cfg=ON):
+        return event_cli.perform(
+            raw, cfg, client, self.path, BOGOTA,
+            lambda: self.background.append(1), lambda: self.inline.append(1),
+        )
 
     def events(self):
         return json.loads(self.path.read_text())["events"]
 
-    def test_create_writes_the_new_rows_and_starts_a_sync(self):
-        code, reply = self.run_write(create_request(), FakeClient(REPLY))
-        self.assertEqual((code, reply), (0, {"ok": True, "eventId": "new1"}))
-        self.assertIn("new1", [r["id"] for r in self.events()])
-        self.assertEqual(self.syncs, [1])
+    # ---- get
 
-    def test_update_replaces_the_rows(self):
-        reply = dict(REPLY, id="ev1", summary="Renamed")
-        code, _ = self.run_write(create_request(action="update", eventId="ev1"), FakeClient(reply))
+    def test_get_returns_the_form(self):
+        client = FakeClient(stored={"ev1": resource("ev1", title="Standup")})
+        code, reply = self.run_event({"action": "get", "calendarId": ME["id"], "eventId": "ev1"}, client)
         self.assertEqual(code, 0)
+        self.assertEqual(reply["event"]["title"], "Standup")
+
+    def test_get_of_an_occurrence_reads_its_master(self):
+        client = FakeClient(stored={"s_20261010": OCCURRENCE, "s": MASTER})
+        _, reply = self.run_event({"action": "get", "calendarId": ME["id"], "eventId": "s_20261010"}, client)
+        self.assertEqual([c[1] for c in client.calls], ["s_20261010", "s"])
+        self.assertEqual(reply["event"]["repeat"], "weekly")
+
+    # ---- create
+
+    def test_create_splices_and_starts_a_background_sync(self):
+        client = FakeClient(reply=resource("new1"))
+        code, reply = self.run_event({"action": "create", "sendUpdates": "all", "event": form()}, client)
+        self.assertEqual((code, reply), (0, {"ok": True, "eventId": "new1"}))
+        self.assertEqual(client.calls[0][2], "all")
+        self.assertIn("new1", [r["id"] for r in self.events()])
+        self.assertEqual((self.background, self.inline), ([1], []))
+
+    def test_create_of_a_series_syncs_inline_instead_of_splicing(self):
+        client = FakeClient(reply=dict(MASTER, id="new1"))
+        code, _ = self.run_event({"action": "create", "event": form(repeat="weekly")}, client)
+        self.assertEqual(code, 0)
+        self.assertEqual(client.calls[0][1]["recurrence"], ["RRULE:FREQ=WEEKLY;BYDAY=SA"])
+        self.assertEqual((self.background, self.inline), ([], [1]))
+        self.assertNotIn("new1", [r["id"] for r in self.events()])
+
+    # ---- update
+
+    def test_update_of_a_single_event_reads_it_then_splices(self):
+        client = FakeClient(stored={"ev1": resource("ev1")}, reply=resource("ev1", title="Renamed"))
+        code, _ = self.run_event({"action": "update", "event": form(eventId="ev1", title="Renamed")}, client)
+        self.assertEqual(code, 0)
+        self.assertEqual([c[0] for c in client.calls], ["get", "update"])
         self.assertEqual([r["title"] for r in self.events()], ["Renamed"])
 
-    def test_delete_removes_the_rows(self):
-        raw = {"action": "delete", "calendarId": ME["id"], "eventId": "ev1"}
-        code, _ = self.run_write(raw, FakeClient())
+    def test_update_of_this_occurrence_sends_no_rule(self):
+        client = FakeClient(stored={"s_20261010": OCCURRENCE}, reply=OCCURRENCE)
+        raw = {"action": "update", "scope": "this",
+               "event": form(eventId="s_20261010", recurringEventId="s", repeat="weekly",
+                             startDate="2026-10-10", endDate="2026-10-10")}
+        self.run_event(raw, client)
+        _, target, body, _ = client.calls[-1]
+        self.assertEqual(target, "s_20261010")
+        self.assertNotIn("recurrence", body)
+
+    def test_update_of_all_events_moves_onto_the_series_and_syncs_inline(self):
+        client = FakeClient(stored={"s": MASTER}, reply=MASTER)
+        raw = {"action": "update", "scope": "all",
+               "event": form(eventId="s_20261010", recurringEventId="s", repeat="weekly",
+                             startDate="2026-10-10", startTime="13:00",
+                             endDate="2026-10-10", endTime="14:00")}
+        code, _ = self.run_event(raw, client)
+        self.assertEqual(code, 0)
+        _, target, body, _ = client.calls[-1]
+        self.assertEqual(target, "s")
+        self.assertEqual(body["start"], {"dateTime": "2026-09-26T13:00:00-05:00"})
+        self.assertEqual(self.inline, [1])
+
+    # ---- delete
+
+    def test_delete_of_a_single_event_removes_its_rows(self):
+        raw = {"action": "delete", "calendarId": ME["id"], "eventId": "ev1", "sendUpdates": "none"}
+        code, _ = self.run_event(raw, FakeClient())
         self.assertEqual(code, 0)
         self.assertEqual(self.events(), [])
 
+    def test_delete_of_all_events_targets_the_series_and_syncs_inline(self):
+        client = FakeClient()
+        raw = {"action": "delete", "calendarId": ME["id"], "eventId": "s_20261010",
+               "recurringEventId": "s", "scope": "all", "sendUpdates": "all"}
+        code, _ = self.run_event(raw, client)
+        self.assertEqual(code, 0)
+        self.assertEqual(client.calls, [("delete", "s", "all")])
+        self.assertEqual(self.inline, [1])
+
+    # ---- refusals
+
+    def test_an_unknown_send_updates_is_refused_before_google(self):
+        client = FakeClient(reply=resource("n"))
+        code, _ = self.run_event({"action": "create", "sendUpdates": "externalOnly", "event": form()}, client)
+        self.assertEqual(code, 1)
+        self.assertEqual(client.calls, [])
+
+    def test_all_events_without_a_series_is_refused(self):
+        code, reply = self.run_event(
+            {"action": "delete", "calendarId": ME["id"], "eventId": "ev1", "scope": "all"}, FakeClient())
+        self.assertEqual(code, 1)
+        self.assertIn("series", reply["error"])
+
     def test_writing_turned_off_is_refused_before_google(self):
-        client = FakeClient(REPLY)
-        code, reply = self.run_write(create_request(), client, cfg={"write": False})
+        client = FakeClient(reply=resource("n"))
+        code, reply = self.run_event({"action": "create", "event": form()}, client, cfg={"write": False})
         self.assertEqual((code, reply["error"]), (1, event_cli.WRITE_OFF))
         self.assertEqual(client.calls, [])
 
     def test_a_backend_that_cannot_write_is_refused(self):
-        client = FakeClient(REPLY)
+        client = FakeClient()
         client.can_write = False
-        code, reply = self.run_write(create_request(), client)
+        code, reply = self.run_event({"action": "create", "event": form()}, client)
         self.assertEqual((code, reply["error"]), (1, event_cli.NOT_WRITABLE))
 
     def test_a_missing_scope_names_the_setup_command(self):
         client = FakeClient(raises=GwsAuthError("403: insufficient scopes"))
-        self.assertEqual(self.run_write(create_request(), client)[1]["error"], event_cli.NO_SCOPE)
+        _, reply = self.run_event({"action": "create", "event": form()}, client)
+        self.assertEqual(reply["error"], event_cli.NO_SCOPE)
 
     def test_an_expired_sign_in_is_not_reported_as_a_missing_scope(self):
         client = FakeClient(raises=GwsAuthError("401: invalid_grant"))
-        self.assertEqual(self.run_write(create_request(), client)[1]["error"], event_cli.EXPIRED)
+        _, reply = self.run_event({"action": "create", "event": form()}, client)
+        self.assertEqual(reply["error"], event_cli.EXPIRED)
 
     def test_an_event_that_is_gone_still_starts_the_sync(self):
-        client = FakeClient(raises=GwsNotFound("404: Not Found"))
-        raw = {"action": "delete", "calendarId": ME["id"], "eventId": "ev1"}
-        code, reply = self.run_write(raw, client)
+        client = FakeClient(raises=GwsNotFound("410: Resource has been deleted"))
+        code, reply = self.run_event({"action": "delete", "calendarId": ME["id"], "eventId": "ev1"}, client)
         self.assertEqual((code, reply["error"]), (1, event_cli.GONE))
-        self.assertEqual(self.syncs, [1])
+        self.assertEqual(self.background, [1])
 
-    def test_a_bad_request_leaves_the_file_untouched(self):
+    def test_a_bad_form_leaves_the_file_untouched(self):
         before = self.path.read_text()
-        code, reply = self.run_write(create_request(start="12:00", end="11:00"), FakeClient(REPLY))
-        self.assertEqual(code, 1)
-        self.assertEqual(reply["error"], "The end must be after the start.")
+        code, reply = self.run_event(
+            {"action": "create", "event": form(startTime="12:00", endTime="11:00")}, FakeClient(reply=resource("n")))
+        self.assertEqual((code, reply["error"]), (1, "The end must be after the start."))
         self.assertEqual(self.path.read_text(), before)
-        self.assertEqual(self.syncs, [])
 
     def test_no_events_file_yet_is_refused(self):
         self.path.unlink()
-        code, reply = self.run_write(create_request(), FakeClient(REPLY))
+        code, reply = self.run_event({"action": "create", "event": form()}, FakeClient())
         self.assertEqual((code, reply["error"]), (1, event_cli.NO_FILE))
 
 
