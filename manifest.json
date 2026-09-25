@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tmn73.calendar",
   "name": "Calendar",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "tmn73",
   "license": "MIT",
   "description": "Your Google Calendar in the bar. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",
