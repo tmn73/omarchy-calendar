@@ -24,7 +24,7 @@ SYNC_UNIT = "omarchy-calendar-sync.service"
 WRITE_OFF = "Writing is turned off. Run sync/setup --write."
 NOT_WRITABLE = "This backend cannot write events."
 NO_SCOPE = "Write access not granted. Run sync/setup --write."
-EXPIRED = "Your Google sign-in expired. Run sync/setup again."
+EXPIRED = "Your Google sign-in expired. Run sync/setup --write."
 GONE = "This event no longer exists."
 NO_FILE = "No calendar synced yet. Wait for the first sync, then try again."
 
@@ -67,7 +67,7 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sy
         start_sync()
         return 1, _fail(GONE)
     except GwsAuthError as error:
-        return 1, _fail(NO_SCOPE if str(error).startswith("403") else EXPIRED)
+        return 1, _fail(_auth_message(str(error)))
     except SyncError as error:
         return 1, _fail(str(error))
 
@@ -85,6 +85,20 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sy
 
     start_sync()
     return 0, {"ok": True, "eventId": event_id}
+
+
+def _auth_message(text):
+    """A person's reading of a 401 or 403.
+
+    Only a missing scope sends the user to setup. Any other 403 (an
+    invitation's shared properties, for one) is Google's own words.
+    """
+    if text.startswith("401"):
+        return EXPIRED
+    lowered = text.lower()
+    if "insufficient" in lowered and "scope" in lowered:
+        return NO_SCOPE
+    return "Google refused the change: " + text.split(": ", 1)[-1]
 
 
 def _get(client, request, tz):
@@ -118,13 +132,26 @@ def _write(client, request, tz):
         return resource.get("id", ""), resource, bool(resource.get("recurrence"))
 
     # An update reads the event first: what it had decides whether a removed
-    # Meet, repeat or colour has to be sent as a removal.
+    # Meet, repeat or colour has to be sent as a removal, and what the patch
+    # can leave out.
     target = request["recurringEventId"] if all_events else request["eventId"]
     current = client.get(calendar_id, target)
     had_meet = event_form.resource_to_form(current, calendar_id, tz)["meet"]
     had_rule = bool(current.get("recurrence"))
     had_color = bool(current.get("colorId"))
-    body = event_form.form_to_body(form, tz, had_meet, had_rule, had_color)
+
+    rule_start = None
+    if all_events:
+        # The series' rule belongs to its first date, not to the occurrence
+        # the user clicked: a monthly "4th Saturday" rebuilt from a late
+        # occurrence would become "last Saturday". An unchanged repeat sends
+        # the series' own rule back; a new preset is built from that date.
+        rule_start = event_form.start_day(current, tz)
+        if form.get("repeat") == event_form.repeat_preset(current.get("recurrence"), rule_start):
+            form = {**form, "repeat": "custom", "rrule": list(current.get("recurrence") or [])}
+
+    body = event_form.form_to_body(form, tz, had_meet, had_rule, had_color, rule_start=rule_start)
+    body["attendees"] = event_form.merge_attendees(body["attendees"], current.get("attendees") or [])
     if all_events:
         body = event_form.onto_series(body, current, tz)
     elif request["recurringEventId"]:
@@ -132,17 +159,23 @@ def _write(client, request, tz):
         # and the panel sends it with scope "all".
         body.pop("recurrence", None)
 
-    if had_meet and not form.get("meet"):
-        # A patch cannot remove a Meet (verified live), so replace the whole
-        # event: the one just read, the form on top, without the conference.
-        # Starting from the read event keeps every field the form does not
-        # know.
+    removing_meet = had_meet and not form.get("meet")
+    switching_kind = ("date" in (current.get("start") or {})) != bool(form.get("allDay"))
+    if removing_meet or switching_kind:
+        # A patch cannot remove a Meet (verified live). A patch from
+        # start.dateTime to start.date may also merge the two keys (raised in
+        # review, not verified live). So replace the whole event: the one
+        # just read, with the form on top, which keeps every field the form
+        # does not know.
         whole = {**current, **body}
-        whole.pop("conferenceData", None)
-        whole.pop("hangoutLink", None)
+        if removing_meet:
+            whole.pop("conferenceData", None)
+            whole.pop("hangoutLink", None)
         resource = client.replace(calendar_id, target, whole, send_updates=send_updates)
     else:
-        resource = client.update(calendar_id, target, body, send_updates=send_updates)
+        patch = event_form.changed_only(body, current, tz)
+        # Nothing changed: no call, so an untouched invitation is not refused.
+        resource = client.update(calendar_id, target, patch, send_updates=send_updates) if patch else current
     series = all_events or had_rule or bool(resource.get("recurrence"))
     return request["eventId"] if not all_events else target, resource, series
 

@@ -148,7 +148,7 @@ class TestPerform(unittest.TestCase):
         client = FakeClient(stored={"s_20261010": OCCURRENCE}, reply=OCCURRENCE)
         raw = {"action": "update", "scope": "this",
                "event": form(eventId="s_20261010", recurringEventId="s", repeat="weekly",
-                             startDate="2026-10-10", endDate="2026-10-10")}
+                             title="Moved", startDate="2026-10-10", endDate="2026-10-10")}
         self.run_event(raw, client)
         _, target, body, _ = client.calls[-1]
         self.assertEqual(target, "s_20261010")
@@ -164,8 +164,44 @@ class TestPerform(unittest.TestCase):
         self.assertEqual(code, 0)
         _, target, body, _ = client.calls[-1]
         self.assertEqual(target, "s")
-        self.assertEqual(body["start"], {"dateTime": "2026-09-26T13:00:00-05:00"})
+        self.assertEqual(body["start"], {"dateTime": "2026-09-26T13:00:00-05:00", "timeZone": "America/Bogota"})
         self.assertEqual(self.inline, [1])
+
+    def test_all_events_keeps_the_series_rule_when_repeat_is_unchanged(self):
+        # A monthly series on the 4th Saturday, edited from its 2026-11-28
+        # occurrence: rebuilding the rule from that date would give -1SA.
+        master = dict(resource("m", day="2026-10-24"), recurrence=["RRULE:FREQ=MONTHLY;BYDAY=4SA"])
+        client = FakeClient(stored={"m": master}, reply=master)
+        raw = {"action": "update", "scope": "all",
+               "event": form(eventId="m_20261128", recurringEventId="m", repeat="monthly",
+                             title="Renamed", startDate="2026-11-28", endDate="2026-11-28")}
+        self.run_event(raw, client)
+        body = client.calls[-1][2]
+        self.assertEqual(body.get("recurrence", master["recurrence"]), ["RRULE:FREQ=MONTHLY;BYDAY=4SA"])
+
+    def test_all_events_builds_a_new_preset_from_the_series_first_date(self):
+        master = dict(resource("m", day="2026-09-21"), recurrence=["RRULE:FREQ=DAILY"])
+        client = FakeClient(stored={"m": master}, reply=master)
+        raw = {"action": "update", "scope": "all",
+               "event": form(eventId="m_20261001", recurringEventId="m", repeat="weekly",
+                             startDate="2026-10-01", endDate="2026-10-01")}
+        self.run_event(raw, client)
+        self.assertEqual(client.calls[-1][2]["recurrence"], ["RRULE:FREQ=WEEKLY;BYDAY=MO"])
+
+    def test_an_edit_keeps_the_rooms(self):
+        room = {"email": "room-2@resource.calendar.google.com", "resource": True, "responseStatus": "accepted"}
+        current = resource("ev1", attendees=[{"email": "ana@example.com", "responseStatus": "accepted"}, room])
+        client = FakeClient(stored={"ev1": current}, reply=current)
+        guests = [{"email": "ana@example.com", "optional": False, "responseStatus": "accepted"},
+                  {"email": "bo@example.com", "optional": False}]
+        self.run_event({"action": "update", "event": form(eventId="ev1", guests=guests)}, client)
+        sent = client.calls[-1][2]["attendees"]
+        self.assertIn("room-2@resource.calendar.google.com", [a["email"] for a in sent])
+
+    def test_switching_to_all_day_replaces_the_event(self):
+        client = FakeClient(stored={"ev1": resource("ev1")}, reply=resource("ev1"))
+        self.run_event({"action": "update", "event": form(eventId="ev1", allDay=True)}, client)
+        self.assertEqual(client.calls[-1][0], "replace")
 
     def test_removing_meet_replaces_the_whole_event_without_it(self):
         with_meet = resource("ev1", hangoutLink="https://meet.google.com/abc",
@@ -225,8 +261,15 @@ class TestPerform(unittest.TestCase):
         code, reply = self.run_event({"action": "create", "event": form()}, client)
         self.assertEqual((code, reply["error"]), (1, event_cli.NOT_WRITABLE))
 
+    def test_another_refusal_shows_what_google_said(self):
+        client = FakeClient(raises=GwsAuthError(
+            "403: Shared properties can only be changed by the organizer of the event."))
+        _, reply = self.run_event({"action": "create", "event": form()}, client)
+        self.assertEqual(reply["error"], "Google refused the change: Shared properties can only be "
+                                         "changed by the organizer of the event.")
+
     def test_a_missing_scope_names_the_setup_command(self):
-        client = FakeClient(raises=GwsAuthError("403: insufficient scopes"))
+        client = FakeClient(raises=GwsAuthError("403: Request had insufficient authentication scopes."))
         _, reply = self.run_event({"action": "create", "event": form()}, client)
         self.assertEqual(reply["error"], event_cli.NO_SCOPE)
 

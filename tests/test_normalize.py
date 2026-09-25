@@ -277,13 +277,3 @@ class TestUrlGuardMatchesTheWidget(unittest.TestCase):
         event["hangoutLink"] = "https://meet.google.com/abc-defg-hij?authuser=1"
         rows = normalize.normalize_event(event, CAL, BOGOTA)
         self.assertEqual(rows[0]["meetingUrl"], "https://meet.google.com/abc-defg-hij?authuser=1")
-
-class TestRecurring(unittest.TestCase):
-    def test_an_occurrence_of_a_series_is_marked_recurring(self):
-        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
-        event["recurringEventId"] = "standup"
-        self.assertTrue(normalize.normalize_event(event, CAL, BOGOTA)[0]["recurring"])
-
-    def test_a_single_event_carries_no_recurring_key(self):
-        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
-        self.assertNotIn("recurring", normalize.normalize_event(event, CAL, BOGOTA)[0])

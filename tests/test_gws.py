@@ -368,3 +368,13 @@ class TestReplace(unittest.TestCase):
             {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "none", "conferenceDataVersion": 1},
         )
         self.assertEqual(json.loads(argv[argv.index("--json") + 1]), {"summary": "S"})
+
+
+class TestForbiddenReasons(unittest.TestCase):
+    def test_a_rate_limit_is_not_an_auth_error(self):
+        body = json.dumps({"error": {"code": 403, "message": "Rate Limit Exceeded",
+                                     "errors": [{"reason": "rateLimitExceeded"}]}})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"insert": (1, body, "")}))
+        with self.assertRaises(gws.GwsApiError) as caught:
+            client.create("me@example.com", {})
+        self.assertNotIsInstance(caught.exception, gws.GwsAuthError)

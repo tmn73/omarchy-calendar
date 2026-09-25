@@ -106,8 +106,15 @@ class TestFormToBody(unittest.TestCase):
 
     def test_a_timed_event_carries_the_offset(self):
         body = self.body()
+        self.assertEqual(body["start"], {"dateTime": "2026-09-26T10:00:00-05:00", "timeZone": "America/Bogota"})
+        self.assertEqual(body["end"], {"dateTime": "2026-09-26T10:30:00-05:00", "timeZone": "America/Bogota"})
+
+    def test_a_fixed_offset_zone_sends_no_zone_name(self):
+        # resolve_local_timezone falls back to a fixed offset, which has no
+        # IANA name to send.
+        from datetime import timedelta, timezone
+        body = event_form.form_to_body(form(), timezone(timedelta(hours=-5)))
         self.assertEqual(body["start"], {"dateTime": "2026-09-26T10:00:00-05:00"})
-        self.assertEqual(body["end"], {"dateTime": "2026-09-26T10:30:00-05:00"})
 
     def test_an_all_day_event_over_three_days_ends_the_day_after(self):
         body = self.body(allDay=True, endDate="2026-09-28")
@@ -116,7 +123,7 @@ class TestFormToBody(unittest.TestCase):
 
     def test_a_timed_event_can_span_two_days(self):
         body = self.body(startTime="22:00", endDate="2026-09-27", endTime="09:00")
-        self.assertEqual(body["end"], {"dateTime": "2026-09-27T09:00:00-05:00"})
+        self.assertEqual(body["end"], {"dateTime": "2026-09-27T09:00:00-05:00", "timeZone": "America/Bogota"})
 
     def test_an_end_before_the_start_is_refused(self):
         with self.assertRaises(WriteRequestError):
@@ -126,7 +133,7 @@ class TestFormToBody(unittest.TestCase):
 
     def test_an_end_at_midnight_on_the_same_day_means_the_next_day(self):
         body = self.body(startTime="23:00", endTime="00:00")
-        self.assertEqual(body["end"], {"dateTime": "2026-09-27T00:00:00-05:00"})
+        self.assertEqual(body["end"], {"dateTime": "2026-09-27T00:00:00-05:00", "timeZone": "America/Bogota"})
 
     def test_guests_become_attendees_and_keep_their_answer(self):
         guests = [
@@ -157,6 +164,11 @@ class TestFormToBody(unittest.TestCase):
 
     def test_a_preset_becomes_its_rule(self):
         self.assertEqual(self.body(repeat="weekly")["recurrence"], ["RRULE:FREQ=WEEKLY;BYDAY=SA"])
+
+    def test_a_preset_can_be_built_from_another_start_date(self):
+        # "All events" builds the rule from the series' first date.
+        body = event_form.form_to_body(form(repeat="weekly"), BOGOTA, rule_start=date(2026, 9, 21))
+        self.assertEqual(body["recurrence"], ["RRULE:FREQ=WEEKLY;BYDAY=MO"])
 
     def test_a_custom_rule_goes_back_unchanged(self):
         rule = ["RRULE:FREQ=YEARLY;WKST=TU"]
@@ -234,11 +246,64 @@ class TestOntoSeries(unittest.TestCase):
         self.assertEqual(moved["start"], {"dateTime": "2026-09-26T10:00:00-05:00"})
         self.assertEqual(moved["end"], {"dateTime": "2026-09-26T11:30:00-05:00"})
 
+    def test_the_zone_name_survives_the_move(self):
+        body = {"start": {"dateTime": "2026-10-10T10:00:00-05:00", "timeZone": "America/Bogota"},
+                "end": {"dateTime": "2026-10-10T11:30:00-05:00", "timeZone": "America/Bogota"}}
+        moved = event_form.onto_series(body, self.MASTER, BOGOTA)
+        self.assertEqual(moved["start"], {"dateTime": "2026-09-26T10:00:00-05:00", "timeZone": "America/Bogota"})
+
     def test_an_all_day_series_keeps_its_first_date_and_length(self):
         master = {"id": "s", "start": {"date": "2026-09-26"}}
         body = {"start": {"date": "2026-10-10"}, "end": {"date": "2026-10-12"}}
         moved = event_form.onto_series(body, master, BOGOTA)
         self.assertEqual((moved["start"], moved["end"]), ({"date": "2026-09-26"}, {"date": "2026-09-28"}))
+
+
+class TestMergeAttendees(unittest.TestCase):
+    CURRENT = [
+        {"email": "me@example.com", "self": True, "organizer": True, "responseStatus": "accepted"},
+        {"email": "ana@example.com", "displayName": "Ana", "comment": "late", "responseStatus": "accepted"},
+        {"email": "room-2@resource.calendar.google.com", "resource": True, "responseStatus": "accepted"},
+    ]
+
+    def test_rooms_and_fields_the_form_does_not_know_are_kept(self):
+        people = [{"email": "me@example.com", "optional": False, "responseStatus": "accepted"},
+                  {"email": "ana@example.com", "optional": True, "responseStatus": "accepted"}]
+        merged = event_form.merge_attendees(people, self.CURRENT)
+        self.assertEqual([a["email"] for a in merged],
+                         ["me@example.com", "ana@example.com", "room-2@resource.calendar.google.com"])
+        self.assertEqual((merged[1]["displayName"], merged[1]["comment"], merged[1]["optional"]), ("Ana", "late", True))
+
+    def test_a_removed_guest_stays_removed(self):
+        merged = event_form.merge_attendees([{"email": "me@example.com", "optional": False}], self.CURRENT)
+        self.assertNotIn("ana@example.com", [a["email"] for a in merged])
+
+
+class TestChangedOnly(unittest.TestCase):
+    # An invitation: the user is not the organizer, so a patch that carries
+    # shared properties is refused, even when their values did not change.
+    CURRENT = {
+        "summary": "Planning", "location": "", "description": "",
+        "start": {"dateTime": "2026-09-26T10:00:00-05:00", "timeZone": "America/Bogota"},
+        "end": {"dateTime": "2026-09-26T10:30:00-05:00", "timeZone": "America/Bogota"},
+        "attendees": [{"email": "boss@example.com", "organizer": True, "responseStatus": "accepted"},
+                      {"email": "me@example.com", "self": True, "responseStatus": "needsAction"}],
+        "reminders": {"useDefault": True},
+    }
+
+    def test_only_the_changed_fields_go_out(self):
+        f = event_form.resource_to_form(self.CURRENT, "me@example.com", BOGOTA, None)
+        f["colorId"] = "5"
+        body = event_form.form_to_body(f, BOGOTA)
+        body["attendees"] = event_form.merge_attendees(body["attendees"], self.CURRENT["attendees"])
+        self.assertEqual(event_form.changed_only(body, self.CURRENT, BOGOTA), {"colorId": "5"})
+
+    def test_a_moved_time_goes_out(self):
+        f = event_form.resource_to_form(self.CURRENT, "me@example.com", BOGOTA, None)
+        f["startTime"], f["endTime"] = "11:00", "11:30"
+        body = event_form.changed_only(event_form.form_to_body(f, BOGOTA), self.CURRENT, BOGOTA)
+        self.assertEqual(set(body) & {"start", "end"}, {"start", "end"})
+        self.assertNotIn("summary", body)
 
 
 if __name__ == "__main__":

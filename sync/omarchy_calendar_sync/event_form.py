@@ -61,12 +61,14 @@ def repeat_preset(rrule, start):
     return "custom"
 
 
-def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
+def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False, rule_start=None):
     """Google's event body for the form.
 
     `had_meet`, `had_rule` and `had_color` say what the event had before
     the edit, so a removed repeat or colour is sent as a removal, and an
-    untouched one is not sent at all.
+    untouched one is not sent at all. `rule_start` is the date a repeat
+    preset is built from: the series' first date for "All events", the
+    form's start date otherwise.
     """
     start_day = _day(form.get("startDate"), "start")
     end_day = _day(form.get("endDate") or form.get("startDate"), "end")
@@ -91,8 +93,8 @@ def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
             end = end + timedelta(days=1)
         if end <= start:
             raise WriteRequestError("The end must be after the start.")
-        body["start"] = {"dateTime": start.isoformat()}
-        body["end"] = {"dateTime": end.isoformat()}
+        body["start"] = _timed_node(start, tz)
+        body["end"] = _timed_node(end, tz)
 
     body["attendees"] = [_attendee(guest) for guest in form.get("guests") or []]
 
@@ -111,7 +113,7 @@ def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
     if preset == "custom":
         body["recurrence"] = list(form.get("rrule") or [])
     elif preset != "none":
-        body["recurrence"] = repeat_rule(preset, start_day)
+        body["recurrence"] = repeat_rule(preset, rule_start or start_day)
     elif had_rule:
         body["recurrence"] = []
 
@@ -231,8 +233,38 @@ def onto_series(body, master, tz):
     end = _local(body["end"]["dateTime"], tz)
     moved_start = datetime.combine(first_day, start.time(), tzinfo=tz)
     moved_end = moved_start + (end - start)
-    return {**body, "start": {"dateTime": moved_start.isoformat()},
-            "end": {"dateTime": moved_end.isoformat()}}
+    return {**body, "start": {**body["start"], "dateTime": moved_start.isoformat()},
+            "end": {**body["end"], "dateTime": moved_end.isoformat()}}
+
+
+def merge_attendees(people, current):
+    """The form's guests, with what the form cannot show put back.
+
+    A patch replaces the whole attendees list. The form shows people only,
+    so without this an edit would release the event's rooms, and drop a
+    guest's display name, comment or extra guests. A guest removed in the
+    form stays removed.
+    """
+    by_email = {str(a.get("email") or "").lower(): a for a in current or []}
+    merged = []
+    for person in people:
+        email = str(person.get("email") or "").lower()
+        merged.append({**by_email.get(email, {}), **person})
+    for attendee in current or []:
+        if attendee.get("resource"):
+            merged.append(attendee)
+    return merged
+
+
+def changed_only(body, current, tz):
+    """The body without the fields whose value the event already has.
+
+    Google refuses a patch that carries shared properties (title, times,
+    guests, guest permissions) from anyone but the organizer, even with
+    unchanged values. So an edit of an invitation's colour or reminder has
+    to carry that colour or reminder, and nothing else.
+    """
+    return {key: value for key, value in body.items() if not _same(key, value, current, tz)}
 
 
 def _attendee(guest):
@@ -244,6 +276,66 @@ def _attendee(guest):
         # Sent back so an edit does not reset the guest's answer.
         attendee["responseStatus"] = guest["responseStatus"]
     return attendee
+
+
+def start_day(resource, tz):
+    """The local date an event (or a series' master) starts on."""
+    return _start_day(resource, tz)
+
+
+def _timed_node(moment, tz):
+    # Google needs the zone name on a repeating event, and the offset alone
+    # cannot say when daylight saving moves the later occurrences. A fixed
+    # offset (resolve_local_timezone's fallback) has no name to send.
+    node = {"dateTime": moment.isoformat()}
+    if getattr(tz, "key", None):
+        node["timeZone"] = tz.key
+    return node
+
+
+def _same(key, value, current, tz):
+    if key in ("start", "end"):
+        return _same_time(value, current.get(key) or {}, tz)
+    if key == "attendees":
+        return _guest_key(value) == _guest_key(current.get("attendees") or [])
+    if key == "reminders":
+        return _reminders_key(value) == _reminders_key(current.get("reminders") or {"useDefault": True})
+    if key == "recurrence":
+        return list(value or []) == list(current.get("recurrence") or [])
+    if key == "transparency":
+        return value == (current.get("transparency") or "opaque")
+    if key == "visibility":
+        return value == (current.get("visibility") or "default")
+    if key == "colorId":
+        return (value or "") == (current.get("colorId") or "")
+    if key in GUEST_PERMISSION_DEFAULTS:
+        return bool(value) == bool(current.get(key, GUEST_PERMISSION_DEFAULTS[key]))
+    if key == "conferenceData":
+        # Only ever sent to add a Meet, which is always a change.
+        return False
+    return (value or "") == (current.get(key) or "")
+
+
+def _same_time(node, current_node, tz):
+    if ("date" in node) != ("date" in current_node):
+        return False
+    if "date" in node:
+        return node["date"] == current_node["date"]
+    try:
+        return _local(node["dateTime"], tz) == _local(current_node["dateTime"], tz)
+    except (KeyError, ValueError):
+        return False
+
+
+def _guest_key(attendees):
+    return sorted((str(a.get("email") or "").lower(), bool(a.get("optional"))) for a in attendees or [])
+
+
+def _reminders_key(reminders):
+    if reminders.get("useDefault", True):
+        return (True, ())
+    return (False, tuple(sorted((o.get("method"), int(o.get("minutes") or 0))
+                                for o in reminders.get("overrides") or [])))
 
 
 def _start_day(resource, tz):

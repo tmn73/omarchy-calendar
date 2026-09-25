@@ -64,7 +64,7 @@ def _subprocess_runner(argv, env):
 class Gws:
     SOURCE_NAME = "gws"
 
-    # The write command asks the client, never the backend name, whether it
+    # The event command asks the client, never the backend name, whether it
     # can write. A backend without create/update/delete sets this to False.
     can_write = True
 
@@ -223,6 +223,10 @@ class Gws:
             if error_code is None:
                 error_code = "unknown"
             message = error.get("message", "unknown error")
+            reasons = {str(e.get("reason") or "") for e in error.get("errors") or [] if isinstance(e, dict)}
+            # A quota 403 is not a sign-in problem.
+            if error_code == 403 and reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
+                raise GwsApiError(f"{error_code}: {message}")
             if error_code in (401, 403):
                 raise GwsAuthError(f"{error_code}: {message}")
             # 410 is what Google answers for an event that was deleted.
