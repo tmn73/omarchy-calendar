@@ -260,8 +260,11 @@ step "Installing the systemd timer"
 mkdir -p "$HOME/.config/systemd/user"
 cp "$SCRIPT_DIR/systemd/omarchy-calendar-sync."{service,timer} "$HOME/.config/systemd/user/"
 # The shipped unit assumes the standard plugin directory. Point it at wherever
-# this checkout actually lives, so a hand-cloned repo works too.
-sed -i "s|^ExecStart=.*|ExecStart=$SYNC_BIN|" "$HOME/.config/systemd/user/omarchy-calendar-sync.service"
+# this checkout actually lives, so a hand-cloned repo works too. In a sed
+# replacement, & means the matched text and | ends the expression, so a path
+# that contains either (or a backslash) must be escaped first.
+sync_bin_escaped=$(printf '%s' "$SYNC_BIN" | sed 's/[&|\\]/\\&/g')
+sed -i "s|^ExecStart=.*|ExecStart=$sync_bin_escaped|" "$HOME/.config/systemd/user/omarchy-calendar-sync.service"
 systemctl --user daemon-reload
 systemctl --user enable --now omarchy-calendar-sync.timer
 
