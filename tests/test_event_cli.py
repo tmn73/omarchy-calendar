@@ -33,6 +33,10 @@ class FakeClient:
         self.calls.append(("update", event_id, body, send_updates))
         return self._answer()
 
+    def replace(self, calendar_id, event_id, resource, send_updates="none"):
+        self.calls.append(("replace", event_id, resource, send_updates))
+        return self._answer()
+
     def delete(self, calendar_id, event_id, send_updates="none"):
         self.calls.append(("delete", event_id, send_updates))
         if self.raises:
@@ -162,6 +166,21 @@ class TestPerform(unittest.TestCase):
         self.assertEqual(target, "s")
         self.assertEqual(body["start"], {"dateTime": "2026-09-26T13:00:00-05:00"})
         self.assertEqual(self.inline, [1])
+
+    def test_removing_meet_replaces_the_whole_event_without_it(self):
+        with_meet = resource("ev1", hangoutLink="https://meet.google.com/abc",
+                             conferenceData={"conferenceSolution": {"key": {"type": "hangoutsMeet"}}},
+                             extendedProperties={"private": {"kept": "yes"}})
+        client = FakeClient(stored={"ev1": with_meet}, reply=resource("ev1"))
+        code, _ = self.run_event({"action": "update", "event": form(eventId="ev1", meet=False)}, client)
+        self.assertEqual(code, 0)
+        action, target, sent, _ = client.calls[-1]
+        self.assertEqual((action, target), ("replace", "ev1"))
+        self.assertNotIn("conferenceData", sent)
+        self.assertNotIn("hangoutLink", sent)
+        # A field the form does not know survives the replace.
+        self.assertEqual(sent["extendedProperties"], {"private": {"kept": "yes"}})
+        self.assertEqual(sent["summary"], "Lunch")
 
     # ---- delete
 

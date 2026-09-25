@@ -132,7 +132,17 @@ def _write(client, request, tz):
         # and the panel sends it with scope "all".
         body.pop("recurrence", None)
 
-    resource = client.update(calendar_id, target, body, send_updates=send_updates)
+    if had_meet and not form.get("meet"):
+        # A patch cannot remove a Meet (verified live), so replace the whole
+        # event: the one just read, the form on top, without the conference.
+        # Starting from the read event keeps every field the form does not
+        # know.
+        whole = {**current, **body}
+        whole.pop("conferenceData", None)
+        whole.pop("hangoutLink", None)
+        resource = client.replace(calendar_id, target, whole, send_updates=send_updates)
+    else:
+        resource = client.update(calendar_id, target, body, send_updates=send_updates)
     series = all_events or had_rule or bool(resource.get("recurrence"))
     return request["eventId"] if not all_events else target, resource, series
 

@@ -65,8 +65,8 @@ def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
     """Google's event body for the form.
 
     `had_meet`, `had_rule` and `had_color` say what the event had before
-    the edit, so a removed conference, repeat or colour is sent as a
-    removal, and an untouched one is not sent at all.
+    the edit, so a removed repeat or colour is sent as a removal, and an
+    untouched one is not sent at all.
     """
     start_day = _day(form.get("startDate"), "start")
     end_day = _day(form.get("endDate") or form.get("startDate"), "end")
@@ -103,10 +103,9 @@ def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
                 "conferenceSolutionKey": {"type": "hangoutsMeet"},
             }
         }
-    elif not form.get("meet") and had_meet:
-        # {}, not None: gws refuses null in its schema check (verified with
-        # --dry-run on gws 0.13.2).
-        body["conferenceData"] = {}
+    # A removed Meet is not in the body: a patch cannot remove one (gws
+    # refuses null, and Google ignores {}), so the event command replaces
+    # the whole event instead. See event_cli._write.
 
     preset = form.get("repeat") or "none"
     if preset == "custom":

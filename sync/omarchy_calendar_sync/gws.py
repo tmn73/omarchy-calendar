@@ -174,6 +174,16 @@ class Gws:
             "--json", json.dumps(body),
         ])
 
+    def replace(self, calendar_id, event_id, resource, send_updates="none"):
+        # PUT: the whole event, so a field left out is removed. The only way
+        # to remove a Meet, since a patch cannot.
+        params = {"calendarId": calendar_id, "eventId": event_id, **_write_params(send_updates)}
+        return self._json([
+            "calendar", "events", "update",
+            "--params", json.dumps(params),
+            "--json", json.dumps(resource),
+        ])
+
     def delete(self, calendar_id, event_id, send_updates="none"):
         params = {"calendarId": calendar_id, "eventId": event_id,
                   "sendUpdates": _send_updates(send_updates)}

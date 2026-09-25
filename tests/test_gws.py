@@ -355,3 +355,16 @@ class TestGetAndParameters(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({}))
         with self.assertRaises(ValueError):
             client.create("me@example.com", {}, send_updates="externalOnly")
+
+
+class TestReplace(unittest.TestCase):
+    def test_replace_puts_the_whole_event(self):
+        runner = FakeRunner({"update": (0, json.dumps({"id": "ev1"}), "")})
+        gws.Gws("/tmp/profile", runner=runner).replace("me@example.com", "ev1", {"summary": "S"}, send_updates="none")
+        argv = runner.calls[0][0]
+        self.assertEqual(argv[1:4], ["calendar", "events", "update"])
+        self.assertEqual(
+            json.loads(argv[argv.index("--params") + 1]),
+            {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "none", "conferenceDataVersion": 1},
+        )
+        self.assertEqual(json.loads(argv[argv.index("--json") + 1]), {"summary": "S"})

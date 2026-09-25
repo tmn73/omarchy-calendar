@@ -146,9 +146,10 @@ class TestFormToBody(unittest.TestCase):
         self.assertEqual(request["conferenceSolutionKey"], {"type": "hangoutsMeet"})
         self.assertTrue(request["requestId"])
 
-    def test_meet_off_on_an_event_that_had_one_sends_an_empty_conference(self):
-        # gws refuses null in its schema check (verified with --dry-run).
-        self.assertEqual(self.body(had_meet=True, meet=False)["conferenceData"], {})
+    def test_meet_off_sends_no_conference_in_the_body(self):
+        # A patch cannot remove a Meet: gws refuses null, and Google ignores
+        # {} (verified live). The event command replaces the event instead.
+        self.assertNotIn("conferenceData", self.body(had_meet=True, meet=False))
 
     def test_meet_untouched_sends_nothing(self):
         self.assertNotIn("conferenceData", self.body())
