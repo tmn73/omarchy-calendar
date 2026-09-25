@@ -768,8 +768,41 @@ function addGuest(guests, text) {
   return guests.concat([{ email: email, optional: false, responseStatus: "needsAction", organizer: false }])
 }
 
+// Google's event colours, from `colors get` (the "event" section).
+var EVENT_COLORS = [
+  { id: "1", color: "#a4bdfc" }, { id: "2", color: "#7ae7bf" }, { id: "3", color: "#dbadff" },
+  { id: "4", color: "#ff887c" }, { id: "5", color: "#fbd75b" }, { id: "6", color: "#ffb878" },
+  { id: "7", color: "#46d6db" }, { id: "8", color: "#e1e1e1" }, { id: "9", color: "#5484ed" },
+  { id: "10", color: "#51b749" }, { id: "11", color: "#dc2127" }
+]
+
+// The notification menu offers one popup at a fixed lead. Anything else an
+// event already has (two reminders, an email, 2 weeks before) shows as
+// "custom" and is sent back untouched unless the user picks another value.
+var REMINDER_MINUTES = [5, 10, 30, 60, 1440]
+
+function reminderChoice(reminders) {
+  var r = reminders || { useDefault: true }
+  if (r.useDefault !== false) return "default"
+  var overrides = r.overrides || []
+  if (overrides.length === 0) return "none"
+  if (overrides.length === 1 && overrides[0].method === "popup"
+      && REMINDER_MINUTES.indexOf(Number(overrides[0].minutes)) >= 0)
+    return String(overrides[0].minutes)
+  return "custom"
+}
+
+function remindersFor(choice) {
+  if (choice === "default") return { useDefault: true, overrides: [] }
+  if (choice === "none") return { useDefault: false, overrides: [] }
+  return { useDefault: false, overrides: [{ method: "popup", minutes: Number(choice) }] }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
+    EVENT_COLORS: EVENT_COLORS,
+    reminderChoice: reminderChoice,
+    remindersFor: remindersFor,
     durationLabel: durationLabel,
     timeOptions: timeOptions,
     nthWeekday: nthWeekday,

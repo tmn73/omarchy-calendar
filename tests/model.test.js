@@ -596,3 +596,22 @@ test('isValidEmail accepts an address and refuses the rest', () => {
   assert.equal(Model.isValidEmail('a@b'), false)
   assert.equal(Model.isValidEmail('a b@c.co'), false)
 })
+
+test('reminderChoice reads the menu value from reminders', () => {
+  assert.equal(Model.reminderChoice({ useDefault: true }), 'default')
+  assert.equal(Model.reminderChoice({ useDefault: false, overrides: [] }), 'none')
+  assert.equal(Model.reminderChoice({ useDefault: false, overrides: [{ method: 'popup', minutes: 30 }] }), '30')
+  assert.equal(Model.reminderChoice({ useDefault: false, overrides: [{ method: 'popup', minutes: 20160 }] }), 'custom')
+  assert.equal(Model.reminderChoice({ useDefault: false, overrides: [{ method: 'email', minutes: 30 }] }), 'custom')
+})
+
+test('remindersFor turns a menu value back into reminders', () => {
+  assert.deepEqual(Model.remindersFor('default'), { useDefault: true, overrides: [] })
+  assert.deepEqual(Model.remindersFor('none'), { useDefault: false, overrides: [] })
+  assert.deepEqual(Model.remindersFor('1440'), { useDefault: false, overrides: [{ method: 'popup', minutes: 1440 }] })
+})
+
+test('EVENT_COLORS holds the 11 colours from colors get', () => {
+  assert.equal(Model.EVENT_COLORS.length, 11)
+  assert.deepEqual(Model.EVENT_COLORS[4], { id: '5', color: '#fbd75b' })
+})
