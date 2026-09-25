@@ -10,6 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import config as config_module
+from . import suggestions as suggestions_module
 from . import contract, normalize
 from .errors import SyncError
 from .gws import Gws
@@ -143,9 +144,11 @@ def run(client, cfg, now, out_path, local_tz):
 
         rows = []
         seen = set()
+        fetched = []
         for calendar in calendars:
             raw = client.events(calendar["id"], time_min, time_max)
             fresh = _drop_duplicates(raw, seen)
+            fetched.extend(fresh)
             rows.extend(normalize.normalize_all(fresh, calendar, local_tz))
 
         source = client.SOURCE_NAME + "/" + ".".join(
@@ -168,7 +171,11 @@ def run(client, cfg, now, out_path, local_tz):
             for c in calendars
             if c.get("writable")
         ]
-    doc = contract.build_document(rows, now.isoformat(), source, writable)
+    # Only for the event form, so only when writing is on.
+    guests = []
+    if writable:
+        guests = suggestions_module.guest_suggestions(fetched, [c["id"] for c in calendars])
+    doc = contract.build_document(rows, now.isoformat(), source, writable, guests)
 
     problems = contract.validate(doc)
     if problems:

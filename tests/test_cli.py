@@ -328,5 +328,22 @@ class TestWritableCalendars(unittest.TestCase):
     def test_no_writable_calendars_when_the_backend_cannot_write(self):
         self.assertNotIn("writableCalendars", self.sync_with({"write": True}, can_write=False))
 
+    def test_guest_suggestions_are_published_with_writing(self):
+        client = FakeGws(calendars=self.CALS, events=[{
+            "id": "e1", "status": "confirmed", "summary": "Sync", "iCalUID": "u1",
+            "start": {"dateTime": "2026-08-10T09:00:00-05:00"},
+            "end": {"dateTime": "2026-08-10T09:30:00-05:00"},
+            "attendees": [{"email": "me@example.com", "self": True}, {"email": "ana@example.com"}],
+        }])
+        client.can_write = True
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.json"
+            cli.run(client, {**config.DEFAULTS, "write": True}, NOW, out, BOGOTA)
+            doc = json.loads(out.read_text())
+        self.assertEqual(doc["guestSuggestions"], [{"email": "ana@example.com", "name": ""}])
+
+    def test_no_guest_suggestions_without_writing(self):
+        self.assertNotIn("guestSuggestions", self.sync_with({"write": False}))
+
     def test_writing_is_off_by_default(self):
         self.assertIs(config.DEFAULTS["write"], False)

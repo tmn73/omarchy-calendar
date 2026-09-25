@@ -115,3 +115,12 @@ class TestOptionalFields(unittest.TestCase):
         self.assertEqual(contract.validate(doc), [])
         doc["events"][0]["recurring"] = "yes"
         self.assertTrue(any("recurring" in p for p in contract.validate(doc)))
+
+    def test_guest_suggestions_is_optional_and_typed(self):
+        doc = self.load()
+        doc["guestSuggestions"] = [{"email": "ana@example.com", "name": "Ana"}]
+        self.assertEqual(contract.validate(doc), [])
+        doc["guestSuggestions"] = [{"name": "Ana"}]
+        self.assertTrue(any("guestSuggestions[0].email" in p for p in contract.validate(doc)))
+        doc["guestSuggestions"] = "ana@example.com"
+        self.assertIn("guestSuggestions must be a list", contract.validate(doc))
