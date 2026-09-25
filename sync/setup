@@ -59,10 +59,31 @@ the guided flow.
 EOF
 fi
 
-if [ "$WRITE" = 0 ] && [ -t 0 ]; then
-  printf '\nCreate and edit events from the widget? [y/N] '
-  read -r answer || true
-  case "${answer:-}" in y|Y|yes|Yes|YES) WRITE=1 ;; esac
+# A second run must not turn writing off behind the user's back: the
+# question defaults to what the config already says, and without a
+# terminal the config's value stands.
+CURRENT_WRITE=$(python3 -c '
+import json, pathlib, sys
+path = pathlib.Path.home() / ".config" / "omarchy" / "calendar-sync.json"
+try:
+    print("1" if json.loads(path.read_text()).get("write") is True else "0")
+except (OSError, ValueError, AttributeError):
+    print("0")
+' 2>/dev/null || echo 0)
+if [ "$WRITE" = 0 ]; then
+  if [ -t 0 ]; then
+    if [ "$CURRENT_WRITE" = 1 ]; then
+      printf '\nCreate and edit events from the widget? [Y/n] '
+      read -r answer || true
+      case "${answer:-}" in n|N|no|No|NO) WRITE=0 ;; *) WRITE=1 ;; esac
+    else
+      printf '\nCreate and edit events from the widget? [y/N] '
+      read -r answer || true
+      case "${answer:-}" in y|Y|yes|Yes|YES) WRITE=1 ;; esac
+    fi
+  else
+    WRITE=$CURRENT_WRITE
+  fi
 fi
 SCOPES="$SCOPE"
 if [ "$WRITE" = 1 ]; then
