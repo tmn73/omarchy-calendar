@@ -65,6 +65,16 @@ class TestVersion(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"--version": (0, "gws 0.13.2\n", "")}))
         client.check()
 
+    def test_unparseable_version_names_exit_code_and_stderr(self):
+        # A wrapper that cannot find node under systemd's PATH exits 127 with
+        # nothing on stdout. The reason is only on stderr.
+        stderr = ".bin/gws: line 18: exec: node: not found\n"
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"--version": (127, "", stderr)}))
+        with self.assertRaises(gws.GwsApiError) as caught:
+            client.version()
+        self.assertIn("exit 127", str(caught.exception))
+        self.assertIn("exec: node: not found", str(caught.exception))
+
 
 class TestCalendars(unittest.TestCase):
     def test_maps_to_id_name_color(self):

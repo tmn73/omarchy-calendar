@@ -46,7 +46,33 @@ the guided flow.
 EOF
 fi
 
-command -v gws >/dev/null || { echo "gws is required: https://github.com/googleworkspace/cli"; exit 1; }
+# Set GWS to pick a specific binary when another program on PATH is also
+# named gws.
+GWS="$(command -v "${GWS:-gws}" || true)"
+[ -n "$GWS" ] || { echo "gws is required: https://github.com/googleworkspace/cli"; exit 1; }
+# The path is recorded for the timer, which runs elsewhere, so a relative one
+# would break there. Not resolved through symlinks: mise's shim is a symlink
+# to mise itself, and only works under its own name.
+case "$GWS" in /*) ;; *) GWS="$PWD/$GWS" ;; esac
+# The name is not unique. The git workspace helper is also called gws, and
+# `gws auth login` on it prints "Not in a workspace" and stops the script.
+# Captured, not piped into grep -q: under pipefail an early grep exit can
+# fail the pipe.
+gws_help=$("$GWS" --help 2>/dev/null || true)
+case "$gws_help" in
+  *"Google Workspace"*) ;;
+  *)
+    cat <<EOF
+$GWS is not the Google Workspace CLI. Another program uses the same name,
+for example the git workspace helper.
+
+Install https://github.com/googleworkspace/cli, then point this script at it:
+
+  GWS=/absolute/path/to/gws $0
+EOF
+    exit 1
+    ;;
+esac
 command -v gcloud >/dev/null || { echo "gcloud is required for automated project setup"; exit 1; }
 
 step "Using an isolated gcloud configuration so your other projects are untouched"
@@ -197,10 +223,10 @@ EOF
 # the calendar scope was granted keeps being served afterwards, and every
 # call fails with 403 insufficient scopes until it is cleared.
 rm -f "$PROFILE/token_cache.json"
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" gws auth login --scopes "$SCOPE"
+GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth login --scopes "$SCOPE"
 
 step "Checking the calendar scope was actually granted"
-if ! GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" gws auth status 2>/dev/null | grep -q "$SCOPE"; then
+if ! GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null | grep -q "$SCOPE"; then
   cat <<EOF
 
 The calendar scope was NOT granted. gws is holding a token that can only read
@@ -209,7 +235,7 @@ your email address.
 This almost always means the calendar checkbox on the consent screen was left
 unticked. Run this script again and tick it.
 
-  granted scopes: $(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" gws auth status 2>/dev/null | grep -A6 '"scopes"' | grep googleapis || echo "identity only")
+  granted scopes: $(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null | grep -A6 '"scopes"' | grep googleapis || echo "identity only")
 EOF
   exit 1
 fi
@@ -218,7 +244,7 @@ echo "  calendar.readonly granted"
 step "Verifying calendar access"
 # Surface a real error rather than reading `items` out of an error body and
 # reporting it as zero calendars.
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" gws calendar calendarList list 2>/dev/null \
+GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" calendar calendarList list 2>/dev/null \
   | python3 -c '
 import json, sys
 
@@ -235,8 +261,36 @@ if count == 0:
 '
 
 step "Recording where gws and your credentials live"
-# The timer runs without your shell PATH, so the bare name is not enough.
-gws_path=$(command -v gws)
+# The timer runs with the PATH its unit sets, not your shell PATH, so the bare
+# name is not enough. An absolute path is not always enough either: a version
+# manager's npm wrapper execs node, and node may only be on your shell PATH.
+# So run gws the way the timer will before recording it.
+timer_path=$(sed -n 's/^Environment=PATH=//p' "$SCRIPT_DIR/systemd/omarchy-calendar-sync.service")
+timer_path=${timer_path//"%h"/$HOME}
+runs_under_timer() { env -i HOME="$HOME" PATH="$timer_path" "$1" --version 2>&1; }
+
+gws_path=$GWS
+if ! timer_output=$(runs_under_timer "$gws_path"); then
+  # mise's shim finds node by itself, and it survives upgrades. The install
+  # path does not: it embeds the gws version.
+  mise_shim="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims/gws"
+  if [ -x "$mise_shim" ] && runs_under_timer "$mise_shim" >/dev/null; then
+    echo "  $gws_path needs your shell PATH, so recording the mise shim instead"
+    gws_path=$mise_shim
+  else
+    cat <<EOF
+
+  Warning: $gws_path does not run under the timer's PATH, so every sync
+  will fail. It printed:
+
+    ${timer_output:-nothing}
+
+  Set gwsPath in $HOME/.config/omarchy/calendar-sync.json to a gws that
+  runs without your shell PATH.
+
+EOF
+  fi
+fi
 config="$HOME/.config/omarchy/calendar-sync.json"
 mkdir -p "$(dirname "$config")"
 python3 - "$config" "$gws_path" "$PROFILE" <<'PYEOF'
