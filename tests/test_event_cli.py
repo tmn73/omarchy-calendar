@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from omarchy_calendar_sync import write_cli
+from omarchy_calendar_sync import event_cli
 from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound
 
 BOGOTA = ZoneInfo("America/Bogota")
@@ -94,7 +94,7 @@ class TestPerform(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_write(self, raw, client, cfg=ON):
-        return write_cli.perform(raw, cfg, client, self.path, BOGOTA, lambda: self.syncs.append(1))
+        return event_cli.perform(raw, cfg, client, self.path, BOGOTA, lambda: self.syncs.append(1))
 
     def events(self):
         return json.loads(self.path.read_text())["events"]
@@ -120,28 +120,28 @@ class TestPerform(unittest.TestCase):
     def test_writing_turned_off_is_refused_before_google(self):
         client = FakeClient(REPLY)
         code, reply = self.run_write(create_request(), client, cfg={"write": False})
-        self.assertEqual((code, reply["error"]), (1, write_cli.WRITE_OFF))
+        self.assertEqual((code, reply["error"]), (1, event_cli.WRITE_OFF))
         self.assertEqual(client.calls, [])
 
     def test_a_backend_that_cannot_write_is_refused(self):
         client = FakeClient(REPLY)
         client.can_write = False
         code, reply = self.run_write(create_request(), client)
-        self.assertEqual((code, reply["error"]), (1, write_cli.NOT_WRITABLE))
+        self.assertEqual((code, reply["error"]), (1, event_cli.NOT_WRITABLE))
 
     def test_a_missing_scope_names_the_setup_command(self):
         client = FakeClient(raises=GwsAuthError("403: insufficient scopes"))
-        self.assertEqual(self.run_write(create_request(), client)[1]["error"], write_cli.NO_SCOPE)
+        self.assertEqual(self.run_write(create_request(), client)[1]["error"], event_cli.NO_SCOPE)
 
     def test_an_expired_sign_in_is_not_reported_as_a_missing_scope(self):
         client = FakeClient(raises=GwsAuthError("401: invalid_grant"))
-        self.assertEqual(self.run_write(create_request(), client)[1]["error"], write_cli.EXPIRED)
+        self.assertEqual(self.run_write(create_request(), client)[1]["error"], event_cli.EXPIRED)
 
     def test_an_event_that_is_gone_still_starts_the_sync(self):
         client = FakeClient(raises=GwsNotFound("404: Not Found"))
         raw = {"action": "delete", "calendarId": ME["id"], "eventId": "ev1"}
         code, reply = self.run_write(raw, client)
-        self.assertEqual((code, reply["error"]), (1, write_cli.GONE))
+        self.assertEqual((code, reply["error"]), (1, event_cli.GONE))
         self.assertEqual(self.syncs, [1])
 
     def test_a_bad_request_leaves_the_file_untouched(self):
@@ -155,13 +155,13 @@ class TestPerform(unittest.TestCase):
     def test_no_events_file_yet_is_refused(self):
         self.path.unlink()
         code, reply = self.run_write(create_request(), FakeClient(REPLY))
-        self.assertEqual((code, reply["error"]), (1, write_cli.NO_FILE))
+        self.assertEqual((code, reply["error"]), (1, event_cli.NO_FILE))
 
 
 class TestMain(unittest.TestCase):
     def test_a_missing_or_broken_argument_is_refused(self):
-        self.assertEqual(write_cli.main([]), 1)
-        self.assertEqual(write_cli.main(["{not json"]), 1)
+        self.assertEqual(event_cli.main([]), 1)
+        self.assertEqual(event_cli.main(["{not json"]), 1)
 
 
 if __name__ == "__main__":

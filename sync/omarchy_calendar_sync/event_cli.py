@@ -1,4 +1,4 @@
-"""The one command the panel runs to change an event.
+"""The one command the panel runs to read or change an event.
 
 In: one JSON argument (see writes.parse_request). Out: one JSON line on
 stdout, {"ok": true, "eventId": ...} or {"ok": false, "error": ...}, and

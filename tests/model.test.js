@@ -524,8 +524,8 @@ test('writeRequest builds the three actions', () => {
 })
 
 test('localPathFromUrl keeps the path absolute and decodes it', () => {
-  assert.equal(Model.localPathFromUrl('file:///home/u/my%20plugins/sync/omarchy-calendar-write'),
-    '/home/u/my plugins/sync/omarchy-calendar-write')
+  assert.equal(Model.localPathFromUrl('file:///home/u/my%20plugins/sync/omarchy-calendar-event'),
+    '/home/u/my plugins/sync/omarchy-calendar-event')
 })
 
 test('parseWriteReply reads the command output, and survives garbage', () => {

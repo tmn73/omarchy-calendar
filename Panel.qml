@@ -100,8 +100,8 @@ Panel {
 
   // Only ever this file, next to this plugin. Never a path from the events
   // file: any program can write that file.
-  readonly property string writeCommand: Model.localPathFromUrl(
-    Qt.resolvedUrl("sync/omarchy-calendar-write"))
+  readonly property string eventCommand: Model.localPathFromUrl(
+    Qt.resolvedUrl("sync/omarchy-calendar-event"))
   readonly property string syncState: eventVersionMismatch
     ? "version"
     : Model.syncState(eventDoc, Date.now(), syncIntervalSeconds)
@@ -540,7 +540,7 @@ Panel {
     root.writeError = ""
     // Argv, not a shell string: the title is typed by the user and can hold
     // anything.
-    writeProcess.command = [root.writeCommand, JSON.stringify(request)]
+    writeProcess.command = [root.eventCommand, JSON.stringify(request)]
     writeProcess.running = true
   }
 
