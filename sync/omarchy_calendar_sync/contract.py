@@ -44,14 +44,21 @@ _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _HTTPS_URL = re.compile(r"^https://[^\s\"'<>]+$")
 
 
-def build_document(events, synced_at, source):
-    """Assemble a contract document from already normalized event rows."""
-    return {
+def build_document(events, synced_at, source, writable_calendars=None):
+    """Assemble a contract document from already normalized event rows.
+
+    writableCalendars is written only when the sync may write, so a file
+    from a read-only setup or from another writer carries no such key.
+    """
+    doc = {
         "version": CONTRACT_VERSION,
         "syncedAt": synced_at,
         "source": source,
         "events": events,
     }
+    if writable_calendars:
+        doc["writableCalendars"] = writable_calendars
+    return doc
 
 
 def validate(doc):
@@ -75,9 +82,28 @@ def validate(doc):
         problems.append("events must be a list")
         return problems
 
+    if "writableCalendars" in doc:
+        problems.extend(_validate_writable(doc["writableCalendars"]))
+
     for index, event in enumerate(events):
         problems.extend(_validate_event(index, event))
 
+    return problems
+
+
+def _validate_writable(writable):
+    if not isinstance(writable, list):
+        return ["writableCalendars must be a list"]
+    problems = []
+    for index, calendar in enumerate(writable):
+        where = f"writableCalendars[{index}]"
+        if not isinstance(calendar, dict):
+            problems.append(f"{where} is not an object")
+            continue
+        for field in ("id", "name", "color"):
+            value = calendar.get(field)
+            if not isinstance(value, str) or not value:
+                problems.append(f"{where}.{field} must be a non-empty string")
     return problems
 
 

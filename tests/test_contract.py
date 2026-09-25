@@ -87,3 +87,24 @@ class TestOptionalFields(unittest.TestCase):
         doc = self.load()
         doc["events"][0]["meetingUrl"] = ""
         self.assertEqual(contract.validate(doc), [])
+
+    def test_writable_calendars_is_optional(self):
+        doc = self.load()
+        self.assertNotIn("writableCalendars", doc)
+        self.assertEqual(contract.validate(doc), [])
+
+    def test_writable_calendars_must_be_a_list_of_calendars(self):
+        doc = self.load()
+        doc["writableCalendars"] = [{"id": "me@example.com", "name": "Me", "color": "#7bd148"}]
+        self.assertEqual(contract.validate(doc), [])
+        doc["writableCalendars"] = [{"id": "me@example.com"}]
+        self.assertTrue(any("writableCalendars[0].name" in p for p in contract.validate(doc)))
+        doc["writableCalendars"] = "me@example.com"
+        self.assertIn("writableCalendars must be a list", contract.validate(doc))
+
+    def test_build_document_omits_an_empty_writable_list(self):
+        doc = contract.build_document([], "2026-09-25T00:00:00+00:00", "gws/0.13.2", [])
+        self.assertNotIn("writableCalendars", doc)
+        writable = [{"id": "a@example.com", "name": "A", "color": "#000000"}]
+        doc = contract.build_document([], "2026-09-25T00:00:00+00:00", "gws/0.13.2", writable)
+        self.assertEqual(doc["writableCalendars"], writable)
