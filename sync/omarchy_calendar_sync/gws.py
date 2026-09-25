@@ -38,6 +38,10 @@ class GwsApiError(GwsError):
     """Google returned an error, or gws returned something unparseable."""
 
 
+class GwsNotFound(GwsApiError):
+    """The event or the calendar does not exist (Google error 404)."""
+
+
 def _subprocess_runner(argv, env):
     completed = subprocess.run(argv, env=env, capture_output=True, text=True)
     return completed.returncode, completed.stdout, completed.stderr
@@ -45,6 +49,10 @@ def _subprocess_runner(argv, env):
 
 class Gws:
     SOURCE_NAME = "gws"
+
+    # The write command asks the client, never the backend name, whether it
+    # can write. A backend without create/update/delete sets this to False.
+    can_write = True
 
     def __init__(self, profile, runner=None, binary="gws"):
         self.profile = str(profile)
@@ -97,6 +105,7 @@ class Gws:
                 or item["id"],
                 "color": item.get("backgroundColor") or FALLBACK_COLOR,
                 "primary": item.get("primary") is True,
+                "writable": item.get("accessRole") in ("owner", "writer"),
             }
             for item in payload.get("items", [])
         ]
@@ -127,16 +136,45 @@ class Gws:
             f"gws events list did not finish paginating within {MAX_PAGES} pages"
         )
 
+    def create(self, calendar_id, body):
+        return self._json([
+            "calendar", "events", "insert",
+            "--params", json.dumps({"calendarId": calendar_id}),
+            "--json", json.dumps(body),
+        ])
+
+    def update(self, calendar_id, event_id, body):
+        # patch, not update: only the fields in `body` change, so the guests
+        # and the description survive an edit from the panel.
+        return self._json([
+            "calendar", "events", "patch",
+            "--params", json.dumps({"calendarId": calendar_id, "eventId": event_id}),
+            "--json", json.dumps(body),
+        ])
+
+    def delete(self, calendar_id, event_id):
+        exit_code, stdout, stderr = self._run([
+            "calendar", "events", "delete",
+            "--params", json.dumps({"calendarId": calendar_id, "eventId": event_id}),
+        ])
+        # Google answers a delete with HTTP 204 and no body.
+        if exit_code == 0 and not stdout.strip():
+            return None
+        self._parse(exit_code, stdout, stderr)
+        return None
+
     def _json(self, args):
-        """Run gws and parse stdout.
+        """Run gws and parse stdout."""
+        return self._parse(*self._run(args))
+
+    def _parse(self, exit_code, stdout, stderr):
+        """Parse one gws reply, or raise the error it carries.
 
         stderr carries keyring noise on success, so it is never parsed as
         data. On a nonzero exit code, stdout may not even be JSON, so stderr
         is quoted in the raised error instead since that is the only place
         useful diagnostic detail can come from.
         """
-        exit_code, stdout, stderr = self._run(args)
-
         if exit_code != 0:
             excerpt = stderr.strip()[:200] or "no stderr output"
             raise GwsApiError(f"gws exited with code {exit_code}: {excerpt}")
@@ -154,6 +192,8 @@ class Gws:
             message = error.get("message", "unknown error")
             if error_code in (401, 403):
                 raise GwsAuthError(f"{error_code}: {message}")
+            if error_code == 404:
+                raise GwsNotFound(f"{error_code}: {message}")
             raise GwsApiError(f"{error_code}: {message}")
 
         return payload

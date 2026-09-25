@@ -85,8 +85,8 @@ class TestCalendars(unittest.TestCase):
         self.assertEqual(
             calendars,
             [
-                {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True},
-                {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False},
+                {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True, "writable": False},
+                {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False, "writable": False},
             ],
         )
 
@@ -244,3 +244,64 @@ class TestConfigurableBinary(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("/opt/bin/gws", message)
         self.assertIn("gwsPath", message)
+
+
+class TestWrites(unittest.TestCase):
+    BODY = {
+        "summary": "Lunch",
+        "start": {"dateTime": "2026-09-26T12:00:00-05:00"},
+        "end": {"dateTime": "2026-09-26T12:30:00-05:00"},
+    }
+
+    def test_create_sends_the_calendar_and_the_body_as_json(self):
+        reply = {"id": "new1", "summary": "Lunch"}
+        runner = FakeRunner({"insert": (0, json.dumps(reply), "")})
+        client = gws.Gws("/tmp/profile", runner=runner)
+        self.assertEqual(client.create("me@example.com", self.BODY), reply)
+        argv = runner.calls[0][0]
+        self.assertEqual(argv[1:4], ["calendar", "events", "insert"])
+        self.assertEqual(json.loads(argv[argv.index("--params") + 1]), {"calendarId": "me@example.com"})
+        self.assertEqual(json.loads(argv[argv.index("--json") + 1]), self.BODY)
+
+    def test_update_patches_by_event_id(self):
+        runner = FakeRunner({"patch": (0, json.dumps({"id": "ev1"}), "")})
+        client = gws.Gws("/tmp/profile", runner=runner)
+        client.update("me@example.com", "ev1", self.BODY)
+        argv = runner.calls[0][0]
+        self.assertEqual(argv[1:4], ["calendar", "events", "patch"])
+        self.assertEqual(
+            json.loads(argv[argv.index("--params") + 1]),
+            {"calendarId": "me@example.com", "eventId": "ev1"},
+        )
+
+    def test_delete_accepts_an_empty_reply(self):
+        runner = FakeRunner({"delete": (0, "", "keyring noise")})
+        client = gws.Gws("/tmp/profile", runner=runner)
+        self.assertIsNone(client.delete("me@example.com", "ev1"))
+        self.assertNotIn("--json", runner.calls[0][0])
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_delete_of_a_missing_event_raises_not_found(self):
+        body = json.dumps({"error": {"code": 404, "message": "Not Found"}})
+        runner = FakeRunner({"delete": (0, body, "")})
+        client = gws.Gws("/tmp/profile", runner=runner)
+        with self.assertRaises(gws.GwsNotFound):
+            client.delete("me@example.com", "gone")
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_a_write_without_the_scope_raises_auth_error(self):
+        body = json.dumps({"error": {"code": 403, "message": "insufficient scopes"}})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"insert": (0, body, "")}))
+        with self.assertRaises(gws.GwsAuthError):
+            client.create("me@example.com", self.BODY)
+
+    def test_owner_and_writer_calendars_are_writable(self):
+        body = json.dumps({"items": [
+            {"id": "a", "summary": "A", "accessRole": "owner"},
+            {"id": "b", "summary": "B", "accessRole": "writer"},
+            {"id": "c", "summary": "C", "accessRole": "reader"},
+            {"id": "d", "summary": "D"},
+        ]})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
+        writable = {c["id"]: c["writable"] for c in client.calendars()}
+        self.assertEqual(writable, {"a": True, "b": True, "c": False, "d": False})
