@@ -161,7 +161,7 @@ or free, visibility, colour and guest permissions.
 
 With guests, the panel asks whether to send invitation emails. For a
 recurring event, it asks whether the change is for this event or all
-events. A repeat rule the menu cannot show, or a notification it has no
+events. To move an event to another calendar, use Google Calendar. A repeat rule the menu cannot show, or a notification it has no
 entry for, stays as it is unless you pick another one.
 
 The EDS backend cannot write yet, so the panel shows none of this there.
@@ -286,11 +286,10 @@ These extra fields are optional. Omit them and everything still works:
 | `eventUrl` | Clicking the row opens this. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
-| `recurring` | `true` on an occurrence of a series. The edit form says it changes that occurrence only |
 
 A top-level `writableCalendars` list (`id`, `name`, `color`) turns on the
 panel's edit buttons for those calendars. Only the bundled sync should write
-it: the panel sends its edits to the bundled write command, not to your writer.
+it: the panel sends its edits to the bundled event command, not to your writer.
 
 Rules a writer has to follow:
 
@@ -359,6 +358,7 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | `401 invalid_grant` | The refresh token expired. Almost always an app left in Testing, which caps refresh tokens at seven days. Publish it, then log in again |
 | `gws is not installed or not on PATH` from the timer, but it works in your terminal | `gwsPath` is not absolute. `sync/setup` writes it for you |
 | "Write access not granted" in the event form | The token has no `calendar.events` scope. See [Create and edit events](#create-and-edit-events) |
+| "Google refused the change: Shared properties can only be changed by the organizer" | The event is an invitation. Only its organizer can change its title, time or guests. Your own colour, notification and busy or free still change |
 | `cannot parse gws version` from the timer, with `exec: node: not found` | `gwsPath` is absolute but points at an npm wrapper that needs node on your shell PATH. With mise, use its shim: `~/.local/share/mise/shims/gws`. `sync/setup` checks this and records the shim for you |
 | `Not in a workspace` during setup, or setup says gws is not the Google Workspace CLI | Another program named `gws` comes first on your PATH, for example the git workspace helper. Pass the right one: `GWS=/absolute/path/to/gws sync/setup` |
 | The panel says "No calendar synced yet" | The events file does not exist. The sync has never completed |
