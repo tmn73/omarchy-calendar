@@ -29,6 +29,14 @@ Column {
 
   spacing: Style.space(4)
 
+  // What is typed and not added yet, so a save can still take it.
+  readonly property string pendingText: guestField.text
+
+  function clearPending() {
+    guestField.text = ""
+    root.highlighted = -1
+  }
+
   function add(text) {
     var next = Model.addGuest(root.guests, text)
     // The same array back means the address was invalid or already in.

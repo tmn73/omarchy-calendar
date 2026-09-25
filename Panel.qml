@@ -510,6 +510,8 @@ Panel {
   }
 
   property bool setupCommandCopied: false
+  // Its own flag: one "Copied" must not show on the other copy button.
+  property bool writeSetupCommandCopied: false
 
   function copySetupCommand() {
     setupCommandCopier.running = true
@@ -520,7 +522,10 @@ Panel {
   Timer {
     id: copiedReset
     interval: 2000
-    onTriggered: root.setupCommandCopied = false
+    onTriggered: {
+      root.setupCommandCopied = false
+      root.writeSetupCommandCopied = false
+    }
   }
 
   Process {
@@ -647,9 +652,14 @@ Panel {
     // anything.
     writeProcess.command = [root.eventCommand, JSON.stringify(request)]
     writeProcess.running = true
+    writeTimeout.restart()
   }
 
   function onWriteReply(text) {
+    // Called by the stream and, as a fallback, by the exit. Only the first
+    // one counts.
+    if (!root.writeBusy) return
+    writeTimeout.stop()
     root.writeBusy = false
     root.pendingDelete = null
     var purpose = root.pendingPurpose
@@ -669,8 +679,35 @@ Panel {
   Process {
     id: writeProcess
     stdout: StdioCollector {
+      id: writeOutput
       waitForEnd: true
       onStreamFinished: root.onWriteReply(text)
+    }
+    // If the stream never reports (the command could not start), the exit
+    // still ends the wait, so the panel never stays on "Saving…". The grace
+    // lets a normal reply's stream finish first, so its text is the one read.
+    onExited: writeExitGrace.restart()
+  }
+
+  Timer {
+    id: writeExitGrace
+    interval: 500
+    onTriggered: root.onWriteReply(writeOutput.text)
+  }
+
+  // A command that hangs (a keyring prompt, a dead network) must not freeze
+  // the pencils until a shell restart. A series edit syncs inline, about
+  // 10 s, so a minute is far past any normal reply.
+  Timer {
+    id: writeTimeout
+    interval: 60000
+    onTriggered: {
+      if (!root.writeBusy) return
+      writeProcess.running = false
+      root.writeBusy = false
+      root.pendingPurpose = ""
+      root.pendingDelete = null
+      root.writeError = qsTr("The event command did not answer within a minute.")
     }
   }
 
@@ -1671,9 +1708,10 @@ Panel {
             setupCommandCopied: root.setupCommandCopied
             onSetupCommandCopyRequested: root.copySetupCommand()
             canWrite: root.canWrite
+            writeSetupCopied: root.writeSetupCommandCopied
             onWriteSetupCopyRequested: {
               writeSetupCopier.running = true
-              root.setupCommandCopied = true
+              root.writeSetupCommandCopied = true
               copiedReset.restart()
             }
             eventCount: root.eventDoc && root.eventDoc.events ? root.eventDoc.events.length : 0

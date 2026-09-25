@@ -34,6 +34,11 @@ Column {
   readonly property color muted: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.68)
   readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
   readonly property bool sameDay: root.form.startDate === root.form.endDate
+  readonly property string calendarName: {
+    for (var i = 0; i < root.calendars.length; i++)
+      if (root.calendars[i].id === root.form.calendarId) return root.calendars[i].name
+    return root.form.calendarId || ""
+  }
   readonly property color calendarColor: {
     for (var i = 0; i < root.calendars.length; i++)
       if (root.calendars[i].id === root.form.calendarId) return root.calendars[i].color
@@ -116,7 +121,26 @@ Column {
   }
 
   function submit() {
-    if (!root.busy) root.submitted(root.form)
+    if (root.busy) return
+    // An address typed but not confirmed with Enter still counts, as it
+    // does in Google.
+    var guests = Model.addGuest(root.form.guests || [], guestList.pendingText)
+    if (guests !== root.form.guests) {
+      root.update({ guests: guests })
+      guestList.clearPending()
+    }
+    root.submitted(root.form)
+  }
+
+  // Leaving "All day" needs times. An all-day event has none, and a save
+  // with empty times is refused, so start from the form's defaults.
+  function toggleAllDay() {
+    if (root.form.allDay === true && !root.form.startTime) {
+      var times = Model.defaultFormTimes(root.form.startDate, new Date())
+      root.update({ allDay: false, startTime: times.start, endTime: times.end })
+    } else {
+      root.update({ allDay: !(root.form.allDay === true) })
+    }
   }
 
   // A labelled line: a fixed-width label, then the controls.
@@ -219,7 +243,7 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       checked: root.form.allDay === true
       foreground: root.foreground
-      onToggled: root.update({ allDay: !(root.form.allDay === true) })
+      onToggled: root.toggleAllDay()
     }
   }
 
@@ -237,6 +261,7 @@ Column {
   }
 
   GuestList {
+    id: guestList
     width: parent.width
     guests: root.form.guests || []
     suggestions: root.guestSuggestions
@@ -310,10 +335,12 @@ Column {
   }
 
   // Always say where the event goes. With one writable calendar there is
-  // nothing to pick, only the name to read.
+  // nothing to pick. On an edit there is nothing to pick either: moving an
+  // event to another calendar needs Google's events.move, which the event
+  // command does not do.
   FieldRow {
     label: qsTr("Calendar")
-    visible: root.calendars.length <= 1
+    visible: root.calendars.length <= 1 || root.isEditing
 
     Rectangle {
       anchors.verticalCenter: parent.verticalCenter
@@ -327,7 +354,7 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       width: root.width - Style.space(90)
       textFormat: Text.PlainText
-      text: root.calendars.length ? root.calendars[0].name : ""
+      text: root.calendarName
       elide: Text.ElideRight
       color: root.foreground
       font.family: root.fontFamily
@@ -337,7 +364,7 @@ Column {
 
   Dropdown {
     width: parent.width
-    visible: root.calendars.length > 1
+    visible: root.calendars.length > 1 && !root.isEditing
     label: qsTr("Calendar")
     value: root.form.calendarId || ""
     options: root.calendars.map(function(c) { return { value: c.id, label: c.name } })

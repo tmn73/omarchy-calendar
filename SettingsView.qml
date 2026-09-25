@@ -30,6 +30,7 @@ Column {
   property bool setupCommandCopied: false
   // True when the events file lists a calendar the panel may write to.
   property bool canWrite: false
+  property bool writeSetupCopied: false
 
   signal calendarToggled(string calendarId)
   signal yearProgressToggled()
@@ -200,7 +201,7 @@ Column {
     label: qsTr("Create and edit events")
     hint: root.canWrite
       ? qsTr("On")
-      : root.setupCommandCopied
+      : root.writeSetupCopied
         ? qsTr("Copied. Paste it in a terminal")
         : qsTr("Off. Click to copy the command that turns it on")
     checked: root.canWrite
