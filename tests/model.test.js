@@ -621,3 +621,28 @@ test('otherGuests leaves out the calendar owner', () => {
   assert.deepEqual(Model.otherGuests(form).map(g => g.email), ['Ana@example.com'])
   assert.deepEqual(Model.otherGuests({ calendarId: 'me@example.com', guests: [] }), [])
 })
+
+const SUGGESTIONS = [
+  { email: 'bo.lee@example.com', name: 'Bo Lee' },
+  { email: 'ana@example.com', name: '' },
+  { email: 'carla@work.co', name: 'Carla Ruiz' }
+]
+
+test('matchGuests matches the email or a word of the name, without case', () => {
+  assert.deepEqual(Model.matchGuests(SUGGESTIONS, 'an', []).map(s => s.email), ['ana@example.com'])
+  assert.deepEqual(Model.matchGuests(SUGGESTIONS, 'RUI', []).map(s => s.email), ['carla@work.co'])
+  assert.deepEqual(Model.matchGuests(SUGGESTIONS, 'example', []).map(s => s.email),
+    ['bo.lee@example.com', 'ana@example.com'])
+})
+
+test('matchGuests leaves out guests already added, and needs some text', () => {
+  const added = [{ email: 'ana@example.com' }]
+  assert.deepEqual(Model.matchGuests(SUGGESTIONS, 'example', added).map(s => s.email), ['bo.lee@example.com'])
+  assert.deepEqual(Model.matchGuests(SUGGESTIONS, '  ', []), [])
+})
+
+test('matchGuests keeps the frequency order and caps the list', () => {
+  const many = Array.from({ length: 9 }, (_, i) => ({ email: 'p' + i + '@x.co', name: '' }))
+  assert.equal(Model.matchGuests(many, 'x.co', [], 5).length, 5)
+  assert.equal(Model.matchGuests(many, 'x.co', [], 5)[0].email, 'p0@x.co')
+})

@@ -764,6 +764,26 @@ function isValidEmail(text) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(text || ""))
 }
 
+// Suggestions for the guest field, in the sync's order (most frequent
+// first): the email contains the text, or a word of the name starts with it.
+function matchGuests(suggestions, text, guests, limit) {
+  var query = normalizeEmail(text)
+  if (!query) return []
+  var taken = {}
+  for (var g = 0; g < (guests || []).length; g++) taken[normalizeEmail(guests[g].email)] = true
+  var out = []
+  var list = suggestions || []
+  for (var i = 0; i < list.length && out.length < (limit || 5); i++) {
+    var email = normalizeEmail(list[i].email)
+    if (taken[email]) continue
+    var words = String(list[i].name || "").toLowerCase().split(/\s+/)
+    var byName = false
+    for (var w = 0; w < words.length; w++) if (words[w] && words[w].indexOf(query) === 0) byName = true
+    if (email.indexOf(query) >= 0 || byName) out.push(list[i])
+  }
+  return out
+}
+
 // Returns the same array when nothing was added, so the caller can tell.
 function addGuest(guests, text) {
   var email = normalizeEmail(text)
@@ -817,6 +837,7 @@ if (typeof module !== "undefined") {
     normalizeEmail: normalizeEmail,
     isValidEmail: isValidEmail,
     addGuest: addGuest,
+    matchGuests: matchGuests,
     isWritable: isWritable,
     defaultFormTimes: defaultFormTimes,
     localPathFromUrl: localPathFromUrl,

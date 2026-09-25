@@ -1638,6 +1638,7 @@ Panel {
               timeFormat: root.eventTimeFormat
               weekStart: root.weekStart
               calendars: root.writableCalendars
+              guestSuggestions: (root.eventDoc && root.eventDoc.guestSuggestions) || []
               initialForm: root.formInitial
               errorText: root.writeError
               busy: root.writeBusy

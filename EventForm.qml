@@ -18,6 +18,8 @@ Column {
   property int weekStart: 1
   // The writable calendars, from the events file.
   property var calendars: []
+  // People from your events, for the guest field (the file's guestSuggestions).
+  property var guestSuggestions: []
   // The form to start from: from the event command's get, or a new one.
   property var initialForm: ({})
   property string errorText: ""
@@ -237,6 +239,7 @@ Column {
   GuestList {
     width: parent.width
     guests: root.form.guests || []
+    suggestions: root.guestSuggestions
     foreground: root.foreground
     fontFamily: root.fontFamily
     onEdited: function(guests) { root.update({ guests: guests }) }
@@ -303,6 +306,32 @@ Column {
         color: root.faint
         font: descriptionField.font
       }
+    }
+  }
+
+  // Always say where the event goes. With one writable calendar there is
+  // nothing to pick, only the name to read.
+  FieldRow {
+    label: qsTr("Calendar")
+    visible: root.calendars.length <= 1
+
+    Rectangle {
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(10)
+      height: width
+      radius: width / 2
+      color: root.calendarColor
+    }
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      width: root.width - Style.space(90)
+      textFormat: Text.PlainText
+      text: root.calendars.length ? root.calendars[0].name : ""
+      elide: Text.ElideRight
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
     }
   }
 
