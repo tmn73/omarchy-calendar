@@ -9,6 +9,16 @@
 
 set -euo pipefail
 
+# --write answers yes to "Create and edit events from the widget?" without
+# asking, for a script or a second run.
+WRITE=0
+for arg in "$@"; do
+  case "$arg" in
+    --write) WRITE=1 ;;
+    *) echo "unknown option: $arg (the only option is --write)"; exit 2 ;;
+  esac
+done
+
 # Deliberately empty by default. Google Cloud project ids are unique across
 # all of Google, not per account, so a hardcoded default works for exactly one
 # person on earth and fails for everyone after them. Resolved below, once we
@@ -19,6 +29,9 @@ GCLOUD_CONFIG="${GCLOUD_CONFIG:-omarchy-calendar}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_BIN="$SCRIPT_DIR/omarchy-calendar-sync"
 SCOPE="https://www.googleapis.com/auth/calendar.readonly"
+# Lets the widget create, edit and delete events. It cannot change sharing
+# or delete a calendar, which the full calendar scope could.
+WRITE_SCOPE="https://www.googleapis.com/auth/calendar.events"
 
 step() { printf '\n==> %s\n' "$1"; }
 
@@ -44,6 +57,16 @@ and this run cannot pause to wait for you. Run this directly in a terminal for
 the guided flow.
 
 EOF
+fi
+
+if [ "$WRITE" = 0 ] && [ -t 0 ]; then
+  printf '\nCreate and edit events from the widget? [y/N] '
+  read -r answer || true
+  case "${answer:-}" in y|Y|yes|Yes|YES) WRITE=1 ;; esac
+fi
+SCOPES="$SCOPE"
+if [ "$WRITE" = 1 ]; then
+  SCOPES="$SCOPE,$WRITE_SCOPE"
 fi
 
 # Set GWS to pick a specific binary when another program on PATH is also
@@ -151,6 +174,14 @@ Open:
   Filter for:  calendar.readonly
   Tick:        $SCOPE
                ("See and download any calendar you can access")
+EOF
+if [ "$WRITE" = 1 ]; then
+  cat <<EOF
+  Also tick:   $WRITE_SCOPE
+               ("View and edit events on all your calendars")
+EOF
+fi
+cat <<EOF
   Update, then Save
 
   If Save is greyed out, fill in "How will the scopes be used?" with
@@ -219,27 +250,36 @@ calendars before clicking Continue. It is not ticked for you.
 Clicking Continue without it still reports a successful login, but grants only
 your email address, and every sync then fails with 403 insufficient scopes.
 EOF
+if [ "$WRITE" = 1 ]; then
+  echo "You asked to create and edit events, so tick the events checkbox too."
+fi
 # gws caches the access token next to the credentials. A cache minted before
 # the calendar scope was granted keeps being served afterwards, and every
 # call fails with 403 insufficient scopes until it is cleared.
 rm -f "$PROFILE/token_cache.json"
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth login --scopes "$SCOPE"
+GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth login --scopes "$SCOPES"
 
 step "Checking the calendar scope was actually granted"
-if ! GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null | grep -q "$SCOPE"; then
-  cat <<EOF
+granted=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null || true)
+for wanted in ${SCOPES//,/ }; do
+  case "$granted" in
+    # Quoted, as auth status prints JSON strings: calendar.events must not
+    # match calendar.events.readonly.
+    *"\"$wanted\""*) echo "  ${wanted##*/} granted" ;;
+    *)
+      cat <<EOF
 
-The calendar scope was NOT granted. gws is holding a token that can only read
-your email address.
+The scope ${wanted##*/} was NOT granted. gws is holding a token without it.
 
-This almost always means the calendar checkbox on the consent screen was left
+This almost always means its checkbox on the consent screen was left
 unticked. Run this script again and tick it.
 
-  granted scopes: $(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null | grep -A6 '"scopes"' | grep googleapis || echo "identity only")
+  granted scopes: $(printf '%s\n' "$granted" | grep -A6 '"scopes"' | grep googleapis || echo "identity only")
 EOF
-  exit 1
-fi
-echo "  calendar.readonly granted"
+      exit 1
+      ;;
+  esac
+done
 
 step "Verifying calendar access"
 # Surface a real error rather than reading `items` out of an error body and
@@ -293,10 +333,11 @@ EOF
 fi
 config="$HOME/.config/omarchy/calendar-sync.json"
 mkdir -p "$(dirname "$config")"
-python3 - "$config" "$gws_path" "$PROFILE" <<'PYEOF'
+python3 - "$config" "$gws_path" "$PROFILE" "$WRITE" <<'PYEOF'
 import json, pathlib, sys
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+write = sys.argv[4] == "1"
 config = {}
 if path.exists():
     try:
@@ -305,9 +346,11 @@ if path.exists():
         config = {}
 config["gwsPath"] = gws_path
 config["profile"] = profile
+config["write"] = write
 path.write_text(json.dumps(config, indent=2) + "\n")
 print("  gwsPath set to", gws_path)
 print("  profile set to", profile)
+print("  write set to", write)
 PYEOF
 
 step "Installing the systemd timer"

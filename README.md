@@ -118,6 +118,37 @@ Two of those steps are traps, and the script says so at the time:
 When it finishes, events land in `~/.local/state/omarchy/calendar-events.json`
 every five minutes and the widget picks them up without a restart.
 
+## Create and edit events
+
+Off by default. Turn it on and the panel gets a **+** next to the day's
+agenda (or press `n`), and a pencil and a trash can when you hover one of
+your own events.
+
+It needs one more Google scope, `calendar.events`. That scope can see and
+edit events. It cannot change sharing or delete a calendar.
+
+New setup: answer yes when `sync/setup` asks, or run `sync/setup --write`.
+
+Already set up:
+
+1. In the Cloud Console, under **Data Access**, add `calendar.events` next to `calendar.readonly`.
+2. Log in again with both scopes:
+
+   ```bash
+   GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-omarchy-calendar gws auth login \
+     --scopes https://www.googleapis.com/auth/calendar.readonly,https://www.googleapis.com/auth/calendar.events
+   ```
+
+3. Set `"write": true` in `~/.config/omarchy/calendar-sync.json`.
+
+Only calendars you own or can edit get the pencil and the trash can. An edit
+changes the title, the date, the times and the location. It leaves the guests
+and the description as they are. On a recurring event, it changes that
+occurrence only. You can delete an event that covers several days, but not
+edit it.
+
+The EDS backend cannot write yet, so the panel shows none of this there.
+
 ## Sync without a Google Cloud project
 
 > **Community-maintained.** The author does not run Evolution Data Server, so
@@ -230,7 +261,7 @@ a shell script, a cron job of your own. No credentials, no network, no `gws`.
 }
 ```
 
-These four extra fields are optional. Omit them and everything still works:
+These extra fields are optional. Omit them and everything still works:
 
 | Field | Effect |
 |---|---|
@@ -238,6 +269,11 @@ These four extra fields are optional. Omit them and everything still works:
 | `eventUrl` | Clicking the row opens this. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
+| `recurring` | `true` on an occurrence of a series. The edit form says it changes that occurrence only |
+
+A top-level `writableCalendars` list (`id`, `name`, `color`) turns on the
+panel's edit buttons for those calendars. Only the bundled sync should write
+it: the panel sends its edits to the bundled write command, not to your writer.
 
 Rules a writer has to follow:
 
@@ -305,6 +341,7 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | `403 insufficient scopes` | The calendar scope was never granted. Check `gws auth status`; if it only lists `openid` and `email`, declare the scope under Data Access in the console, then run `sync/setup` again |
 | `401 invalid_grant` | The refresh token expired. Almost always an app left in Testing, which caps refresh tokens at seven days. Publish it, then log in again |
 | `gws is not installed or not on PATH` from the timer, but it works in your terminal | `gwsPath` is not absolute. `sync/setup` writes it for you |
+| "Write access not granted" in the event form | The token has no `calendar.events` scope. See [Create and edit events](#create-and-edit-events) |
 | `cannot parse gws version` from the timer, with `exec: node: not found` | `gwsPath` is absolute but points at an npm wrapper that needs node on your shell PATH. With mise, use its shim: `~/.local/share/mise/shims/gws`. `sync/setup` checks this and records the shim for you |
 | `Not in a workspace` during setup, or setup says gws is not the Google Workspace CLI | Another program named `gws` comes first on your PATH, for example the git workspace helper. Pass the right one: `GWS=/absolute/path/to/gws sync/setup` |
 | The panel says "No calendar synced yet" | The events file does not exist. The sync has never completed |
