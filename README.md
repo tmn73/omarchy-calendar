@@ -132,8 +132,8 @@ New setup: answer yes when `sync/setup` asks, or run `sync/setup --write`.
 Already set up:
 
 1. In the Cloud Console, under **Data Access**, add `calendar.events` next to `calendar.readonly`.
-2. Log in again with both scopes. The `rm` drops the cached token, which would
-   keep being served without the new scope:
+2. Log in again with both scopes. The `rm` drops the cached token, which gws
+   would keep serving without the new scope:
 
    ```bash
    rm -f ~/.config/gws-omarchy-calendar/token_cache.json
@@ -143,11 +143,16 @@ Already set up:
 
 3. Set `"write": true` in `~/.config/omarchy/calendar-sync.json`.
 
-Only calendars you own or can edit get the pencil and the trash can. An edit
-changes the title, the date, the times and the location. It leaves the guests
-and the description as they are. On a recurring event, it changes that
-occurrence only. You can delete an event that covers several days, but not
-edit it.
+Only calendars you own or can edit get the pencil and the trash can. The
+form follows Google's: start and end dates with a date picker, times in
+15-minute steps in your `eventTimeFormat`, all day, repeat, guests, Google
+Meet, location and description. Under "More options": notifications, busy
+or free, visibility, colour and guest permissions.
+
+With guests, the panel asks whether to send invitation emails. For a
+recurring event, it asks whether the change is for this event or all
+events. A repeat rule the menu cannot show, or a notification it has no
+entry for, stays as it is unless you pick another one.
 
 The EDS backend cannot write yet, so the panel shows none of this there.
 
