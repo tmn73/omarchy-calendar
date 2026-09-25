@@ -692,8 +692,91 @@ function parseWriteReply(text) {
   }
 }
 
+// ---- The event form's option lists. Labels are English, like the rest
+//      of the panel; the time labels come from the caller's format.
+
+var WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"]
+var ORDINALS = { 1: "first", 2: "second", 3: "third", 4: "fourth", "-1": "last" }
+
+function durationLabel(minutes) {
+  if (minutes < 60) return minutes + " min"
+  var hours = Math.floor(minutes / 60)
+  var rest = minutes % 60
+  return hours + " h" + (rest ? " " + (rest < 10 ? "0" : "") + rest : "")
+}
+
+// The start menu: every 15 minutes of the day. The end menu (fromMinutes is
+// the start): from 15 minutes after the start up to midnight, with the
+// duration, as Google shows it. "00:00" at the end means that midnight.
+function timeOptions(fromMinutes, formatTime, withDuration) {
+  var options = []
+  var first = fromMinutes < 0 ? 0 : fromMinutes + 15
+  var last = fromMinutes < 0 ? 23 * 60 + 45 : 24 * 60
+  for (var m = first; m <= last; m += 15) {
+    var value = clockText(m)
+    var label = formatTime(value)
+    if (withDuration && fromMinutes >= 0) label += " (" + durationLabel(m - fromMinutes) + ")"
+    options.push({ value: value, label: label })
+  }
+  return options
+}
+
+function partsOfKey(key) {
+  var parts = String(key).split("-")
+  return { year: Number(parts[0]), month: Number(parts[1]) - 1, day: Number(parts[2]) }
+}
+
+// Which weekday of its month a date is: 1 to 4, or -1 in the last 7 days.
+// Kept in step with event_form.nth_weekday on the Python side.
+function nthWeekday(key) {
+  var p = partsOfKey(key)
+  var daysInMonth = new Date(p.year, p.month + 1, 0).getDate()
+  var weekday = new Date(p.year, p.month, p.day).getDay()
+  return { n: p.day + 7 > daysInMonth ? -1 : Math.floor((p.day - 1) / 7) + 1, weekday: weekday }
+}
+
+function repeatOptions(key) {
+  var p = partsOfKey(key)
+  var nth = nthWeekday(key)
+  var weekdayName = WEEKDAY_NAMES[nth.weekday]
+  return [
+    { value: "none", label: "Does not repeat" },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly on " + weekdayName },
+    { value: "monthly", label: "Monthly on the " + ORDINALS[String(nth.n)] + " " + weekdayName },
+    { value: "yearly", label: "Annually on " + MONTH_NAMES[p.month] + " " + p.day },
+    { value: "weekdays", label: "Every weekday (Monday to Friday)" }
+  ]
+}
+
+function normalizeEmail(text) {
+  return String(text || "").trim().toLowerCase()
+}
+
+function isValidEmail(text) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(text || ""))
+}
+
+// Returns the same array when nothing was added, so the caller can tell.
+function addGuest(guests, text) {
+  var email = normalizeEmail(text)
+  if (!isValidEmail(email)) return guests
+  for (var i = 0; i < guests.length; i++)
+    if (normalizeEmail(guests[i].email) === email) return guests
+  return guests.concat([{ email: email, optional: false, responseStatus: "needsAction", organizer: false }])
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
+    durationLabel: durationLabel,
+    timeOptions: timeOptions,
+    nthWeekday: nthWeekday,
+    repeatOptions: repeatOptions,
+    normalizeEmail: normalizeEmail,
+    isValidEmail: isValidEmail,
+    addGuest: addGuest,
     isWritable: isWritable,
     isMultiDay: isMultiDay,
     defaultFormTimes: defaultFormTimes,

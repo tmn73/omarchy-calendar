@@ -534,3 +534,65 @@ test('parseWriteReply reads the command output, and survives garbage', () => {
   assert.equal(Model.parseWriteReply('Traceback ...').ok, false)
   assert.equal(Model.parseWriteReply('').ok, false)
 })
+
+const HHMM = (value) => value
+
+test('timeOptions for the start menu lists 96 slots of 15 minutes', () => {
+  const options = Model.timeOptions(-1, HHMM, false)
+  assert.equal(options.length, 96)
+  assert.deepEqual(options[0], { value: '00:00', label: '00:00' })
+  assert.deepEqual(options[95], { value: '23:45', label: '23:45' })
+})
+
+test('timeOptions for the end menu starts 15 minutes later and shows durations', () => {
+  const options = Model.timeOptions(10 * 60, HHMM, true)
+  assert.deepEqual(options[0], { value: '10:15', label: '10:15 (15 min)' })
+  assert.deepEqual(options[3], { value: '11:00', label: '11:00 (1 h)' })
+  assert.deepEqual(options[options.length - 1], { value: '00:00', label: '00:00 (14 h)' })
+})
+
+test('timeOptions passes each value through the format function', () => {
+  const twelve = (value) => value === '13:00' ? '1:00 PM' : value
+  assert.equal(Model.timeOptions(-1, twelve, false)[52].label, '1:00 PM')
+})
+
+test('durationLabel reads like Google', () => {
+  assert.equal(Model.durationLabel(15), '15 min')
+  assert.equal(Model.durationLabel(60), '1 h')
+  assert.equal(Model.durationLabel(90), '1 h 30')
+  assert.equal(Model.durationLabel(1440), '24 h')
+})
+
+test('nthWeekday counts from the start, or -1 in the last seven days', () => {
+  assert.deepEqual(Model.nthWeekday('2026-09-12'), { n: 2, weekday: 6 })
+  assert.deepEqual(Model.nthWeekday('2026-09-26'), { n: -1, weekday: 6 })
+  assert.deepEqual(Model.nthWeekday('2026-09-01'), { n: 1, weekday: 2 })
+})
+
+test('repeatOptions labels the presets from the start date', () => {
+  assert.deepEqual(Model.repeatOptions('2026-09-26').map(o => o.label), [
+    'Does not repeat',
+    'Daily',
+    'Weekly on Saturday',
+    'Monthly on the last Saturday',
+    'Annually on September 26',
+    'Every weekday (Monday to Friday)'
+  ])
+  assert.deepEqual(Model.repeatOptions('2026-09-26').map(o => o.value),
+    ['none', 'daily', 'weekly', 'monthly', 'yearly', 'weekdays'])
+  assert.equal(Model.repeatOptions('2026-09-12')[3].label, 'Monthly on the second Saturday')
+})
+
+test('addGuest trims, lowercases, and refuses a duplicate or a non-email', () => {
+  const one = Model.addGuest([], '  Ana@Example.com ')
+  assert.deepEqual(one, [{ email: 'ana@example.com', optional: false, responseStatus: 'needsAction', organizer: false }])
+  assert.equal(Model.addGuest(one, 'ANA@example.com'), one)
+  assert.equal(Model.addGuest(one, 'not an email'), one)
+  assert.equal(Model.addGuest(one, 'bo@example.com').length, 2)
+})
+
+test('isValidEmail accepts an address and refuses the rest', () => {
+  assert.equal(Model.isValidEmail('a@b.co'), true)
+  assert.equal(Model.isValidEmail('a@b'), false)
+  assert.equal(Model.isValidEmail('a b@c.co'), false)
+})
