@@ -1,7 +1,8 @@
 # Calendar for Omarchy
 
 **Your Google Calendar, in your Omarchy bar.** A month view with your real
-events on it, and a bar that tells you what is coming before it starts.
+events on it, a bar that tells you what is coming before it starts, and a
+form to create or edit events without opening Google.
 
 Not a Google user? It reads a plain JSON file, so khal, vdirsyncer, Nextcloud
 or an ICS feed work just as well. See [Use another source](#use-another-source).
@@ -21,17 +22,26 @@ time away for an event title would be a downgrade you pay for all day.
 
 - Month grid with ISO week numbers, coloured dots per calendar
 - The selected day's agenda under the grid, click any day to see it
-- The next event today, with a live countdown, in the panel header
+- Today's agenda reads as a timeline: a line at the current time, past events
+  faded, the event in progress highlighted, and a countdown on the next one
+- Create, edit and delete events from the panel (press `n`), with a form like
+  Google's: date picker, times in 15-minute steps, repeat, guests with
+  suggestions, Google Meet, notifications, colour. Off by default, see
+  [Create and edit events](#create-and-edit-events)
 - The bar label announces what is next, minutes before it starts
 - A **Join** button on meetings that have a video link, shown only from 15
   minutes before the start until 15 minutes after the end
 - Clicking any event opens it in your calendar
-- Per-calendar visibility, week start, and countdown lead time in a settings page
+- Per-calendar visibility, week start, countdown lead time and a 24 h or 12 h
+  time format
 - Google's working-location markers hidden by default, declined invitations
   struck through
 - Everything the built-in Omarchy clock does: label formats, right click to
   cycle them, the year and life progress bars if you want them back
-- Theme aware, because it is a fork of the built-in clock
+- Theme aware, light themes included, because it is a fork of the built-in clock
+- No Google Cloud project needed if you read your calendars through
+  Evolution Data Server (community-maintained), or any other source that
+  writes the events file
 
 ## Requirements
 
