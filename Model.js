@@ -680,16 +680,48 @@ function localPathFromUrl(fileUrl) {
   return decodeURIComponent(text)
 }
 
+// The event command's reply. `event` is the form a get returns, null for
+// a write.
 function parseWriteReply(text) {
   try {
     var reply = JSON.parse(String(text || "").trim())
-    if (reply && reply.ok === true) return { ok: true, error: "" }
-    if (reply && typeof reply.error === "string") return { ok: false, error: reply.error }
+    if (reply && reply.ok === true) return { ok: true, error: "", event: reply.event || null }
+    if (reply && typeof reply.error === "string") return { ok: false, error: reply.error, event: null }
   } catch (error) {}
   return {
     ok: false,
-    error: "The write command failed: " + (String(text || "").slice(0, 200) || "no output")
+    error: "The event command failed: " + (String(text || "").slice(0, 200) || "no output"),
+    event: null
   }
+}
+
+// The form for a new event. Same shape as the one the event command's get
+// returns (see sync/omarchy_calendar_sync/event_form.py), with Google's
+// defaults. An end at "00:00" keeps the same end date: the command reads it
+// as that midnight.
+function newEventForm(dateKeyText, times, calendarId) {
+  return {
+    calendarId: calendarId, eventId: "", recurringEventId: "",
+    title: "", allDay: false,
+    startDate: dateKeyText, startTime: times.start,
+    endDate: dateKeyText, endTime: times.end,
+    location: "", description: "",
+    guests: [], meet: false, meetUrl: "",
+    repeat: "none", rrule: [],
+    reminders: { useDefault: true, overrides: [] },
+    busy: true, visibility: "default", colorId: "",
+    guestsCanModify: false, guestsCanInviteOthers: true, guestsCanSeeOtherGuests: true
+  }
+}
+
+// The guests who would get an email: everyone but the calendar's owner.
+function otherGuests(form) {
+  var me = normalizeEmail(form.calendarId)
+  var out = []
+  var guests = form.guests || []
+  for (var i = 0; i < guests.length; i++)
+    if (normalizeEmail(guests[i].email) !== me) out.push(guests[i])
+  return out
 }
 
 // ---- The event form's option lists. Labels are English, like the rest
@@ -801,6 +833,8 @@ function remindersFor(choice) {
 if (typeof module !== "undefined") {
   module.exports = {
     EVENT_COLORS: EVENT_COLORS,
+    newEventForm: newEventForm,
+    otherGuests: otherGuests,
     reminderChoice: reminderChoice,
     remindersFor: remindersFor,
     durationLabel: durationLabel,

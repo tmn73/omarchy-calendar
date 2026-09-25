@@ -529,8 +529,9 @@ test('localPathFromUrl keeps the path absolute and decodes it', () => {
 })
 
 test('parseWriteReply reads the command output, and survives garbage', () => {
-  assert.deepEqual(Model.parseWriteReply('{"ok":true,"eventId":"x"}\n'), { ok: true, error: '' })
-  assert.deepEqual(Model.parseWriteReply('{"ok":false,"error":"Nope."}'), { ok: false, error: 'Nope.' })
+  assert.deepEqual(Model.parseWriteReply('{"ok":true,"eventId":"x"}\n'), { ok: true, error: '', event: null })
+  assert.deepEqual(Model.parseWriteReply('{"ok":false,"error":"Nope."}'), { ok: false, error: 'Nope.', event: null })
+  assert.deepEqual(Model.parseWriteReply('{"ok":true,"event":{"title":"T"}}').event, { title: 'T' })
   assert.equal(Model.parseWriteReply('Traceback ...').ok, false)
   assert.equal(Model.parseWriteReply('').ok, false)
 })
@@ -614,4 +615,30 @@ test('remindersFor turns a menu value back into reminders', () => {
 test('EVENT_COLORS holds the 11 colours from colors get', () => {
   assert.equal(Model.EVENT_COLORS.length, 11)
   assert.deepEqual(Model.EVENT_COLORS[4], { id: '5', color: '#fbd75b' })
+})
+
+test('newEventForm builds a complete empty form on the day', () => {
+  const form = Model.newEventForm('2026-09-26', { start: '10:30', end: '11:00' }, 'me@example.com')
+  assert.equal(form.calendarId, 'me@example.com')
+  assert.deepEqual([form.startDate, form.startTime, form.endDate, form.endTime],
+    ['2026-09-26', '10:30', '2026-09-26', '11:00'])
+  assert.equal(form.eventId, '')
+  assert.equal(form.repeat, 'none')
+  assert.deepEqual(form.guests, [])
+  assert.deepEqual(form.reminders, { useDefault: true, overrides: [] })
+  assert.equal(form.busy, true)
+  assert.equal(form.guestsCanInviteOthers, true)
+})
+
+test('newEventForm ending at midnight moves the end date to the next day', () => {
+  const form = Model.newEventForm('2026-09-26', { start: '23:30', end: '00:00' }, 'me@example.com')
+  assert.equal(form.endDate, '2026-09-26')
+  assert.equal(form.endTime, '00:00')
+})
+
+test('otherGuests leaves out the calendar owner', () => {
+  const form = { calendarId: 'me@example.com', guests: [
+    { email: 'me@example.com' }, { email: 'Ana@example.com' }] }
+  assert.deepEqual(Model.otherGuests(form).map(g => g.email), ['Ana@example.com'])
+  assert.deepEqual(Model.otherGuests({ calendarId: 'me@example.com', guests: [] }), [])
 })
