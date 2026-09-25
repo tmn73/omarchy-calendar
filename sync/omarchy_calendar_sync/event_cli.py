@@ -118,12 +118,13 @@ def _write(client, request, tz):
         return resource.get("id", ""), resource, bool(resource.get("recurrence"))
 
     # An update reads the event first: what it had decides whether a removed
-    # Meet or a removed repeat has to be sent as a removal.
+    # Meet, repeat or colour has to be sent as a removal.
     target = request["recurringEventId"] if all_events else request["eventId"]
     current = client.get(calendar_id, target)
     had_meet = event_form.resource_to_form(current, calendar_id, tz)["meet"]
     had_rule = bool(current.get("recurrence"))
-    body = event_form.form_to_body(form, tz, had_meet, had_rule)
+    had_color = bool(current.get("colorId"))
+    body = event_form.form_to_body(form, tz, had_meet, had_rule, had_color)
     if all_events:
         body = event_form.onto_series(body, current, tz)
     elif request["recurringEventId"]:

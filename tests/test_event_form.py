@@ -101,8 +101,8 @@ class TestRepeatPreset(unittest.TestCase):
 
 
 class TestFormToBody(unittest.TestCase):
-    def body(self, had_meet=False, had_rule=False, **fields):
-        return event_form.form_to_body(form(**fields), BOGOTA, had_meet, had_rule)
+    def body(self, had_meet=False, had_rule=False, had_color=False, **fields):
+        return event_form.form_to_body(form(**fields), BOGOTA, had_meet, had_rule, had_color)
 
     def test_a_timed_event_carries_the_offset(self):
         body = self.body()
@@ -146,8 +146,9 @@ class TestFormToBody(unittest.TestCase):
         self.assertEqual(request["conferenceSolutionKey"], {"type": "hangoutsMeet"})
         self.assertTrue(request["requestId"])
 
-    def test_meet_off_on_an_event_that_had_one_sends_null(self):
-        self.assertIsNone(self.body(had_meet=True, meet=False)["conferenceData"])
+    def test_meet_off_on_an_event_that_had_one_sends_an_empty_conference(self):
+        # gws refuses null in its schema check (verified with --dry-run).
+        self.assertEqual(self.body(had_meet=True, meet=False)["conferenceData"], {})
 
     def test_meet_untouched_sends_nothing(self):
         self.assertNotIn("conferenceData", self.body())
@@ -171,7 +172,13 @@ class TestFormToBody(unittest.TestCase):
         self.assertEqual(body["colorId"], "5")
         self.assertIs(body["guestsCanModify"], True)
         self.assertEqual(self.body()["transparency"], "opaque")
-        self.assertIsNone(self.body()["colorId"])
+
+    def test_no_colour_sends_no_colour_key(self):
+        # gws refuses a null colorId (verified with --dry-run).
+        self.assertNotIn("colorId", self.body())
+
+    def test_removing_a_colour_sends_an_empty_colour(self):
+        self.assertEqual(self.body(had_color=True)["colorId"], "")
 
     def test_reminder_overrides_go_out_as_they_are(self):
         reminders = {"useDefault": False, "overrides": [{"method": "popup", "minutes": 30}]}

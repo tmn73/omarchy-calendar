@@ -61,12 +61,12 @@ def repeat_preset(rrule, start):
     return "custom"
 
 
-def form_to_body(form, tz, had_meet=False, had_rule=False):
+def form_to_body(form, tz, had_meet=False, had_rule=False, had_color=False):
     """Google's event body for the form.
 
-    `had_meet` and `had_rule` say what the event had before the edit, so a
-    removed conference or a removed repeat is sent as a removal, and an
-    untouched one is not sent at all.
+    `had_meet`, `had_rule` and `had_color` say what the event had before
+    the edit, so a removed conference, repeat or colour is sent as a
+    removal, and an untouched one is not sent at all.
     """
     start_day = _day(form.get("startDate"), "start")
     end_day = _day(form.get("endDate") or form.get("startDate"), "end")
@@ -104,7 +104,9 @@ def form_to_body(form, tz, had_meet=False, had_rule=False):
             }
         }
     elif not form.get("meet") and had_meet:
-        body["conferenceData"] = None
+        # {}, not None: gws refuses null in its schema check (verified with
+        # --dry-run on gws 0.13.2).
+        body["conferenceData"] = {}
 
     preset = form.get("repeat") or "none"
     if preset == "custom":
@@ -128,8 +130,12 @@ def form_to_body(form, tz, had_meet=False, had_rule=False):
 
     body["transparency"] = "opaque" if form.get("busy", True) else "transparent"
     body["visibility"] = str(form.get("visibility") or "default")
-    # None, not "": an empty colorId is refused, null means the calendar's.
-    body["colorId"] = str(form.get("colorId")) if form.get("colorId") else None
+    # gws refuses a null colorId, so no colour sends no key, and removing a
+    # colour the event had sends "" (verified with --dry-run on gws 0.13.2).
+    if form.get("colorId"):
+        body["colorId"] = str(form["colorId"])
+    elif had_color:
+        body["colorId"] = ""
     for key, fallback in GUEST_PERMISSION_DEFAULTS.items():
         body[key] = bool(form.get(key, fallback))
     return body
