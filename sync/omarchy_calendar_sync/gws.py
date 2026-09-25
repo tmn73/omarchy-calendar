@@ -42,6 +42,20 @@ class GwsNotFound(GwsApiError):
     """The event or the calendar does not exist (Google error 404)."""
 
 
+def _send_updates(value):
+    # Only the two answers the panel asks for. "externalOnly" is valid for
+    # Google, but nothing in the panel offers it.
+    if value not in ("all", "none"):
+        raise ValueError(f"sendUpdates must be 'all' or 'none', got {value!r}")
+    return value
+
+
+def _write_params(send_updates):
+    # conferenceDataVersion=1 on every write: without it Google ignores a
+    # Meet request, and a removed Meet stays on the event.
+    return {"sendUpdates": _send_updates(send_updates), "conferenceDataVersion": 1}
+
+
 def _subprocess_runner(argv, env):
     completed = subprocess.run(argv, env=env, capture_output=True, text=True)
     return completed.returncode, completed.stdout, completed.stderr
@@ -136,26 +150,36 @@ class Gws:
             f"gws events list did not finish paginating within {MAX_PAGES} pages"
         )
 
-    def create(self, calendar_id, body):
+    def get(self, calendar_id, event_id):
+        return self._json([
+            "calendar", "events", "get",
+            "--params", json.dumps({"calendarId": calendar_id, "eventId": event_id}),
+        ])
+
+    def create(self, calendar_id, body, send_updates="none"):
+        params = {"calendarId": calendar_id, **_write_params(send_updates)}
         return self._json([
             "calendar", "events", "insert",
-            "--params", json.dumps({"calendarId": calendar_id}),
+            "--params", json.dumps(params),
             "--json", json.dumps(body),
         ])
 
-    def update(self, calendar_id, event_id, body):
-        # patch, not update: only the fields in `body` change, so the guests
-        # and the description survive an edit from the panel.
+    def update(self, calendar_id, event_id, body, send_updates="none"):
+        # patch, not update: only the fields in `body` change, so anything
+        # the form does not show survives an edit from the panel.
+        params = {"calendarId": calendar_id, "eventId": event_id, **_write_params(send_updates)}
         return self._json([
             "calendar", "events", "patch",
-            "--params", json.dumps({"calendarId": calendar_id, "eventId": event_id}),
+            "--params", json.dumps(params),
             "--json", json.dumps(body),
         ])
 
-    def delete(self, calendar_id, event_id):
+    def delete(self, calendar_id, event_id, send_updates="none"):
+        params = {"calendarId": calendar_id, "eventId": event_id,
+                  "sendUpdates": _send_updates(send_updates)}
         exit_code, stdout, stderr = self._run([
             "calendar", "events", "delete",
-            "--params", json.dumps({"calendarId": calendar_id, "eventId": event_id}),
+            "--params", json.dumps(params),
         ])
         # Google answers a delete with HTTP 204 and no body.
         if exit_code == 0 and not stdout.strip():

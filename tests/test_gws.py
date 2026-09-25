@@ -260,7 +260,10 @@ class TestWrites(unittest.TestCase):
         self.assertEqual(client.create("me@example.com", self.BODY), reply)
         argv = runner.calls[0][0]
         self.assertEqual(argv[1:4], ["calendar", "events", "insert"])
-        self.assertEqual(json.loads(argv[argv.index("--params") + 1]), {"calendarId": "me@example.com"})
+        self.assertEqual(
+            json.loads(argv[argv.index("--params") + 1]),
+            {"calendarId": "me@example.com", "sendUpdates": "none", "conferenceDataVersion": 1},
+        )
         self.assertEqual(json.loads(argv[argv.index("--json") + 1]), self.BODY)
 
     def test_update_patches_by_event_id(self):
@@ -271,7 +274,7 @@ class TestWrites(unittest.TestCase):
         self.assertEqual(argv[1:4], ["calendar", "events", "patch"])
         self.assertEqual(
             json.loads(argv[argv.index("--params") + 1]),
-            {"calendarId": "me@example.com", "eventId": "ev1"},
+            {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "none", "conferenceDataVersion": 1},
         )
 
     def test_delete_accepts_an_empty_reply(self):
@@ -324,3 +327,31 @@ class TestErrorsWithANonzeroExit(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"delete": (1, body, self.NOISE)}))
         with self.assertRaises(gws.GwsNotFound):
             client.delete("me@example.com", "gone")
+
+
+class TestGetAndParameters(unittest.TestCase):
+    def params(self, runner):
+        argv = runner.calls[0][0]
+        return json.loads(argv[argv.index("--params") + 1])
+
+    def test_get_reads_one_event(self):
+        runner = FakeRunner({"get": (0, json.dumps({"id": "ev1"}), "")})
+        self.assertEqual(gws.Gws("/tmp/profile", runner=runner).get("me@example.com", "ev1"), {"id": "ev1"})
+        argv = runner.calls[0][0]
+        self.assertEqual(argv[1:4], ["calendar", "events", "get"])
+        self.assertEqual(self.params(runner), {"calendarId": "me@example.com", "eventId": "ev1"})
+
+    def test_invitations_are_sent_only_when_asked(self):
+        runner = FakeRunner({"insert": (0, json.dumps({"id": "n"}), "")})
+        gws.Gws("/tmp/profile", runner=runner).create("me@example.com", {}, send_updates="all")
+        self.assertEqual(self.params(runner)["sendUpdates"], "all")
+
+    def test_delete_passes_send_updates(self):
+        runner = FakeRunner({"delete": (0, "", "")})
+        gws.Gws("/tmp/profile", runner=runner).delete("me@example.com", "ev1", send_updates="all")
+        self.assertEqual(self.params(runner), {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "all"})
+
+    def test_an_unknown_send_updates_value_is_refused(self):
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({}))
+        with self.assertRaises(ValueError):
+            client.create("me@example.com", {}, send_updates="externalOnly")
