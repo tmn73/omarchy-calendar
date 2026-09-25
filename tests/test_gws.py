@@ -305,3 +305,22 @@ class TestWrites(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
         writable = {c["id"]: c["writable"] for c in client.calendars()}
         self.assertEqual(writable, {"a": True, "b": True, "c": False, "d": False})
+
+
+class TestErrorsWithANonzeroExit(unittest.TestCase):
+    # Verified live on gws 0.13.2: an API error exits 1, prints the JSON
+    # error on stdout, and leaves only keyring noise on stderr.
+    NOISE = "Using keyring backend: keyring\n"
+
+    def test_an_api_error_is_read_from_stdout(self):
+        body = json.dumps({"error": {"code": 403, "message": "insufficient scopes"}})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"events": (1, body, self.NOISE)}))
+        with self.assertRaises(gws.GwsAuthError) as caught:
+            client.events("a", "MIN", "MAX")
+        self.assertIn("insufficient scopes", str(caught.exception))
+
+    def test_a_deleted_event_raises_not_found(self):
+        body = json.dumps({"error": {"code": 410, "message": "Resource has been deleted", "reason": "deleted"}})
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"delete": (1, body, self.NOISE)}))
+        with self.assertRaises(gws.GwsNotFound):
+            client.delete("me@example.com", "gone")

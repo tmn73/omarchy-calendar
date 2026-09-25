@@ -170,21 +170,20 @@ class Gws:
     def _parse(self, exit_code, stdout, stderr):
         """Parse one gws reply, or raise the error it carries.
 
-        stderr carries keyring noise on success, so it is never parsed as
-        data. On a nonzero exit code, stdout may not even be JSON, so stderr
-        is quoted in the raised error instead since that is the only place
-        useful diagnostic detail can come from.
+        stderr carries keyring noise on success and on failure, so it is
+        never parsed as data. An API error exits 1 with Google's JSON error
+        on stdout (verified on gws 0.13.2), so stdout is read first. Only
+        when stdout holds no error does a nonzero exit quote stderr, which
+        is then the only place detail can come from.
         """
-        if exit_code != 0:
-            excerpt = stderr.strip()[:200] or "no stderr output"
-            raise GwsApiError(f"gws exited with code {exit_code}: {excerpt}")
-
+        decode_error = None
         try:
             payload = json.loads(stdout)
         except json.JSONDecodeError as error:
-            raise GwsApiError(f"gws returned unparseable output: {error}") from error
+            payload = None
+            decode_error = error
 
-        if isinstance(payload, dict) and "error" in payload:
+        if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
             error = payload["error"]
             error_code = error.get("code")
             if error_code is None:
@@ -192,9 +191,17 @@ class Gws:
             message = error.get("message", "unknown error")
             if error_code in (401, 403):
                 raise GwsAuthError(f"{error_code}: {message}")
-            if error_code == 404:
+            # 410 is what Google answers for an event that was deleted.
+            if error_code in (404, 410):
                 raise GwsNotFound(f"{error_code}: {message}")
             raise GwsApiError(f"{error_code}: {message}")
+
+        if exit_code != 0:
+            excerpt = stderr.strip()[:200] or "no stderr output"
+            raise GwsApiError(f"gws exited with code {exit_code}: {excerpt}")
+
+        if decode_error is not None:
+            raise GwsApiError(f"gws returned unparseable output: {decode_error}") from decode_error
 
         return payload
 
