@@ -618,8 +618,88 @@ function syncState(doc, nowMs, intervalSeconds) {
   return (nowMs - syncedMs) > thresholdMs ? "stale" : "ok"
 }
 
+// ---- Writing. The sync decides what the panel may change: a calendar is
+//      writable only when it is in the file's writableCalendars list.
+
+function isWritable(event, writableCalendars) {
+  if (!event || !writableCalendars || !writableCalendars.length) return false
+  for (var i = 0; i < writableCalendars.length; i++)
+    if (writableCalendars[i] && writableCalendars[i].id === event.calendarId) return true
+  return false
+}
+
+// A multi-day event is one row per day it covers, all with the same id.
+function isMultiDay(event, events) {
+  if (!event || !events) return false
+  var count = 0
+  for (var i = 0; i < events.length; i++)
+    if (events[i].id === event.id && events[i].calendarId === event.calendarId) count++
+  return count > 1
+}
+
+function clockText(minutes) {
+  var h = Math.floor(minutes / 60) % 24
+  var m = minutes % 60
+  return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m
+}
+
+// Today: the next half hour. Another day: 09:00. Always 30 minutes, and
+// never past midnight, so the default always saves.
+function defaultFormTimes(dateKeyText, now) {
+  var start = 9 * 60
+  if (String(dateKeyText) === keyForDate(now)) {
+    var minutes = now.getHours() * 60 + now.getMinutes()
+    start = Math.min(Math.ceil((minutes + 1) / 30) * 30, 23 * 60 + 30)
+  }
+  return { start: clockText(start), end: clockText(start + 30) }
+}
+
+// The JSON the write command reads. See sync/omarchy_calendar_sync/writes.py.
+function writeRequest(action, fields, event) {
+  if (action === "delete")
+    return { action: "delete", calendarId: event.calendarId, eventId: event.id }
+  var request = {
+    action: action,
+    calendarId: fields.calendarId,
+    title: fields.title,
+    dateKey: fields.dateKey,
+    allDay: !!fields.allDay,
+    start: fields.start,
+    end: fields.end,
+    location: fields.location
+  }
+  if (action === "update") request.eventId = event.id
+  return request
+}
+
+// For running a file next to this one. commandPathFromUrl shortens to ~
+// for display; a process needs the real absolute path.
+function localPathFromUrl(fileUrl) {
+  var text = String(fileUrl || "")
+  if (text.indexOf("file://") === 0) text = text.substring(7)
+  return decodeURIComponent(text)
+}
+
+function parseWriteReply(text) {
+  try {
+    var reply = JSON.parse(String(text || "").trim())
+    if (reply && reply.ok === true) return { ok: true, error: "" }
+    if (reply && typeof reply.error === "string") return { ok: false, error: reply.error }
+  } catch (error) {}
+  return {
+    ok: false,
+    error: "The write command failed: " + (String(text || "").slice(0, 200) || "no output")
+  }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
+    isWritable: isWritable,
+    isMultiDay: isMultiDay,
+    defaultFormTimes: defaultFormTimes,
+    writeRequest: writeRequest,
+    localPathFromUrl: localPathFromUrl,
+    parseWriteReply: parseWriteReply,
     dateKey: dateKey,
     keyForDate: keyForDate,
     normalizedWeekStart: normalizedWeekStart,

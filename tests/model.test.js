@@ -473,3 +473,64 @@ test('formatRemaining reads as time left, distinct from a countdown', () => {
   assert.equal(Model.formatRemaining(30 * 1000), 'ending')
   assert.equal(Model.formatRemaining(-1), null)
 })
+
+const ME_CAL = { id: 'me@example.com', name: 'Me', color: '#7bd148' }
+
+test('isWritable is true only for rows on a writable calendar', () => {
+  assert.equal(Model.isWritable({ calendarId: 'me@example.com' }, [ME_CAL]), true)
+  assert.equal(Model.isWritable({ calendarId: 'team@example.com' }, [ME_CAL]), false)
+  assert.equal(Model.isWritable({ calendarId: 'me@example.com' }, undefined), false)
+})
+
+test('isMultiDay counts the rows an event has in the file', () => {
+  const rows = [
+    { id: 'm', calendarId: 'c', dateKey: '2026-09-26' },
+    { id: 'm', calendarId: 'c', dateKey: '2026-09-27' },
+    { id: 's', calendarId: 'c', dateKey: '2026-09-26' }
+  ]
+  assert.equal(Model.isMultiDay(rows[0], rows), true)
+  assert.equal(Model.isMultiDay(rows[2], rows), false)
+})
+
+test('defaultFormTimes starts today at the next half hour, 30 minutes long', () => {
+  const now = new Date(2026, 8, 26, 10, 12)
+  assert.deepEqual(Model.defaultFormTimes('2026-09-26', now), { start: '10:30', end: '11:00' })
+})
+
+test('defaultFormTimes on the half hour moves to the next one', () => {
+  const now = new Date(2026, 8, 26, 10, 30)
+  assert.deepEqual(Model.defaultFormTimes('2026-09-26', now), { start: '11:00', end: '11:30' })
+})
+
+test('defaultFormTimes starts another day at 09:00', () => {
+  const now = new Date(2026, 8, 26, 10, 12)
+  assert.deepEqual(Model.defaultFormTimes('2026-09-28', now), { start: '09:00', end: '09:30' })
+})
+
+test('defaultFormTimes late in the day ends at midnight', () => {
+  const now = new Date(2026, 8, 26, 23, 40)
+  assert.deepEqual(Model.defaultFormTimes('2026-09-26', now), { start: '23:30', end: '00:00' })
+})
+
+test('writeRequest builds the three actions', () => {
+  const fields = { calendarId: 'me@example.com', title: 'Lunch', dateKey: '2026-09-26',
+    allDay: false, start: '12:00', end: '12:30', location: '' }
+  const row = { id: 'ev1', calendarId: 'me@example.com' }
+  assert.equal(Model.writeRequest('create', fields, null).eventId, undefined)
+  assert.equal(Model.writeRequest('create', fields, null).action, 'create')
+  assert.equal(Model.writeRequest('update', fields, row).eventId, 'ev1')
+  assert.deepEqual(Model.writeRequest('delete', null, row),
+    { action: 'delete', calendarId: 'me@example.com', eventId: 'ev1' })
+})
+
+test('localPathFromUrl keeps the path absolute and decodes it', () => {
+  assert.equal(Model.localPathFromUrl('file:///home/u/my%20plugins/sync/omarchy-calendar-write'),
+    '/home/u/my plugins/sync/omarchy-calendar-write')
+})
+
+test('parseWriteReply reads the command output, and survives garbage', () => {
+  assert.deepEqual(Model.parseWriteReply('{"ok":true,"eventId":"x"}\n'), { ok: true, error: '' })
+  assert.deepEqual(Model.parseWriteReply('{"ok":false,"error":"Nope."}'), { ok: false, error: 'Nope.' })
+  assert.equal(Model.parseWriteReply('Traceback ...').ok, false)
+  assert.equal(Model.parseWriteReply('').ok, false)
+})
