@@ -477,12 +477,44 @@ Panel {
           //      it is also the way home — clicking the date you are
           //      looking for beats hunting for a reset button.
           Item {
+            id: hero
             width: parent.width
             height: heroRow.height
+
+            // Decorative, and deliberately outside the Style.font.* scale.
+            // The icon is sized to read at the cap height of the date.
+            readonly property int iconPixelSize: 48
+            readonly property int datePixelSize: 52
+
+            // The row is centred, so it has to clear the settings button on
+            // both sides. A long date in a wide font ("September 12" in some
+            // monospace fonts) ran under the button, so shrink both glyphs
+            // together until the row fits. The spacing stays fixed.
+            readonly property real availableWidth: width - 2 * (settingsButton.width + Style.space(8))
+            readonly property real naturalGlyphWidth: heroIconMetrics.advanceWidth + heroDateMetrics.advanceWidth
+            readonly property real fit: naturalGlyphWidth > 0
+              ? Math.max(0.4, Math.min(1, (availableWidth - heroRow.spacing) / naturalGlyphWidth))
+              : 1
+
+            TextMetrics {
+              id: heroIconMetrics
+              text: heroIcon.text
+              font.family: root.contentFontFamily
+              font.pixelSize: hero.iconPixelSize
+            }
+
+            TextMetrics {
+              id: heroDateMetrics
+              text: heroDate.text
+              font.family: root.contentFontFamily
+              font.pixelSize: hero.datePixelSize
+              font.bold: true
+            }
 
             // Sits in the hero's right margin rather than in the row itself,
             // so turning it on and off never shifts the date off centre.
             PanelActionButton {
+              id: settingsButton
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               iconText: root.settingsOpen ? "󰅖" : "󰒓"
@@ -498,6 +530,7 @@ Panel {
               spacing: Style.space(22)
 
               Text {
+                id: heroIcon
                 // Baseline-aligned, not center-aligned: "July 26" carries a
                 // descender, so centering the two boxes leaves the icon
                 // sitting visibly low against the digits.
@@ -507,10 +540,7 @@ Panel {
                   ? Style.hoverStateColor(root.contentForeground, Color.accent)
                   : root.contentForeground
                 font.family: root.contentFontFamily
-                // Decorative, and deliberately outside the Style.font.*
-                // scale. Sized so the glyph reads at the cap height of the
-                // date beside it rather than towering over it.
-                font.pixelSize: 48
+                font.pixelSize: Math.floor(hero.iconPixelSize * hero.fit)
               }
 
               Text {
@@ -521,7 +551,7 @@ Panel {
                   ? Style.hoverStateColor(root.contentForeground, Color.accent)
                   : root.contentForeground
                 font.family: root.contentFontFamily
-                font.pixelSize: 52
+                font.pixelSize: Math.floor(hero.datePixelSize * hero.fit)
                 font.bold: true
               }
             }
