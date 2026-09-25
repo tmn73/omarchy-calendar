@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Executable wrapper so the write command runs without being pip installed."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from omarchy_calendar_sync.write_cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())
