@@ -41,8 +41,8 @@ Item {
   property string setupCommand: ""
   property bool setupCommandCopied: false
 
-  property string quickPreviewTitle: ""
-  property string quickPreviewWhen: ""
+  property var quickPreview: ({ rows: [], hint: "", opensForm: false })
+  property string quickCalendarName: ""
   property var quickUnderstood: []
   property alias quickText: quickAdd.text
 
@@ -99,8 +99,8 @@ Item {
       foreground: root.foreground
       fontFamily: root.fontFamily
       language: root.language
-      previewTitle: root.quickPreviewTitle
-      previewWhen: root.quickPreviewWhen
+      preview: root.quickPreview
+      calendarName: root.quickCalendarName
       understood: root.quickUnderstood
       onSubmitted: function(moreOptions) { root.quickSubmitted(moreOptions) }
       onEscaped: root.quickEscaped()

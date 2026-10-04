@@ -634,17 +634,23 @@ function parseQuickAdd(input, now, lang) {
 }
 
 // The words quick add read as something else than the title, in the order
-// they were typed: [{ text, kind }], kind one of "date", "time",
-// "duration", "allDay", "meet", "repeat" and "guest". The panel shows
-// them, so the user can see what was understood. A meeting word stays in
+// they were typed: [{ text, kind, start, end }], kind one of "date",
+// "time", "duration", "allDay", "meet", "repeat" and "guest", and start
+// and end where the words sit in `input`. The panel marks them in the
+// field, so the user can see what was understood. A meeting word stays in
 // the title too.
 function quickAddUnderstood(input, now, lang) {
   return scanQuickAdd(input, now, lang).found
 }
 
+// { parsed, found, assumed }: parseQuickAdd's result, quickAddUnderstood's,
+// and { start, length }, true for what no typed word set.
 function scanQuickAdd(input, now, lang) {
-  var raw = Model.text(input).trim()
-  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return { parsed: null, found: [] }
+  var typed = Model.text(input)
+  var raw = typed.trim()
+  var leading = typed.length - typed.replace(/^\s+/, "").length
+  var nothingAssumed = { start: false, length: false }
+  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return { parsed: null, found: [], assumed: nothingAssumed }
 
   var nowDate = typeof now === "number" ? new Date(now) : now
   var today = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate())
@@ -680,13 +686,17 @@ function scanQuickAdd(input, now, lang) {
   var length = readDuration(scanner, times !== null || dayPart !== null || !!(relative && relative.at))
   note("duration")
   found.sort(function(a, b) { return a.at - b.at })
-  found = found.map(function(f) { return { text: f.text, kind: f.kind } })
+  // `at` counts in " " + raw.
+  found = found.map(function(f) {
+    var start = f.at - 1 + leading
+    return { text: f.text, kind: f.kind, start: start, end: start + f.text.length }
+  })
 
   // Punctuation stranded by a blanked phrase ("Trip [7 p.m]." ) goes too.
   var title = scanner.original.replace(/(^|\s)[.,;:!?]+(?=\s|$)/g, "$1").replace(/\s+/g, " ")
     .replace(/\s+([,;:.!?])/g, "$1")
     .replace(/^[\s,;:·\-\u2013\u2014]+|[\s,;:·\-\u2013\u2014]+$/g, "")
-  if (title === "") return { parsed: null, found: found }
+  if (title === "") return { parsed: null, found: found, assumed: nothingAssumed }
 
   var day = today
   if (dates) day = dates.start
@@ -720,11 +730,14 @@ function scanQuickAdd(input, now, lang) {
                  durationMinutes: 0, meet: meet, repeat: repeat ? repeat.preset : "none", guests: guests }
   var lengthDays = length && length.days ? length.days : 0
   var deadline = Model.DEADLINE_PREFIX.test(title)
+  var assumed = { start: times === null && !dayGiven, length: false }
   if (forcedAllDay || (times === null && (lengthDays > 0 || ((dayGiven || deadline) && !length)))) {
     result.allDay = true
     result.endDateKey = lastDay ? Model.keyForDate(lastDay) : lengthDays > 1 ? Model.addDays(key, lengthDays - 1) : key
-    return { found: found, parsed: result }
+    assumed.length = !forcedAllDay && !lengthDays && !lastDay
+    return { found: found, parsed: result, assumed: assumed }
   }
+  assumed.length = !length && (times === null || times.end === null)
 
   // No time: the next half hour today, 09:00 on another day.
   if (times === null) {
@@ -758,7 +771,76 @@ function scanQuickAdd(input, now, lang) {
   result.startTime = Model.clockText(times.start)
   result.endTime = Model.clockText(endMinutes % MINUTES_PER_DAY)
   result.durationMinutes = duration
-  return { found: found, parsed: result }
+  return { found: found, parsed: result, assumed: assumed }
+}
+
+// What the panel shows under the field: { rows, hint, opensForm }. A row
+// is { key, value, sources, assumed }: key one of "title", "starts",
+// "lasts", "repeats", "guests" and "video"; sources the typed words that
+// set it; assumed true when none did and a default stands. So "in 2
+// minutes" reads as a start, and the hour after it as a default length.
+// `hint` is a Strings key, or "". `opensForm`: Enter opens the form, as it
+// does with a guest. `format` writes the parts in the panel's locale:
+// { day(dateKey), time(minutes), span(minutes), days(count), ends(text),
+// repeat(preset, dateKey), allDay() }.
+function quickAddPreview(input, now, lang, format) {
+  var scan = scanQuickAdd(input, now, lang)
+  var parsed = scan.parsed
+  if (!parsed) return { rows: [], hint: "", opensForm: false }
+  function words(kinds) {
+    return scan.found.filter(function(f) { return kinds.indexOf(f.kind) !== -1 })
+      .map(function(f) { return f.text })
+  }
+  function row(key, value, sources, assumed) {
+    return { key: key, value: value, sources: sources, assumed: assumed }
+  }
+
+  var rows = [row("title", parsed.title, [], false)]
+  if (parsed.allDay) {
+    var first = Model.partsOfKey(parsed.dateKey)
+    var last = Model.partsOfKey(parsed.endDateKey)
+    var days = daysBetween(new Date(first.year, first.month, first.day), new Date(last.year, last.month, last.day)) + 1
+    rows.push(row("starts", format.day(parsed.dateKey), words(["date"]), scan.assumed.start))
+    rows.push(row("lasts", days > 1 ? format.days(days) + " · " + format.ends(format.day(parsed.endDateKey)) : format.allDay(),
+      words(["duration", "allDay"]), scan.assumed.length))
+  } else {
+    var start = Number(parsed.startTime.substr(0, 2)) * 60 + Number(parsed.startTime.substr(3, 2))
+    var end = format.time((start + parsed.durationMinutes) % MINUTES_PER_DAY)
+    if (parsed.endDateKey !== parsed.dateKey) end = format.day(parsed.endDateKey) + " " + end
+    rows.push(row("starts", format.day(parsed.dateKey) + ", " + format.time(start), words(["date", "time"]),
+      scan.assumed.start))
+    rows.push(row("lasts", format.span(parsed.durationMinutes) + " · " + format.ends(end), words(["duration"]),
+      scan.assumed.length))
+  }
+  if (parsed.repeat !== "none") rows.push(row("repeats", format.repeat(parsed.repeat, parsed.dateKey), words(["repeat"]), false))
+  if (parsed.guests.length > 0) rows.push(row("guests", parsed.guests.join(", "), words(["guest"]), false))
+  if (parsed.meet) rows.push(row("video", "Google Meet", words(["meet"]), false))
+
+  var hint = ""
+  if (parsed.guests.length > 0) hint = "quick.hintGuest"
+  else if (scan.found.length === 0) hint = "quick.nothingUnderstood"
+  else if (!parsed.allDay && scan.assumed.length) hint = "quick.hintLength"
+  return { rows: rows, hint: hint, opensForm: parsed.guests.length > 0 }
+}
+
+// The typed text as StyledText for the field to draw on itself, the
+// understood words (`found`, from quickAddUnderstood) underlined in
+// `color`. Every space stays, where StyledText would merge a run of them,
+// so the drawn text lines up with the field's.
+function markedText(text, found, color) {
+  function plain(part) {
+    return part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/ /g, "&nbsp;")
+  }
+  var spans = found.slice().sort(function(a, b) { return a.start - b.start })
+  var out = ""
+  var at = 0
+  for (var i = 0; i < spans.length; i++) {
+    if (spans[i].start < at || spans[i].end > text.length) continue
+    out += plain(text.substring(at, spans[i].start))
+      + "<font color=\"" + color + "\"><u>" + plain(text.substring(spans[i].start, spans[i].end)) + "</u></font>"
+    at = spans[i].end
+  }
+  return out + plain(text.substring(at))
 }
 
 // The event form a quick add opens as, for "More options" or a direct save.

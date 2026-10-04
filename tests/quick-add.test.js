@@ -611,3 +611,68 @@ test('quickAddUnderstood names guests and repeats, and keeps a range together', 
   assert.deepEqual(understood('Trip friday to sunday', 'en'), ['date:friday to sunday'])
   assert.deepEqual(understood('test in two minutes', 'en'), ['time:in two minutes'])
 })
+
+// The panel's formatters, made plain so the rows read in a test.
+const fmt = {
+  day: (key) => key === '2026-10-06' ? 'Today' : key,
+  time: (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,
+  span: (m) => `${m} min`,
+  days: (n) => `${n} days`,
+  ends: (t) => `ends ${t}`,
+  repeat: (preset) => preset,
+  allDay: () => 'All day'
+}
+const preview = (text, lang = 'en') => QuickAdd.quickAddPreview(text, NOW, lang, fmt)
+const rows = (text, lang) =>
+  preview(text, lang).rows.map((r) => `${r.key}=${r.value}|${r.assumed ? 'default' : r.sources.join('+')}`)
+
+test('quickAddPreview reads a relative start as the start, and says the length is a default', () => {
+  assert.deepEqual(rows('test in 2 minutes'),
+    ['title=test|', 'starts=Today, 12:54|in 2 minutes', 'lasts=60 min · ends 13:54|default'])
+  assert.equal(preview('test in 2 minutes').hint, 'quick.hintLength')
+})
+
+test('quickAddPreview gives each field the words that set it', () => {
+  const text = 'Sync with ana@x.com every monday 6pm for 45m call'
+  assert.deepEqual(rows(text), ['title=Sync call|', 'starts=2026-10-12, 18:00|6pm',
+    'lasts=45 min · ends 18:45|for 45m', 'repeats=weekly|every monday', 'guests=ana@x.com|with ana@x.com',
+    'video=Google Meet|call'])
+  assert.deepEqual([preview(text).hint, preview(text).opensForm], ['quick.hintGuest', true])
+})
+
+test('quickAddPreview: all day, for one day or several', () => {
+  assert.deepEqual(rows('x tomorrow'), ['title=x|', 'starts=2026-10-07|tomorrow', 'lasts=All day|default'])
+  assert.deepEqual(rows('Trip friday to sunday'),
+    ['title=Trip|', 'starts=2026-10-09|friday to sunday', 'lasts=3 days · ends 2026-10-11|'])
+  assert.equal(preview('x tomorrow').hint, '')
+})
+
+test('quickAddPreview: with nothing understood, the next half hour, both rows defaults', () => {
+  assert.deepEqual(rows('Pay rent'),
+    ['title=Pay rent|', 'starts=Today, 13:00|default', 'lasts=30 min · ends 13:30|default'])
+  assert.equal(preview('Pay rent').hint, 'quick.nothingUnderstood')
+})
+
+test('quickAddPreview: a time range sets the length', () => {
+  assert.deepEqual(rows('x 2-3pm'), ['title=x|', 'starts=Today, 14:00|2-3pm', 'lasts=60 min · ends 15:00|'])
+  assert.equal(preview('x 2-3pm').hint, '')
+})
+
+test('quickAddPreview is empty without a title', () => {
+  assert.deepEqual(preview('tomorrow 3pm'), { rows: [], hint: '', opensForm: false })
+})
+
+test('quickAddUnderstood says where each phrase sits in the typed text', () => {
+  for (const text of ['test in 2 minutes', '   Sync with ana@x.com tomorrow 3pm']) {
+    const found = QuickAdd.quickAddUnderstood(text, NOW, 'en')
+    assert.deepEqual(found.map((f) => text.slice(f.start, f.end)), found.map((f) => f.text), text)
+  }
+})
+
+test('markedText underlines the understood words in the accent and keeps every space', () => {
+  const text = 'a  <b> & in 2 minutes'
+  const found = QuickAdd.quickAddUnderstood(text, NOW, 'en')
+  assert.equal(QuickAdd.markedText(text, found, '#e0a66a'),
+    'a&nbsp;&nbsp;&lt;b&gt;&nbsp;&amp;&nbsp;<font color="#e0a66a"><u>in&nbsp;2&nbsp;minutes</u></font>')
+  assert.equal(QuickAdd.markedText('plain', [], '#e0a66a'), 'plain')
+})

@@ -227,32 +227,34 @@ Panel {
   // ---- Quick add.
   readonly property var quickParsed: QuickAddParser.parseQuickAdd(agenda.quickText, nowTick, language)
   readonly property var quickUnderstood: QuickAddParser.quickAddUnderstood(agenda.quickText, nowTick, language)
-  readonly property string quickPreviewWhen: {
-    var parsed = root.quickParsed
-    if (!parsed) return ""
-    var severalDays = parsed.endDateKey !== parsed.dateKey
-    var parts = [root.formatDate(Model.dateFromKey(parsed.dateKey, root.today), "short")]
-    if (parsed.allDay) {
-      if (severalDays) parts[0] += "–" + root.formatDate(Model.dateFromKey(parsed.endDateKey, root.today), "short")
-      parts.push(root.tr("quick.allDay"))
-    } else {
-      var start = Model.dateFromKey(parsed.dateKey, root.today)
-      start.setHours(Number(parsed.startTime.substr(0, 2)), Number(parsed.startTime.substr(3, 2)))
-      var end = new Date(start.getTime() + parsed.durationMinutes * 60000)
-      var endText = root.formatTime(end.getTime())
-      if (severalDays) endText = root.formatDate(end, "short") + " " + endText
-      parts.push(root.formatTime(start.getTime()) + "–" + endText
-        + " (" + Model.spanText(parsed.durationMinutes, root.language) + ")")
+  // The rows under the field, written in the panel's locale. A read-only
+  // setup hands every event to Google, so nothing opens the form there.
+  readonly property var quickPreview: {
+    var preview = QuickAddParser.quickAddPreview(agenda.quickText, nowTick, language, {
+      day: function(key) {
+        return key === root.todayKey ? root.tr("day.today") : root.formatDate(Model.dateFromKey(key, root.today), "short")
+      },
+      time: function(minutes) {
+        var at = new Date(root.today)
+        at.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+        return root.formatTime(at.getTime())
+      },
+      span: function(minutes) { return Model.spanText(minutes, root.language) },
+      days: function(count) { return Strings.trn(root.language, "quick.days", count) },
+      ends: function(text) { return root.tr("quick.ends", [text]) },
+      repeat: function(preset, key) {
+        var options = Model.repeatOptions(key, root.language, false)
+        for (var i = 0; i < options.length; i++)
+          if (options[i].value === preset) return options[i].label
+        return preset
+      },
+      allDay: function() { return root.tr("quick.allDay") }
+    })
+    if (!root.canWrite) {
+      preview.opensForm = false
+      if (preview.hint === "quick.hintGuest") preview.hint = ""
     }
-    if (parsed.repeat !== "none") {
-      var options = Model.repeatOptions(parsed.dateKey, root.language, false)
-      for (var i = 0; i < options.length; i++)
-        if (options[i].value === parsed.repeat) parts.push(options[i].label)
-    }
-    if (root.canWrite) parts.push(root.writableCalendars[0].name)
-    if (parsed.meet) parts.push("Google Meet")
-    if (parsed.guests.length > 0) parts.push(parsed.guests.join(", "))
-    return parts.join(" · ")
+    return preview
   }
 
   // ---- Feedback.
@@ -1132,8 +1134,8 @@ Panel {
               syncState: root.syncState
               setupCommand: root.setupCommand
               setupCommandCopied: root.setupCommandCopied
-              quickPreviewTitle: root.quickParsed ? root.quickParsed.title : ""
-              quickPreviewWhen: root.quickPreviewWhen
+              quickPreview: root.quickPreview
+              quickCalendarName: root.canWrite ? root.writableCalendars[0].name : ""
               quickUnderstood: root.quickUnderstood
               toastText: root.toastText
               toastError: root.toastError

@@ -2,25 +2,29 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
+import "QuickAddParser.js" as QuickAddParser
 import "Strings.js" as Strings
 
 // "call with Ana tomorrow 2pm for 45m", read as you type. The panel parses
-// the text and hands back a preview: the title, when it lands, and the words
-// it understood, so a word read as a date or a meeting never goes unseen.
-// The "?" lists what it reads. Enter creates, Ctrl+Enter (or "More
-// options") opens the full form with the parsed fields filled in.
+// the text and hands back a preview: one row per field with the words that
+// set it, and those words marked in the field, so a word read as a date or
+// a meeting never goes unseen. The "?" lists what it reads. Enter creates,
+// Ctrl+Enter (or "More options") opens the full form with the parsed
+// fields filled in.
 Rectangle {
   id: root
 
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
-  property string previewTitle: ""
-  property string previewWhen: ""
-  // [{ text, kind }] from QuickAddParser.quickAddUnderstood
+  // { rows, hint, opensForm } from QuickAddParser.quickAddPreview
+  property var preview: ({ rows: [], hint: "", opensForm: false })
+  property string calendarName: ""
+  // [{ text, kind, start, end }] from QuickAddParser.quickAddUnderstood
   property var understood: []
   property alias text: field.text
-  readonly property bool hasPreview: previewTitle !== ""
+  readonly property bool hasPreview: preview.rows.length > 0
+  readonly property bool marksWords: understood.length > 0
 
   signal submitted(bool moreOptions)
   signal escaped()
@@ -35,6 +39,13 @@ Rectangle {
 
   function clear() {
     field.text = ""
+  }
+
+  // "#rrggbb", the form StyledText takes.
+  function hexOf(color) {
+    return "#" + [color.r, color.g, color.b].map(function(channel) {
+      return ("0" + Math.round(channel * 255).toString(16)).slice(-2)
+    }).join("")
   }
 
   implicitHeight: content.implicitHeight + Style.space(4) * 2
@@ -80,6 +91,9 @@ Rectangle {
         foreground: root.foreground
         font.family: root.fontFamily
         background: null
+        // With words to mark, the field's own text turns transparent and
+        // the marked copy below draws it, so the two never show side by side.
+        color: root.marksWords ? "transparent" : root.foreground
         Accessible.name: root.tr("quick.label")
 
         Keys.onPressed: function(event) {
@@ -91,6 +105,36 @@ Rectangle {
             if (field.text !== "") field.text = ""
             else root.escaped()
             event.accepted = true
+          }
+        }
+
+        // The text area, clipped like the field's own, so a long line
+        // scrolls under the padding the same way.
+        Item {
+          visible: root.marksWords
+          x: field.leftPadding
+          y: field.topPadding
+          width: field.width - field.leftPadding - field.rightPadding
+          height: field.height - field.topPadding - field.bottomPadding
+          clip: true
+
+          Text {
+            // Where the field draws its first character, inside the
+            // padding: it moves as the field scrolls, which the cursor
+            // rectangle reports.
+            readonly property rect origin: {
+              field.text
+              field.cursorRectangle
+              field.width
+              return field.positionToRectangle(0)
+            }
+            x: origin.x
+            y: origin.y
+            textFormat: Text.StyledText
+            text: QuickAddParser.markedText(field.text, root.understood, root.hexOf(Color.accent))
+            color: root.foreground
+            font: field.font
+            renderType: field.renderType
           }
         }
       }
@@ -135,7 +179,7 @@ Rectangle {
     Item {
       visible: root.hasPreview
       width: parent.width
-      height: visible ? Math.max(previewText.implicitHeight, createButton.height) + Style.space(8) * 2 : 0
+      height: visible ? previewColumn.implicitHeight + Style.space(8) * 2 : 0
 
       Rectangle {
         width: parent.width
@@ -144,105 +188,60 @@ Rectangle {
       }
 
       Column {
-        id: previewText
+        id: previewColumn
         anchors.left: parent.left
-        anchors.right: moreButton.left
-        anchors.rightMargin: Style.space(8)
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(2)
+        spacing: Style.space(8)
 
-        Text {
+        QuickAddSummary {
           width: parent.width
-          textFormat: Text.PlainText
-          text: root.previewTitle
-          elide: Text.ElideRight
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          font.bold: true
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          language: root.language
+          rows: root.preview.rows
+          hint: root.preview.hint
         }
 
-        Text {
+        Item {
           width: parent.width
-          textFormat: Text.PlainText
-          text: root.previewWhen
-          wrapMode: Text.Wrap
-          color: Util.alpha(root.foreground, 0.6)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-
-        // The words read as a date, a time, a length or a meeting, each in
-        // the accent colour. A meeting word also says what it adds.
-        Flow {
-          id: understoodRow
-          // Every item of the row is one chip tall, so the label and the
-          // chips share a centre line, also across a wrap.
-          readonly property real chipHeight: chipMetrics.height + Style.space(1) * 2
-
-          width: parent.width
-          topPadding: Style.space(2)
-          spacing: Style.space(4)
-
-          FontMetrics {
-            id: chipMetrics
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
+          height: createButton.height
 
           Text {
-            height: understoodRow.chipHeight
-            verticalAlignment: Text.AlignVCenter
-            text: root.tr(root.understood.length > 0 ? "quick.understood" : "quick.nothingUnderstood")
+            anchors.left: parent.left
+            anchors.right: moreButton.left
+            anchors.rightMargin: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: root.calendarName
+            elide: Text.ElideRight
             color: Util.alpha(root.foreground, 0.6)
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
           }
 
-          Repeater {
-            model: root.understood
+          SecondaryButton {
+            id: moreButton
+            anchors.right: createButton.left
+            anchors.rightMargin: Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.tr("quick.moreOptions")
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.submitted(true)
+          }
 
-            Rectangle {
-              required property var modelData
-              width: chipLabel.implicitWidth + Style.space(5) * 2
-              height: understoodRow.chipHeight
-              radius: Style.cornerRadius
-              color: Util.alpha(Color.accent, 0.14)
-
-              Text {
-                id: chipLabel
-                anchors.centerIn: parent
-                textFormat: Text.PlainText
-                text: modelData.kind === "meet" ? modelData.text + " → Google Meet" : modelData.text
-                color: Color.accent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
+          AccentButton {
+            id: createButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.tr(root.preview.opensForm ? "quick.checkGuest" : "quick.create") + " ⏎"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onClicked: root.submitted(false)
           }
         }
-      }
-
-      SecondaryButton {
-        id: moreButton
-        anchors.right: createButton.left
-        anchors.rightMargin: Style.space(6)
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.tr("quick.moreOptions")
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onClicked: root.submitted(true)
-      }
-
-      AccentButton {
-        id: createButton
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(4)
-        anchors.verticalCenter: parent.verticalCenter
-        text: root.tr("quick.create") + " ⏎"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onClicked: root.submitted(false)
       }
     }
   }
