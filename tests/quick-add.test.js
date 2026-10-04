@@ -561,7 +561,7 @@ test('parseQuickAdd: repeat words map to the form presets', () => {
   assert.equal(parse('x todo dia 8h').repeat, 'daily')
   assert.equal(parse('x todos os dias').repeat, 'daily')
   assert.equal(parse('x semanalmente').repeat, 'weekly')
-  assert.equal(parse('Rent every month', 'en').repeat, 'monthly')
+  assert.equal(parse('Rent every month', 'en').repeat, 'monthlyDate')
   assert.equal(parse('Birthday every year oct 12', 'en').repeat, 'yearly')
   assert.equal(parse('Pills daily 8am', 'en').title, 'Pills')
 })
@@ -570,7 +570,14 @@ test('parseQuickAdd: a repeat word that names the event, or one no preset says, 
   assert.deepEqual([parse('Weekly review friday 4pm', 'en').title, parse('Weekly review friday 4pm', 'en').repeat],
     ['Weekly review', 'none'])
   assert.equal(parse('x every other week', 'en').title, 'x every other week')
-  assert.equal(parse('Pagar todo dia 5').repeat, 'none')
+})
+
+test('parseQuickAdd: every month keeps the date, and "todo dia 5" is the 5th of each month', () => {
+  for (const [text, lang] of [['Rent on the 5th of every month', 'en'], ['Rent every month on the 5th', 'en'],
+    ['Aluguel todo dia 5', 'pt'], ['Aluguel dia 5 de cada mês', 'pt']]) {
+    const p = parse(text, lang)
+    assert.deepEqual([p.title, p.dateKey, p.allDay, p.repeat], [text.split(' ')[0], '2026-11-05', true, 'monthlyDate'], text)
+  }
 })
 
 test('parseQuickAdd: email addresses become guests and leave the title', () => {

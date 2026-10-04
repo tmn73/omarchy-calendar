@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from .writes import WriteRequestError
 
 WEEKDAYS = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
-PRESETS = ("none", "daily", "weekly", "monthly", "yearly", "weekdays")
+PRESETS = ("none", "daily", "weekly", "monthly", "monthlyDate", "yearly", "weekdays")
 
 # Google's defaults for an event that does not set them.
 GUEST_PERMISSION_DEFAULTS = {
@@ -31,6 +31,9 @@ def repeat_rule(preset, start):
         return [f"RRULE:FREQ=WEEKLY;BYDAY={WEEKDAYS[start.weekday()]}"]
     if preset == "monthly":
         return [f"RRULE:FREQ=MONTHLY;BYDAY={nth_weekday(start)}{WEEKDAYS[start.weekday()]}"]
+    if preset == "monthlyDate":
+        # No BYDAY: RFC 5545 repeats on the start date's day of the month.
+        return ["RRULE:FREQ=MONTHLY"]
     if preset == "yearly":
         return ["RRULE:FREQ=YEARLY"]
     if preset == "weekdays":

@@ -99,7 +99,8 @@ var REPEAT_PHRASES = {
   weekdays: ["every weekday", "every workday", "weekdays", "dias uteis", "todo dia util",
     "todos os dias uteis", "em dias uteis", "nos dias uteis", "dias de semana"],
   weekly: ["every week", "each week", "weekly", "toda semana", "todas as semanas", "semanalmente"],
-  monthly: ["every month", "each month", "monthly", "todo mes", "todos os meses", "mensalmente"],
+  monthlyDate: ["every month", "each month", "of every month", "of each month", "monthly", "todo mes",
+    "todos os meses", "de cada mes", "de todo mes", "mensalmente"],
   yearly: ["every year", "each year", "yearly", "annually", "todo ano", "todos os anos", "anualmente"]
 }
 // As the first word these name the event ("Weekly review"), not a repeat.

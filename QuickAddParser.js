@@ -91,6 +91,8 @@ var QUICK_PATTERNS = {
   repeatWeekday: new RegExp("\\s(" + oneOf(Words.EVERY_WORDS.concat(Words.PLURAL_DAY_WORDS)) + ") "
     + QUICK_WEEKDAY + "(s)?((?:-| )feiras?)?(?=\\s)"),
   repeatPhrase: new RegExp("\\s(" + oneOf(wordsOf(Words.REPEAT_PHRASES)) + ")(?=\\s)"),
+  // "todo dia 5": the 5th of each month. Group 1 the day.
+  repeatMonthDay: /\s(?:todo|todos os) dia (\d{1,2})(?=\s)/,
   relative: new RegExp("\\s(?:in|em|daqui a|daqui|dentro de) (?:about |around |cerca de )?(" + QUICK_AMOUNT + ")(?=\\s)"),
   now: /\s(?:right now|now|agora mesmo|agora)(?=\s)/,
   // Groups: 1 and 2 the days, 3 or 4 the month, 5 the year.
@@ -286,23 +288,27 @@ function readGuests(scanner) {
   }
 }
 
-// { preset, weekday } with a preset of the event form, and the WEEKDAYS
-// row of "every monday" (-1 for any other repeat), or null.
+// { preset, weekday, monthDay } with a preset of the event form, the
+// WEEKDAYS row of "every monday" and the day of "todo dia 5" (-1 when
+// the repeat names neither), or null.
 function readRepeat(scanner) {
   var p = QUICK_PATTERNS
+  var monthly = take(scanner, p.repeatMonthDay, function(m) {
+    var day = Number(m[1])
+    return day >= 1 && day <= 31 ? { preset: "monthlyDate", weekday: -1, monthDay: day } : null
+  })
+  if (monthly) return monthly
   var weekly = take(scanner, p.repeatWeekday, function(m) {
     var every = Words.EVERY_WORDS.indexOf(m[1]) !== -1
     var plural = !!m[3] || /feiras/.test(m[4] || "")
     if (!every && !plural) return null
     if (!every && Words.AMBIGUOUS_WEEKDAYS.indexOf(m[2]) !== -1) return null
-    return { preset: "weekly", weekday: rowOf(m[2], [Words.WEEKDAYS]) }
+    return { preset: "weekly", weekday: rowOf(m[2], [Words.WEEKDAYS]), monthDay: -1 }
   })
   if (weekly) return weekly
   return take(scanner, p.repeatPhrase, function(m, at) {
     if (Words.REPEAT_TITLE_WORDS.indexOf(m[1]) !== -1 && scanner.folded.substring(0, at).trim() === "") return null
-    // "todo dia 5" is the 5th of each month, which no preset says.
-    if (m[1] === "todo dia" && /^\s+\d{1,2}(?=\s)/.test(scanner.folded.substring(at + m[0].length))) return null
-    return { preset: keyOf(m[1], Words.REPEAT_PHRASES), weekday: -1 }
+    return { preset: keyOf(m[1], Words.REPEAT_PHRASES), weekday: -1, monthDay: -1 }
   })
 }
 
@@ -357,18 +363,21 @@ function readDate(scanner, today, lang) {
     if (ahead === 0 && (m[2] || m[4])) ahead = 7
     return offsetDate(today, ahead)
   })
-  // "dia 12" / "on the 12th": this month, or the next month that has that
-  // day once it has gone by.
   if (!date) date = take(scanner, p.monthDayOnly, function(m) {
-    var day = Number(m[1] || m[2] || m[3])
-    for (var ahead = 0; ahead <= 12 && day >= 1 && day <= 31; ahead++) {
-      var month = new Date(today.getFullYear(), today.getMonth() + ahead, 1)
-      var candidate = validDay(month.getFullYear(), month.getMonth(), day)
-      if (candidate && candidate >= today) return candidate
-    }
-    return null
+    return nextMonthDay(today, Number(m[1] || m[2] || m[3]))
   })
   return date
+}
+
+// "dia 12" / "on the 12th": this month, or the next month that has that
+// day once it has gone by.
+function nextMonthDay(today, day) {
+  for (var ahead = 0; ahead <= 12 && day >= 1 && day <= 31; ahead++) {
+    var month = new Date(today.getFullYear(), today.getMonth() + ahead, 1)
+    var candidate = validDay(month.getFullYear(), month.getMonth(), day)
+    if (candidate && candidate >= today) return candidate
+  }
+  return null
 }
 
 function span(start, end) {
@@ -618,8 +627,8 @@ function blankedSince(before, after) {
 //   durationMinutes, meet, repeat, guests }, or null when there is no
 // title to create. `now` is a Date or ms. An all-day event has startTime
 // and endTime "" and durationMinutes 0. `repeat` is a preset of the event
-// form ("none", "daily", "weekly", "monthly", "yearly", "weekdays"), and
-// `guests` a list of email addresses.
+// form ("none", "daily", "weekly", "monthly", "monthlyDate", "yearly",
+// "weekdays"), and `guests` a list of email addresses.
 function parseQuickAdd(input, now, lang) {
   return scanQuickAdd(input, now, lang).parsed
 }
@@ -683,7 +692,8 @@ function scanQuickAdd(input, now, lang) {
   if (dates) day = dates.start
   else if (relative && relative.date) day = relative.date
   else if (repeat && repeat.weekday >= 0) day = offsetDate(today, (repeat.weekday - today.getDay() + 7) % 7)
-  var dayGiven = !!dates || !!(relative && relative.date) || !!(repeat && repeat.weekday >= 0)
+  else if (repeat && repeat.monthDay > 0) day = nextMonthDay(today, repeat.monthDay) || today
+  var dayGiven = !!dates || !!(relative && relative.date) || !!(repeat && (repeat.weekday >= 0 || repeat.monthDay > 0))
   var lastDay = dates && dates.end ? dates.end : null
 
   // "in 20 min": that start, on whatever day it falls; "until 3pm" can
@@ -771,7 +781,7 @@ function compactDate(key) {
 // The repeat presets as Google's prefilled page takes them. Google picks
 // the day of the week or month from the start date.
 var TEMPLATE_RULES = {
-  daily: "RRULE:FREQ=DAILY", weekly: "RRULE:FREQ=WEEKLY", monthly: "RRULE:FREQ=MONTHLY",
+  daily: "RRULE:FREQ=DAILY", weekly: "RRULE:FREQ=WEEKLY", monthlyDate: "RRULE:FREQ=MONTHLY",
   yearly: "RRULE:FREQ=YEARLY", weekdays: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
 }
 

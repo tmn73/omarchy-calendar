@@ -1355,6 +1355,7 @@ function repeatOptions(key, lang, withCustom) {
     { value: "weekly", label: Strings.trFor(lang, "repeat.weekly", gender, [weekday]) },
     { value: "monthly", label: Strings.trFor(lang, "repeat.monthly", gender,
         [Strings.trFor(lang, "ordinal." + nth.n, gender), weekday]) },
+    { value: "monthlyDate", label: Strings.tr(lang, "repeat.monthlyDate", [p.day]) },
     { value: "yearly", label: Strings.tr(lang, "repeat.yearly", [p.day, Strings.tr(lang, "month." + p.month)]) },
     { value: "weekdays", label: Strings.tr(lang, "repeat.weekdays") }
   ]
