@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 from omarchy_calendar_sync import event_cli
@@ -295,6 +296,19 @@ class TestPerform(unittest.TestCase):
         self.path.unlink()
         code, reply = self.run_event({"action": "create", "event": form()}, FakeClient())
         self.assertEqual((code, reply["error"]), (1, event_cli.NO_FILE))
+
+
+class TestBackgroundSync(unittest.TestCase):
+    def test_a_write_restarts_a_sync_that_is_already_running(self):
+        # A sync started before the write read Google too early. "start" on
+        # a running oneshot unit does nothing, and that sync then writes the
+        # old event back over the spliced file.
+        with mock.patch.object(event_cli.subprocess, "run") as run:
+            event_cli.start_background_sync()
+        self.assertEqual(
+            run.call_args.args[0],
+            ["systemctl", "--user", "restart", "--no-block", event_cli.SYNC_UNIT],
+        )
 
 
 class TestMain(unittest.TestCase):

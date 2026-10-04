@@ -31,8 +31,11 @@ NO_FILE = "No calendar synced yet. Wait for the first sync, then try again."
 
 def start_background_sync():
     # --no-block: the panel waits for this command, not for a 10 s sync.
+    # restart, not start: a sync already running read Google before this
+    # write, and "start" would let it finish and put the old event back.
+    # Stopping it is safe, because the sync replaces the file atomically.
     subprocess.run(
-        ["systemctl", "--user", "start", "--no-block", SYNC_UNIT],
+        ["systemctl", "--user", "restart", "--no-block", SYNC_UNIT],
         check=False,
         capture_output=True,
     )
