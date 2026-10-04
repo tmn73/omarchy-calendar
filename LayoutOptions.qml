@@ -47,13 +47,34 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  // The kit's one-of-N row, at the panel's text size. Not a Tab stop: the
-  // panel's own keys drive the days while the menu is open.
-  component Choices: ButtonGroup {
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    fontSize: Style.font.bodySmall
-    focusable: false
+  // One of several: the kit's buttons, as in its ButtonGroup, but in a Flow
+  // so a long label wraps to the next line instead of running out of the
+  // menu. Not Tab stops: the panel's own keys drive the days meanwhile.
+  component Choices: Flow {
+    id: choices
+
+    property var options: []
+    property string value: ""
+
+    signal chosen(string value)
+
+    width: parent ? parent.width : 0
+    spacing: Style.spacing.md
+
+    Repeater {
+      model: choices.options
+
+      Button {
+        required property var modelData
+        text: modelData.label
+        selected: modelData.value === choices.value
+        bordered: true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.bodySmall
+        onClicked: choices.chosen(modelData.value)
+      }
+    }
   }
 
   component BlockSwitch: ToggleRow {
@@ -68,7 +89,7 @@ Column {
     options: root.options(Model.LAYOUT_PRESET_NAMES.map(function(name) { return [name, "layout." + name] }))
     // Empty for a layout set by hand, so no preset reads as chosen.
     value: root.presetName
-    onChanged: function(value) { root.layoutPicked(Model.layoutPreset(value)) }
+    onChosen: function(value) { root.layoutPicked(Model.layoutPreset(value)) }
   }
 
   Caption {
@@ -78,17 +99,7 @@ Column {
 
   Item { width: 1; height: Style.space(4) }
 
-  Caption { text: root.tr("layout.agendaPlacement") }
-
-  Choices {
-    options: root.options([["beside", "layout.agendaBeside"], ["below", "layout.agendaBelow"]])
-    value: root.layout.agendaPlacement
-    onChanged: function(value) { root.pick("agendaPlacement", value) }
-  }
-
-  Item { width: 1; height: Style.space(4) }
-
-  Caption { text: root.tr("layout.leftColumn") }
+  Caption { text: root.tr("layout.calendarSection") }
   BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress") }
   BlockSwitch { key: "showCalendarList"; label: root.tr("layout.calendarList") }
   BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend") }
@@ -96,6 +107,13 @@ Column {
   Item { width: 1; height: Style.space(4) }
 
   Caption { text: root.tr("agenda.title") }
+
+  Choices {
+    options: root.options([["beside", "layout.agendaBeside"], ["below", "layout.agendaBelow"]])
+    value: root.layout.agendaPlacement
+    onChosen: function(value) { root.pick("agendaPlacement", value) }
+  }
+
   BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label") }
   BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp") }
   BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming") }

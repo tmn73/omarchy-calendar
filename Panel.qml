@@ -1226,7 +1226,7 @@ Panel {
       // them when they scroll.
       x: Math.max(0, hero.width - width - columnsScroll.contentX)
       y: hero.height + Style.space(6) - leftScroll.contentY
-      width: Style.space(290)
+      width: Style.space(320)
       height: layoutMenuContent.implicitHeight + Style.space(12) * 2
       radius: Style.cornerRadius
       color: Color.popups.background
