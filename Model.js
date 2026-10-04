@@ -1100,11 +1100,11 @@ var LAYOUT_PRESET_NAMES = ["minimal", "standard"]
 // missing key changes nothing for someone who never opened the menu.
 var LAYOUT_PRESETS = {
   minimal: {
-    agendaPlacement: "below", showYearProgress: false, showCalendarList: false,
+    agendaPlacement: "below", showYearProgress: false,
     showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
   },
   standard: {
-    agendaPlacement: "beside", showYearProgress: false, showCalendarList: true,
+    agendaPlacement: "beside", showYearProgress: false,
     showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
   }
 }

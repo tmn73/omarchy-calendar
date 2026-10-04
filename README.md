@@ -26,8 +26,8 @@ time away for an event title would be a downgrade you pay for all day.
   the middle, and the selected event's details on the right. The details
   column only opens when you click something
 - **Your layout.** The layout button beside the settings picks a preset
-  or turns each block on or off: year progress, the calendar list, the
-  shortcut legend, quick add, the next up card and the upcoming days.
+  or turns each block on or off: year progress, the shortcut legend, quick
+  add, the next up card and the upcoming days.
   Standard shows them all. Minimal is one narrow column, the agenda under
   the calendar. Settings has the same options
 - **Nothing cut off.** Titles wrap instead of trailing off in an ellipsis

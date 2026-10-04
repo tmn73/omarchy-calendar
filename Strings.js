@@ -101,10 +101,6 @@ var STRINGS = {
     "week.startSunday": "Start weeks on Sunday",
     "week.startMonday": "Start weeks on Monday",
 
-    "chips.title": "Calendars",
-    "chips.toggle": "Show or hide %1",
-    "chips.hidden.one": "%1 hidden",
-    "chips.hidden.other": "%1 hidden",
 
     "keys.title": "Shortcuts",
     "keys.new": "new",
@@ -171,7 +167,6 @@ var STRINGS = {
     "layout.agendaBeside": "Beside the calendar",
     "layout.agendaBelow": "Under the calendar",
     "layout.calendarSection": "Calendar",
-    "layout.calendarList": "Calendar list",
     "layout.shortcutLegend": "Shortcut legend",
     "layout.nextUp": "Next up card",
 
@@ -300,6 +295,8 @@ var STRINGS = {
     "life.mementoMori": "Memento Mori",
 
     "settings.calendars": "Calendars",
+    "settings.hiddenCalendars.one": "%1 hidden",
+    "settings.hiddenCalendars.other": "%1 hidden",
     "settings.noCalendars": "Nothing synced yet, so there is nothing to choose from.",
     "settings.display": "Display",
     "settings.weekMonday": "Week starts on Monday",
@@ -414,10 +411,6 @@ var STRINGS = {
     "week.startSunday": "Começar a semana no domingo",
     "week.startMonday": "Começar a semana na segunda-feira",
 
-    "chips.title": "Agendas",
-    "chips.toggle": "Mostrar ou ocultar %1",
-    "chips.hidden.one": "%1 oculta",
-    "chips.hidden.other": "%1 ocultas",
 
     "keys.title": "Atalhos",
     "keys.new": "novo",
@@ -484,7 +477,6 @@ var STRINGS = {
     "layout.agendaBeside": "Ao lado do calendário",
     "layout.agendaBelow": "Abaixo do calendário",
     "layout.calendarSection": "Calendário",
-    "layout.calendarList": "Lista de agendas",
     "layout.shortcutLegend": "Legenda de atalhos",
     "layout.nextUp": "Cartão do próximo evento",
 
@@ -617,6 +609,8 @@ var STRINGS = {
     "life.title": "Vida",
 
     "settings.calendars": "Agendas",
+    "settings.hiddenCalendars.one": "%1 oculta",
+    "settings.hiddenCalendars.other": "%1 ocultas",
     "settings.noCalendars": "Nada sincronizado ainda, então não há o que escolher.",
     "settings.display": "Exibição",
     "settings.weekMonday": "Semana começa na segunda-feira",

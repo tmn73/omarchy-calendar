@@ -38,6 +38,12 @@ Row {
   property bool writeSetupCopied: false
 
   signal calendarToggled(string calendarId)
+
+  // Folded by default: most visits to this page are not about calendars.
+  property bool calendarsExpanded: false
+  readonly property int hiddenCount: calendars.filter(function(calendar) {
+    return hiddenCalendars.indexOf(String(calendar.id)) !== -1
+  }).length
   signal layoutPicked(var values)
   signal weekStartToggled()
   signal workingLocationToggled()
@@ -161,9 +167,32 @@ Row {
     width: root.columnWidth
     spacing: Style.space(10)
 
-    // ---- Calendars
+    // ---- Calendars, folded under a one-line summary.
 
-    SectionTitle { text: root.tr("settings.calendars") }
+    Rectangle {
+      width: parent.width
+      height: calendarsTitle.implicitHeight + Style.space(4) * 2
+      radius: Style.cornerRadius
+      color: calendarsMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+
+      SectionTitle {
+        id: calendarsTitle
+        anchors.verticalCenter: parent.verticalCenter
+        text: {
+          var parts = [root.tr("settings.calendars"), String(root.calendars.length)]
+          if (root.hiddenCount > 0) parts.push(Strings.trn(root.language, "settings.hiddenCalendars", root.hiddenCount))
+          return (root.calendarsExpanded ? "▾ " : "▸ ") + parts.join(" · ")
+        }
+      }
+
+      MouseArea {
+        id: calendarsMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.calendarsExpanded = !root.calendarsExpanded
+      }
+    }
 
     Note {
       visible: root.calendars.length === 0
@@ -176,12 +205,14 @@ Row {
       SettingToggle {
         required property var modelData
 
+        visible: root.calendarsExpanded
         label: modelData.name
         swatch: modelData.color
         checked: root.hiddenCalendars.indexOf(modelData.id) === -1
         onActivated: root.calendarToggled(modelData.id)
       }
     }
+
     // ---- Display
 
     SectionTitle { text: root.tr("settings.display") }

@@ -101,7 +101,6 @@ Column {
 
   Caption { text: root.tr("layout.calendarSection") }
   BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress") }
-  BlockSwitch { key: "showCalendarList"; label: root.tr("layout.calendarList") }
   BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend") }
 
   Item { width: 1; height: Style.space(4) }

@@ -108,7 +108,6 @@ Panel {
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
   readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
-  readonly property bool calendarListExpanded: setting("calendarListExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
   property bool layoutMenuOpen: false
   // Google's working-location markers describe no commitment, so they are
@@ -124,21 +123,6 @@ Panel {
   // would still serve the old value when a second click arrives.
   property var hiddenCalendars: []
   readonly property var knownCalendars: Model.calendarsInDocument(eventDoc)
-  // Events per calendar, hidden ones included, for the filter chips. By id:
-  // a multi-day event is one row per day.
-  readonly property var calendarCounts: {
-    var seen = {}
-    var counts = {}
-    var events = (root.eventDoc && root.eventDoc.events) || []
-    for (var i = 0; i < events.length; i++) {
-      var event = events[i]
-      var key = event.calendarId + "|" + event.id
-      if (seen[key]) continue
-      seen[key] = true
-      counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
-    }
-    return counts
-  }
 
   // ---- Writing. The sync lists the calendars the panel may change; with no
   //      list, quick add goes to Google Calendar in the browser instead.
@@ -1010,20 +994,6 @@ Panel {
                 visible: root.agendaBelow && !root.settingsOpen
                 width: parent.width
                 height: visible ? Math.min(agenda.naturalHeight, root.agendaBelowMaxHeight) : 0
-              }
-
-              CalendarFilters {
-                width: parent.width
-                expanded: root.calendarListExpanded
-                onExpandToggled: root.persistSettings({ calendarListExpanded: !root.calendarListExpanded })
-                visible: !root.settingsOpen && root.layout.showCalendarList && calendars.length > 0
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                calendars: root.knownCalendars
-                hiddenCalendars: root.hiddenCalendars
-                counts: root.calendarCounts
-                onToggled: function(calendarId) { root.toggleCalendar(calendarId) }
               }
 
               ShortcutLegend {

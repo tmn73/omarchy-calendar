@@ -10,8 +10,8 @@ test('layoutFromSettings: no settings gives the standard layout', () => {
 })
 
 test('layoutFromSettings: stored values win over the standard layout', () => {
-  const layout = Model.layoutFromSettings({ showCalendarList: false, agendaPlacement: 'below' })
-  assert.equal(layout.showCalendarList, false)
+  const layout = Model.layoutFromSettings({ showQuickAdd: false, agendaPlacement: 'below' })
+  assert.equal(layout.showQuickAdd, false)
   assert.equal(layout.agendaPlacement, 'below')
   assert.equal(layout.showShortcutLegend, true)
 })
@@ -36,7 +36,6 @@ test('layoutPreset: the standard preset is the panel as it was before layouts', 
   assert.deepEqual(Model.layoutPreset('standard'), {
     agendaPlacement: 'beside',
     showYearProgress: false,
-    showCalendarList: true,
     showShortcutLegend: true,
     showQuickAdd: true,
     showNextUp: true,
@@ -47,7 +46,7 @@ test('layoutPreset: the standard preset is the panel as it was before layouts', 
 test('layoutPreset: minimal is one column, the agenda under the month', () => {
   const minimal = Model.layoutPreset('minimal')
   assert.equal(minimal.agendaPlacement, 'below')
-  assert.equal(minimal.showCalendarList, false)
+  assert.equal(minimal.showShortcutLegend, false)
   assert.equal(minimal.showQuickAdd, false)
 })
 
@@ -64,7 +63,7 @@ test('layoutPresetName: names the preset a layout matches, or gives an empty str
   for (const name of Model.LAYOUT_PRESET_NAMES)
     assert.equal(Model.layoutPresetName(Model.layoutPreset(name)), name)
   const custom = Model.layoutPreset('standard')
-  custom.showCalendarList = false
+  custom.showShortcutLegend = false
   assert.equal(Model.layoutPresetName(custom), '')
 })
 
