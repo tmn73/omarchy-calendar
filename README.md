@@ -25,6 +25,12 @@ time away for an event title would be a downgrade you pay for all day.
 - **Three columns.** The month grid you know on the left, the day's agenda in
   the middle, and the selected event's details on the right. The details
   column only opens when you click something
+- **Your layout.** The layout button beside the settings picks a preset
+  (Minimal, Standard, Full) or turns each block on or off: year progress,
+  the calendar list, the shortcut legend, quick add, the next up card and
+  the upcoming days. Minimal is one narrow column, the agenda under the
+  month. The details column can also stay pinned open. Settings has the
+  same options
 - **Nothing cut off.** Titles wrap instead of trailing off in an ellipsis
 - **Deadlines and tasks look like what they are.** Titles starting with
   `DEADLINE:`/`PRAZO:`/`Due:` get a badge and come first. Rows from a task
@@ -40,8 +46,8 @@ time away for an event title would be a downgrade you pay for all day.
   for 45m`, `dentista sexta às 15h`. You see the parsed date before you
   press Enter. Read-only sources open Google Calendar with the event filled in
 - **Details** on click: full title, when, Join, directions, description,
-  reminder. Double click edits (writable calendars) or opens the event in
-  Google
+  reminder, and buttons to edit the event (writable calendars), open it in
+  Google or delete it
 - **Create, edit and delete** from the panel, with a form like Google's: date
   picker, times in 15-minute steps, repeat, guests with suggestions, Google
   Meet, notifications, colour. Off by default, see

@@ -20,7 +20,6 @@ Column {
 
   signal daySelected(string key)
   signal itemSelected(var item)
-  signal itemActivated(var item)
   signal joinRequested(var item)
 
   visible: days.length > 0
@@ -85,7 +84,6 @@ Column {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.itemSelected(row.modelData)
-            onDoubleClicked: root.itemActivated(row.modelData)
           }
 
           Text {

@@ -6,7 +6,8 @@ import "Strings.js" as Strings
 
 // One chip per calendar, with how many events it holds; clicking a chip
 // hides or shows that calendar everywhere, the bar included. A hidden
-// calendar keeps its chip, hollowed out, so it can be brought back.
+// calendar keeps its chip, hollowed out, so it can be brought back. Most
+// days nobody needs the chips, so they fold away under a one-line summary.
 Column {
   id: root
 
@@ -17,22 +18,54 @@ Column {
   property var hiddenCalendars: []
   // { calendarId: number of events }
   property var counts: ({})
+  property bool expanded: false
 
   signal toggled(string calendarId)
+  signal expandToggled()
+
+  readonly property int hiddenCount: calendars.filter(function(calendar) {
+    return hiddenCalendars.indexOf(String(calendar.id)) !== -1
+  }).length
 
   visible: calendars.length > 0
   spacing: Style.space(8)
 
-  Text {
-    text: Strings.tr(root.language, "chips.title").toUpperCase()
-    color: Util.alpha(root.foreground, 0.68)
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    font.letterSpacing: 1
-    font.bold: true
+  Rectangle {
+    width: root.width
+    height: summary.implicitHeight + Style.space(4) * 2
+    radius: Style.cornerRadius
+    color: summaryMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+
+    Text {
+      id: summary
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(2)
+      text: {
+        var parts = [Strings.tr(root.language, "chips.title"), String(root.calendars.length)]
+        if (root.hiddenCount > 0) parts.push(Strings.trn(root.language, "chips.hidden", root.hiddenCount))
+        return (root.expanded ? "▾ " : "▸ ") + parts.join(" · ").toUpperCase()
+      }
+      elide: Text.ElideRight
+      color: Util.alpha(root.foreground, 0.68)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.letterSpacing: 1
+      font.bold: true
+    }
+
+    MouseArea {
+      id: summaryMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.expandToggled()
+    }
   }
 
   Flow {
+    visible: root.expanded
     width: root.width
     spacing: Style.space(6)
 

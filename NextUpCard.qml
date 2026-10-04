@@ -111,10 +111,9 @@ Rectangle {
       onClicked: root.joinRequested()
     }
 
-    AccentButton {
+    SecondaryButton {
       visible: root.snoozable
       anchors.right: parent.right
-      filled: false
       iconText: "󰒲"
       text: root.snoozeText
       foreground: root.foreground

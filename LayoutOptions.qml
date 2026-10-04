@@ -1,12 +1,14 @@
 import QtQuick
 import qs.Commons
+import qs.Ui
 
 import "Model.js" as Model
 import "Strings.js" as Strings
 
-// What the panel shows: a preset, the details column mode, and one switch
-// per block. The layout menu and Settings both host it. It reads the
-// layout and emits the settings to store; the panel owns every value.
+// What the panel shows: a preset, where the agenda sits, the details column
+// mode, and one switch per block. The layout menu and Settings both host
+// it. It reads the layout and emits the settings to store; the panel owns
+// every value.
 Column {
   id: root
 
@@ -32,6 +34,10 @@ Column {
     root.layoutPicked(values)
   }
 
+  function options(pairs) {
+    return pairs.map(function(pair) { return { value: pair[0], label: root.tr(pair[1]) } })
+  }
+
   spacing: Style.space(6)
 
   component Caption: Text {
@@ -42,29 +48,13 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  component Choices: Flow {
-    id: choices
-
-    property var options: []
-    property string current: ""
-
-    signal chosen(string value)
-
-    width: parent ? parent.width : 0
-    spacing: Style.space(3)
-
-    Repeater {
-      model: choices.options
-
-      ChoicePill {
-        required property var modelData
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        label: root.tr(modelData.label)
-        active: modelData.value === choices.current
-        onActivated: choices.chosen(modelData.value)
-      }
-    }
+  // The kit's one-of-N row, at the panel's text size. Not a Tab stop: the
+  // panel's own keys drive the days while the menu is open.
+  component Choices: ButtonGroup {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    fontSize: Style.font.bodySmall
+    focusable: false
   }
 
   component BlockSwitch: ToggleRow {
@@ -76,11 +66,10 @@ Column {
   }
 
   Choices {
-    options: Model.LAYOUT_PRESET_NAMES.map(function(name) {
-      return { value: name, label: "layout." + name }
-    })
-    current: root.presetName
-    onChosen: function(value) { root.layoutPicked(Model.layoutPreset(value)) }
+    options: root.options(Model.LAYOUT_PRESET_NAMES.map(function(name) { return [name, "layout." + name] }))
+    // Empty for a layout set by hand, so no preset reads as chosen.
+    value: root.presetName
+    onChanged: function(value) { root.layoutPicked(Model.layoutPreset(value)) }
   }
 
   Caption {
@@ -90,24 +79,26 @@ Column {
 
   Item { width: 1; height: Style.space(4) }
 
+  Caption { text: root.tr("layout.agendaPlacement") }
+
+  Choices {
+    options: root.options([["beside", "layout.agendaBeside"], ["below", "layout.agendaBelow"]])
+    value: root.layout.agendaPlacement
+    onChanged: function(value) { root.pick("agendaPlacement", value) }
+  }
+
+  Item { width: 1; height: Style.space(4) }
+
   Caption { text: root.tr("layout.details") }
 
   Choices {
-    options: [
-      { value: "click", label: "layout.detailsClick" },
-      { value: "pinned", label: "layout.detailsPinned" },
-      { value: "off", label: "layout.detailsOff" }
-    ]
-    current: root.layout.detailsColumn
-    onChosen: function(value) { root.pick("detailsColumn", value) }
+    options: root.options([["click", "layout.detailsClick"], ["pinned", "layout.detailsPinned"]])
+    value: root.layout.detailsColumn
+    onChanged: function(value) { root.pick("detailsColumn", value) }
   }
 
   Caption {
-    text: root.tr({
-      click: "layout.detailsClickHint",
-      pinned: "layout.detailsPinnedHint",
-      off: "layout.detailsOffHint"
-    }[root.layout.detailsColumn])
+    text: root.tr(root.layout.detailsColumn === "pinned" ? "layout.detailsPinnedHint" : "layout.detailsClickHint")
   }
 
   Item { width: 1; height: Style.space(4) }

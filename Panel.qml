@@ -108,6 +108,8 @@ Panel {
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
   readonly property string detailsMode: root.layout.detailsColumn
+  readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
+  readonly property bool calendarListExpanded: setting("calendarListExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
   property bool layoutMenuOpen: false
   // Google's working-location markers describe no commitment, so they are
@@ -274,6 +276,8 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property int agendaWidth: Style.space(330)
+  // Under the month, past this the agenda scrolls inside the panel.
+  readonly property int agendaBelowMaxHeight: Style.space(420)
   readonly property int inspectorWidth: Style.space(290)
   readonly property int columnPadding: Style.space(14)
 
@@ -567,7 +571,7 @@ Panel {
       && !/todoist/i.test(String(item.calendarName || ""))
   }
 
-  // Double click and "e": edit what can be edited, open the rest in Google.
+  // "e": edit what can be edited, open the rest in Google.
   function activateItem(item) {
     if (!item) return
     if (root.isEditable(item)) root.editEvent(item)
@@ -871,11 +875,15 @@ Panel {
     focusTarget: keyFocus
     contentWidth: panel.fittedContentWidth(columns.width + panel.padding * 2
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec))
-    // Fixed while the panel is up, whatever the day holds: the agenda and
-    // the inspector scroll inside it, so moving between days never makes
-    // the popup jump. The left column sets it, so it follows the layout.
-    // The floor keeps room for an agenda when the left column is short.
-    contentHeight: panel.fittedContentHeight(Math.max(Style.space(480), leftContent.implicitHeight + root.columnPadding))
+    // Beside the month, fixed while the panel is up, whatever the day holds:
+    // the agenda and the inspector scroll inside it, so moving between days
+    // never makes the popup jump. The floor keeps room for that agenda when
+    // the left column is short. Under the month, the panel fits the day, as
+    // it did before the redesign. The open layout menu always fits.
+    contentHeight: panel.fittedContentHeight(Math.max(
+      root.agendaBelow ? 0 : Style.space(480),
+      leftContent.implicitHeight + root.columnPadding,
+      layoutMenu.visible ? layoutMenu.y + layoutMenu.height + root.columnPadding : 0))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -998,8 +1006,19 @@ Panel {
                 onMonthStepped: function(delta) { root.moveMonth(delta) }
               }
 
+              // Where the agenda goes when it sits under the month. The one
+              // agenda moves here, see its parent below.
+              Item {
+                id: agendaBelowSlot
+                visible: root.agendaBelow && !root.settingsOpen
+                width: parent.width
+                height: visible ? Math.min(agenda.naturalHeight, root.agendaBelowMaxHeight) : 0
+              }
+
               CalendarFilters {
                 width: parent.width
+                expanded: root.calendarListExpanded
+                onExpandToggled: root.persistSettings({ calendarListExpanded: !root.calendarListExpanded })
                 visible: !root.settingsOpen && root.layout.showCalendarList && calendars.length > 0
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -1058,21 +1077,27 @@ Panel {
           }
 
           Rectangle {
+            visible: !root.agendaBelow
             width: Style.spacing.hairline
             height: parent.height
             color: Util.alpha(root.contentForeground, 0.1)
           }
 
-          // ---- Middle: the agenda.
+          // ---- Middle: the agenda, unless it sits under the month.
           Item {
+            id: agendaBesideSlot
+            visible: !root.agendaBelow
             width: root.agendaWidth + root.columnPadding * 2
             height: parent.height
 
             AgendaColumn {
               id: agenda
+              // One agenda, moved between its two places, so a half-typed
+              // quick add survives a change of layout.
+              parent: root.agendaBelow ? agendaBelowSlot : agendaBesideSlot
               anchors.fill: parent
-              anchors.leftMargin: root.columnPadding
-              anchors.rightMargin: root.columnPadding
+              anchors.leftMargin: root.agendaBelow ? 0 : root.columnPadding
+              anchors.rightMargin: root.agendaBelow ? 0 : root.columnPadding
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               language: root.language
@@ -1102,7 +1127,6 @@ Panel {
               toastText: root.toastText
               toastError: root.toastError
               onItemSelected: function(item) { root.selectEvent(item) }
-              onItemActivated: function(item) { root.selectEvent(item); root.activateItem(item) }
               onJoinRequested: function(item) { root.joinItem(item) }
               onSnoozeRequested: function(item) { root.snooze(item) }
               onDaySelected: function(key) { root.selectDay(key) }
@@ -1210,12 +1234,13 @@ Panel {
     }
 
     Rectangle {
+      id: layoutMenu
       visible: root.layoutMenuOpen
       // The hero sits at the top left of the columns, so the menu follows
       // them when they scroll.
       x: Math.max(0, hero.width - width - columnsScroll.contentX)
       y: hero.height + Style.space(6) - leftScroll.contentY
-      width: Style.space(260)
+      width: Style.space(290)
       height: layoutMenuContent.implicitHeight + Style.space(12) * 2
       radius: Style.cornerRadius
       color: Color.popups.background

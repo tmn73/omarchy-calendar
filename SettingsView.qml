@@ -84,9 +84,13 @@ Column {
     fontFamily: root.fontFamily
   }
 
-  component SettingPill: ChoicePill {
+  // One choice of several: the kit's button, as in its ButtonGroup, but
+  // in a Flow so a long row wraps.
+  component SettingChoice: Button {
+    bordered: true
     foreground: root.foreground
     fontFamily: root.fontFamily
+    fontSize: Style.font.bodySmall
   }
 
   // ---- Layout
@@ -170,16 +174,16 @@ Column {
 
   Flow {
     width: parent.width
-    spacing: Style.space(3)
+    spacing: Style.spacing.md
 
     Repeater {
       model: Strings.languageOptions(root.language)
 
-      SettingPill {
+      SettingChoice {
         required property var modelData
-        label: modelData.label
-        active: modelData.value === root.languageSetting
-        onActivated: root.languagePicked(modelData.value)
+        text: modelData.label
+        selected: modelData.value === root.languageSetting
+        onClicked: root.languagePicked(modelData.value)
       }
     }
   }
@@ -192,16 +196,16 @@ Column {
 
   Flow {
     width: parent.width
-    spacing: Style.space(3)
+    spacing: Style.spacing.md
 
     Repeater {
       model: [0, 5, 15, 30, 60]
 
-      SettingPill {
+      SettingChoice {
         required property int modelData
-        label: modelData === 0 ? root.tr("settings.never") : root.tr("settings.minutes", [modelData])
-        active: modelData === root.announceLeadMinutes
-        onActivated: root.leadMinutesPicked(modelData)
+        text: modelData === 0 ? root.tr("settings.never") : root.tr("settings.minutes", [modelData])
+        selected: modelData === root.announceLeadMinutes
+        onClicked: root.leadMinutesPicked(modelData)
       }
     }
   }

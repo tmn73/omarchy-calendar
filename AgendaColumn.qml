@@ -49,7 +49,6 @@ Item {
   property bool toastError: false
 
   signal itemSelected(var item)
-  signal itemActivated(var item)
   signal joinRequested(var item)
   signal snoozeRequested(var item)
   signal daySelected(string key)
@@ -60,6 +59,9 @@ Item {
   signal toastDismissed()
 
   readonly property bool empty: sections.allDay.length === 0 && sections.timed.length === 0
+  // The height that shows everything without scrolling. The panel uses it
+  // when the agenda sits under the month.
+  readonly property real naturalHeight: header.height + scroll.anchors.topMargin + scroll.contentHeight
   readonly property string nowText: Qt.formatDateTime(new Date(nowMs), timeFormat)
 
   function tr(key, args) {
@@ -187,7 +189,8 @@ Item {
               return root.tr(root.setupCommandCopied ? "sync.copied" : "sync.missingPanel", [root.setupCommand])
             if (root.syncState === "version") return root.tr("sync.versionPanel")
             if (root.syncState === "stale") return root.tr("sync.stalePanel")
-            return root.tr(root.canWrite ? "agenda.empty" : "agenda.emptyReadOnly")
+            if (!root.canWrite) return root.tr("agenda.emptyReadOnly")
+            return root.tr(root.showQuickAdd ? "agenda.empty" : "agenda.emptyNoQuickAdd")
           }
         }
 
@@ -225,7 +228,6 @@ Item {
             fontFamily: root.fontFamily
             language: root.language
             onClicked: root.itemSelected(modelData)
-            onDoubleClicked: root.itemActivated(modelData)
             onSnoozeRequested: root.snoozeRequested(modelData)
           }
         }
@@ -272,7 +274,6 @@ Item {
               fontFamily: root.fontFamily
               language: root.language
               onClicked: root.itemSelected(timedEntry.modelData)
-              onDoubleClicked: root.itemActivated(timedEntry.modelData)
               onJoinRequested: root.joinRequested(timedEntry.modelData)
               onSnoozeRequested: root.snoozeRequested(timedEntry.modelData)
             }
@@ -304,7 +305,6 @@ Item {
         language: root.language
         onDaySelected: function(key) { root.daySelected(key) }
         onItemSelected: function(item) { root.itemSelected(item) }
-        onItemActivated: function(item) { root.itemActivated(item) }
         onJoinRequested: function(item) { root.joinRequested(item) }
       }
     }

@@ -6,6 +6,7 @@ import qs.Ui
 // to do now ("Join" a live meeting, "Create"), outlined for the same action
 // when it can wait. Not the kit's Button: that paints hover as a foreground
 // wash, which on a filled accent would hide the button instead of lighting it.
+// It takes the kit's control padding, so it lines up with SecondaryButton.
 Rectangle {
   id: root
 
@@ -22,18 +23,18 @@ Rectangle {
 
   readonly property bool hot: mouse.containsMouse && enabled
   readonly property color labelColor: filled ? Color.background : accent
-  readonly property int padX: Style.space(large ? 16 : 10)
-  readonly property int padY: Style.space(large ? 11 : 5)
+  readonly property int padX: large ? Style.space(16) : (text === "" ? padY : Style.spacing.controlPaddingX)
+  readonly property int padY: large ? Style.space(11) : Style.spacing.controlPaddingY
 
-  implicitWidth: row.implicitWidth + padX * 2
-  implicitHeight: row.implicitHeight + padY * 2
+  implicitWidth: row.implicitWidth + padX * 2 + border.width * 2
+  implicitHeight: row.implicitHeight + padY * 2 + border.width * 2
   radius: Style.cornerRadius
   opacity: enabled ? 1 : 0.5
   color: filled
     ? (hot ? Qt.lighter(accent, 1.12) : accent)
     : (hot ? Style.hoverFillFor(foreground, accent) : "transparent")
-  border.width: filled ? 0 : Style.spacing.hairline
-  border.color: Util.alpha(foreground, 0.25)
+  border.width: Style.spacing.hairline
+  border.color: filled ? color : Util.alpha(foreground, 0.25)
 
   Row {
     id: row

@@ -154,17 +154,14 @@ Rectangle {
         }
       }
 
-      Button {
+      SecondaryButton {
         id: moreButton
         anchors.right: createButton.left
         anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
         text: root.tr("quick.moreOptions")
-        bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
-        fontSize: Style.font.bodySmall
-        verticalPadding: Style.space(4)
         onClicked: root.submitted(true)
       }
 

@@ -1092,23 +1092,26 @@ function notificationArg(value) {
 
 // ---- Layout: which blocks the panel shows
 
-// "click" opens the details column on a click, "pinned" keeps it open and
-// "off" never opens it. The edit form still opens there in every mode.
-var DETAILS_MODES = ["click", "pinned", "off"]
+// The agenda sits in its own column beside the month, or under it in one
+// narrow column, the way the panel looked before the redesign.
+var AGENDA_PLACEMENTS = ["beside", "below"]
+// "click" opens the details column on a click and "pinned" keeps it open.
+// The edit form opens there in both modes.
+var DETAILS_MODES = ["click", "pinned"]
 var LAYOUT_PRESET_NAMES = ["minimal", "standard", "full"]
 // Standard is the panel as it was before these settings existed, so a
 // missing key changes nothing for someone who never opened the menu.
 var LAYOUT_PRESETS = {
   minimal: {
-    detailsColumn: "off", showYearProgress: false, showCalendarList: false,
+    agendaPlacement: "below", detailsColumn: "click", showYearProgress: false, showCalendarList: false,
     showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
   },
   standard: {
-    detailsColumn: "click", showYearProgress: false, showCalendarList: true,
+    agendaPlacement: "beside", detailsColumn: "click", showYearProgress: false, showCalendarList: true,
     showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
   },
   full: {
-    detailsColumn: "pinned", showYearProgress: true, showCalendarList: true,
+    agendaPlacement: "beside", detailsColumn: "pinned", showYearProgress: true, showCalendarList: true,
     showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
   }
 }
@@ -1128,7 +1131,9 @@ function layoutFromSettings(settings) {
   var layout = layoutPreset("standard")
   for (var key in layout) {
     var value = stored[key]
-    if (key === "detailsColumn") {
+    if (key === "agendaPlacement") {
+      if (AGENDA_PLACEMENTS.indexOf(value) !== -1) layout[key] = value
+    } else if (key === "detailsColumn") {
       if (DETAILS_MODES.indexOf(value) !== -1) layout[key] = value
     } else if (typeof value === "boolean") {
       layout[key] = value
@@ -1151,7 +1156,6 @@ function layoutPresetName(layout) {
 // A pinned column stays open on a day with nothing to show, so the panel
 // keeps its width while you move between days.
 function detailsVisible(mode, opened, hasItem) {
-  if (mode === "off") return false
   if (mode === "pinned") return true
   return opened && hasItem
 }
