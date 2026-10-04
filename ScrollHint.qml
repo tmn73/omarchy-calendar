@@ -1,9 +1,10 @@
 import QtQuick
 import qs.Commons
 
-// Shows that a Flickable holds more than it shows: a thin thumb on its
-// right edge, and a fade over its bottom edge while there is more below.
-// Lay it over the Flickable; it takes no clicks.
+// Shows that a Flickable holds more than it shows: a fade over its bottom
+// edge while there is more below, and a thin thumb on its right edge while
+// the pointer is over it or it moves. Lay it over the Flickable; it takes
+// no clicks.
 Item {
   id: root
 
@@ -17,6 +18,8 @@ Item {
     && flickable.contentY + flickable.height < flickable.contentHeight - 1
 
   visible: scrollable
+
+  HoverHandler { id: hover }
 
   Rectangle {
     visible: root.moreBelow
@@ -32,6 +35,8 @@ Item {
 
   Rectangle {
     anchors.right: parent.right
+    opacity: hover.hovered || (root.flickable !== null && root.flickable.moving) ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 150 } }
     width: Style.space(3)
     radius: width / 2
     y: root.flickable ? root.flickable.visibleArea.yPosition * root.height : 0
