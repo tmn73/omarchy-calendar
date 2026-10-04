@@ -17,6 +17,9 @@ Column {
   property real nowMs: 0
   property bool editable: false
   property bool deletable: false
+  // A write or the fetch before an edit is under way. The buttons stay in
+  // place and only stop answering, so the calendar never reads as read-only.
+  property bool busy: false
   property bool snoozable: false
   property string snoozeText: ""
   property color foreground: Color.foreground
@@ -320,6 +323,7 @@ Column {
       text: root.tr("insp.edit")
       foreground: root.foreground
       fontFamily: root.fontFamily
+      enabled: !root.busy
       onClicked: root.editRequested()
     }
 
@@ -341,6 +345,7 @@ Column {
       tooltipText: root.tr("insp.delete")
       foreground: root.foreground
       fontFamily: root.fontFamily
+      enabled: !root.busy
       onClicked: root.deleteRequested()
     }
   }
