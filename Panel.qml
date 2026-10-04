@@ -105,7 +105,11 @@ Panel {
     Qt.resolvedUrl("sync/setup"), Quickshell.env("HOME") || "")
   readonly property string writeSetupCommand: root.setupCommand + " --write"
 
-  readonly property bool showYearProgress: setting("showYearProgress", false)
+  // Which blocks the panel shows. See Model.layoutFromSettings.
+  readonly property var layout: Model.layoutFromSettings(root.settings)
+  readonly property string detailsMode: root.layout.detailsColumn
+  readonly property bool showYearProgress: root.layout.showYearProgress
+  property bool layoutMenuOpen: false
   // Google's working-location markers describe no commitment, so they are
   // out by default. Declined invitations stay in: you probably still want
   // to see what you said no to.
@@ -188,7 +192,11 @@ Panel {
       if (String(root.dayItems[i].id) === root.selectedEventId) return root.dayItems[i]
     return null
   }
-  readonly property bool inspectorOpen: formOpen || (detailsOpen && selectedItem !== null)
+  // What the details column shows: the selection, or when pinned the next
+  // event. The form opens there in every mode.
+  readonly property var inspectorItem: Model.inspectorItem(root.detailsMode, root.selectedItem, root.nextUp, root.dayItems)
+  readonly property bool inspectorOpen: formOpen
+    || Model.detailsVisible(root.detailsMode, root.detailsOpen, root.inspectorItem !== null)
 
   // Today's first timed event not yet over, shown above today's agenda.
   readonly property var nextUp: {
@@ -206,6 +214,7 @@ Panel {
   readonly property var recentlyFired: hostWidget && hostWidget.recentlyFired ? hostWidget.recentlyFired : ({})
   readonly property string snoozeText: tr("notify.snooze", [snoozeMinutes])
   readonly property bool selectedSnoozable: recentlyFired !== null && canSnooze(selectedItem)
+  readonly property bool inspectorSnoozable: recentlyFired !== null && canSnooze(inspectorItem)
   readonly property bool nextUpSnoozable: recentlyFired !== null && canSnooze(nextUp)
 
   function canSnooze(event) {
@@ -390,6 +399,7 @@ Panel {
     // Dismissing mid-edit would otherwise leave the inputs up, waiting
     // behind a closed popup for the next time it opens.
     progress.cancelEditing()
+    root.layoutMenuOpen = false
     if (root.formOpen) root.closeForm()
   }
 
@@ -494,6 +504,7 @@ Panel {
     // ConfirmDialog takes no keys, so Escape is how a pending delete is
     // dropped from the keyboard.
     else if (root.pendingDelete !== null) root.pendingDelete = null
+    else if (root.layoutMenuOpen) root.layoutMenuOpen = false
     else if (root.formOpen) root.closeForm()
     else if (root.detailsOpen && root.selectedItem) root.detailsOpen = false
     else if (root.selectedEventId !== "") root.selectedEventId = ""
@@ -508,7 +519,10 @@ Panel {
     else if (t === "}") root.moveYear(1)
     else if (t === "t" || t === "T") root.goToToday()
     else if (t === "w" || t === "W") root.toggleWeekStart()
-    else if (t === "n" || t === "N") agenda.focusQuickAdd()
+    else if (t === "n" || t === "N") {
+      if (root.layout.showQuickAdd) agenda.focusQuickAdd()
+      else root.newEvent()
+    }
     else if (t === "e" || t === "E") root.activateItem(root.selectedItem)
     else if (t === "m" || t === "M") root.joinMeeting()
     else if (t === "o" || t === "O") root.openEvent(root.selectedItem)
@@ -859,8 +873,9 @@ Panel {
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec))
     // Fixed while the panel is up, whatever the day holds: the agenda and
     // the inspector scroll inside it, so moving between days never makes
-    // the popup jump.
-    contentHeight: panel.fittedContentHeight(Math.max(Style.space(640), leftContent.implicitHeight + root.columnPadding))
+    // the popup jump. The left column sets it, so it follows the layout.
+    // The floor keeps room for an agenda when the left column is short.
+    contentHeight: panel.fittedContentHeight(Math.max(Style.space(480), leftContent.implicitHeight + root.columnPadding))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -924,6 +939,7 @@ Panel {
               spacing: Style.space(14)
 
               HeroHeader {
+                id: hero
                 width: parent.width
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -935,10 +951,15 @@ Panel {
                   Model.isoWeek(root.today.getFullYear(), root.today.getMonth(), root.today.getDate())
                 ])
                 settingsOpen: root.settingsOpen
+                layoutOpen: root.layoutMenuOpen
                 canGoHome: root.selectedDayKey !== root.todayKey
                   || root.viewYear !== root.today.getFullYear() || root.viewMonth !== root.today.getMonth()
                 onHomeRequested: root.goToToday()
-                onSettingsToggled: root.settingsOpen = !root.settingsOpen
+                onSettingsToggled: {
+                  root.layoutMenuOpen = false
+                  root.settingsOpen = !root.settingsOpen
+                }
+                onLayoutToggled: root.layoutMenuOpen = !root.layoutMenuOpen
               }
 
               ProgressRails {
@@ -979,7 +1000,7 @@ Panel {
 
               CalendarFilters {
                 width: parent.width
-                visible: !root.settingsOpen && calendars.length > 0
+                visible: !root.settingsOpen && root.layout.showCalendarList && calendars.length > 0
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
@@ -991,7 +1012,7 @@ Panel {
 
               ShortcutLegend {
                 width: parent.width
-                visible: !root.settingsOpen
+                visible: !root.settingsOpen && root.layout.showShortcutLegend
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
@@ -1008,7 +1029,7 @@ Panel {
                 languageSetting: String(root.setting("language", "auto"))
                 calendars: root.knownCalendars
                 hiddenCalendars: root.hiddenCalendars
-                showYearProgress: root.showYearProgress
+                layout: root.layout
                 showWorkingLocation: root.showWorkingLocation
                 hideDeclined: root.hideDeclined
                 weekStartsMonday: root.weekStart === 1
@@ -1026,7 +1047,7 @@ Panel {
                 onSetupCommandCopyRequested: root.copySetupCommand()
                 onWriteSetupCopyRequested: root.copyWriteSetupCommand()
                 onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
-                onYearProgressToggled: root.persistSettings({ showYearProgress: !root.showYearProgress })
+                onLayoutPicked: function(values) { root.persistSettings(values) }
                 onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
                 onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
                 onWeekStartToggled: root.toggleWeekStart()
@@ -1061,6 +1082,9 @@ Panel {
               isToday: root.selectedIsToday
               canWrite: root.canWrite
               busy: root.writeBusy && !root.formOpen
+              showQuickAdd: root.layout.showQuickAdd
+              showNextUp: root.layout.showNextUp
+              showUpcomingDays: root.layout.showUpcomingDays
               dayHeading: root.dayHeading
               daySummary: Model.daySummary(root.daySections, root.language)
               sections: root.daySections
@@ -1115,25 +1139,37 @@ Panel {
               width: root.inspectorWidth
 
               EventDetails {
-                visible: !root.formOpen && root.selectedItem !== null
+                visible: !root.formOpen && root.inspectorItem !== null
                 width: parent.width
-                item: root.selectedItem || ({})
-                whenText: root.whenText(root.selectedItem)
+                item: root.inspectorItem || ({})
+                whenText: root.whenText(root.inspectorItem)
                 nowMs: root.nowMs
-                editable: root.isEditable(root.selectedItem) && !root.writeBusy
-                deletable: root.isEditable(root.selectedItem) && !root.writeBusy
-                snoozable: root.selectedSnoozable
+                editable: root.isEditable(root.inspectorItem) && !root.writeBusy
+                deletable: root.isEditable(root.inspectorItem) && !root.writeBusy
+                snoozable: root.inspectorSnoozable
                 snoozeText: root.snoozeText
+                closable: root.detailsMode !== "pinned"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
                 onCloseRequested: root.detailsOpen = false
-                onEditRequested: root.editEvent(root.selectedItem)
-                onDeleteRequested: root.deleteEvent(root.selectedItem)
-                onJoinRequested: root.joinItem(root.selectedItem)
-                onSnoozeRequested: root.snooze(root.selectedItem)
+                onEditRequested: root.editEvent(root.inspectorItem)
+                onDeleteRequested: root.deleteEvent(root.inspectorItem)
+                onJoinRequested: root.joinItem(root.inspectorItem)
+                onSnoozeRequested: root.snooze(root.inspectorItem)
                 onLinkOpened: function(url) { root.openExternally(url) }
                 onLinkCopied: function(url) { root.copyLink(url) }
+              }
+
+              // Pinned open on a day with nothing in it.
+              Text {
+                visible: !root.formOpen && root.inspectorItem === null
+                width: parent.width
+                text: root.tr("layout.nothingSelected")
+                color: Util.alpha(root.contentForeground, 0.6)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.bodySmall
+                wrapMode: Text.WordWrap
               }
 
               // A Loader, so every open gets a fresh form: the shell's menus
@@ -1162,6 +1198,71 @@ Panel {
               }
             }
           }
+        }
+      }
+    }
+
+    // The layout menu, under its button. A click outside it closes it.
+    MouseArea {
+      anchors.fill: parent
+      visible: root.layoutMenuOpen
+      onClicked: root.layoutMenuOpen = false
+    }
+
+    Rectangle {
+      visible: root.layoutMenuOpen
+      // The hero sits at the top left of the columns, so the menu follows
+      // them when they scroll.
+      x: Math.max(0, hero.width - width - columnsScroll.contentX)
+      y: hero.height + Style.space(6) - leftScroll.contentY
+      width: Style.space(260)
+      height: layoutMenuContent.implicitHeight + Style.space(12) * 2
+      radius: Style.cornerRadius
+      color: Color.popups.background
+      border.width: Style.spacing.hairline
+      border.color: Util.alpha(root.contentForeground, 0.25)
+
+      // Takes the clicks between the rows, so they do not reach the area
+      // behind and close the menu.
+      MouseArea { anchors.fill: parent }
+
+      Column {
+        id: layoutMenuContent
+        x: Style.space(12)
+        y: Style.space(12)
+        width: parent.width - Style.space(24)
+        spacing: Style.space(10)
+
+        Item {
+          width: parent.width
+          height: layoutTitle.height
+
+          Text {
+            id: layoutTitle
+            text: root.tr("layout.title")
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.baseline: layoutTitle.baseline
+            text: root.tr("layout.saved")
+            color: Util.alpha(root.contentForeground, 0.5)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        LayoutOptions {
+          width: parent.width
+          foreground: root.contentForeground
+          fontFamily: root.contentFontFamily
+          language: root.language
+          layout: root.layout
+          onLayoutPicked: function(values) { root.persistSettings(values) }
         }
       }
     }

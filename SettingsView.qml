@@ -16,7 +16,8 @@ Column {
 
   property var calendars: []
   property var hiddenCalendars: []
-  property bool showYearProgress: false
+  // Model.layoutFromSettings
+  property var layout: ({})
   property bool weekStartsMonday: true
   property bool showWorkingLocation: false
   property bool hideDeclined: false
@@ -35,7 +36,7 @@ Column {
   property bool writeSetupCopied: false
 
   signal calendarToggled(string calendarId)
-  signal yearProgressToggled()
+  signal layoutPicked(var values)
   signal weekStartToggled()
   signal workingLocationToggled()
   signal hideDeclinedToggled()
@@ -77,112 +78,28 @@ Column {
     wrapMode: Text.WordWrap
   }
 
-  // A row that reads as a switch without pulling in a control library the
-  // rest of this plugin does not use.
-  component ToggleRow: Rectangle {
-    id: toggle
-
-    property string label: ""
-    property string hint: ""
-    property bool checked: false
-    property color swatch: "transparent"
-
-    signal activated()
-
-    width: parent ? parent.width : 0
-    height: toggleBody.height + Style.space(6)
-    radius: Style.cornerRadius
-    color: hovered.hovered ? root.quiet(0.06) : "transparent"
-
-    HoverHandler { id: hovered }
-    TapHandler { onTapped: toggle.activated() }
-
-    Row {
-      id: toggleBody
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.leftMargin: Style.space(3)
-      anchors.rightMargin: Style.space(3)
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(4)
-
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(14)
-        text: toggle.checked ? "✓" : ""
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-      }
-
-      Rectangle {
-        anchors.verticalCenter: parent.verticalCenter
-        visible: toggle.swatch.a > 0
-        width: Style.space(4)
-        height: width
-        radius: width / 2
-        color: toggle.checked ? toggle.swatch : "transparent"
-        border.width: Style.spacing.hairline
-        border.color: toggle.swatch
-      }
-
-      Column {
-        anchors.verticalCenter: parent.verticalCenter
-        width: toggleBody.width - Style.space(26)
-        spacing: Style.space(1)
-
-        Text {
-          width: parent.width
-          // Calendar names come from the events file, so a shared calendar or
-          // a third-party writer chooses this string, not the plugin.
-          textFormat: Text.PlainText
-          text: toggle.label
-          color: toggle.checked ? root.foreground : root.muted
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          elide: Text.ElideRight
-        }
-
-        Text {
-          width: parent.width
-          visible: toggle.hint !== ""
-          text: toggle.hint
-          color: root.faint
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.WordWrap
-        }
-      }
-    }
+  // The shared rows, in this page's colours.
+  component SettingToggle: ToggleRow {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
   }
 
-  // One choice of several, as a pill.
-  component Pill: Rectangle {
-    id: pill
+  component SettingPill: ChoicePill {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+  }
 
-    property string label: ""
-    property bool active: false
+  // ---- Layout
 
-    signal activated()
+  SectionTitle { text: root.tr("layout.title") }
 
-    width: pillLabel.width + Style.space(8)
-    height: pillLabel.height + Style.space(4)
-    radius: height / 2
-    color: active ? root.quiet(0.14) : "transparent"
-    border.width: Style.spacing.hairline
-    border.color: active ? root.muted : root.quiet(0.36)
-
-    Text {
-      id: pillLabel
-      anchors.centerIn: parent
-      text: pill.label
-      color: pill.active ? root.foreground : root.faint
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-
-    HoverHandler { cursorShape: Qt.PointingHandCursor }
-    TapHandler { onTapped: pill.activated() }
+  LayoutOptions {
+    width: parent.width
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    language: root.language
+    layout: root.layout
+    onLayoutPicked: function(values) { root.layoutPicked(values) }
   }
 
   // ---- Calendars
@@ -197,7 +114,7 @@ Column {
   Repeater {
     model: root.calendars
 
-    ToggleRow {
+    SettingToggle {
       required property var modelData
 
       label: modelData.name
@@ -211,21 +128,21 @@ Column {
 
   SectionTitle { text: root.tr("settings.display") }
 
-  ToggleRow {
+  SettingToggle {
     label: root.tr("settings.weekMonday")
     hint: root.tr("settings.weekMondayHint")
     checked: root.weekStartsMonday
     onActivated: root.weekStartToggled()
   }
 
-  ToggleRow {
+  SettingToggle {
     label: root.tr("settings.workingLocation")
     hint: root.tr("settings.workingLocationHint")
     checked: root.showWorkingLocation
     onActivated: root.workingLocationToggled()
   }
 
-  ToggleRow {
+  SettingToggle {
     // Every row on this page reads "checked means shown". Phrasing this one as
     // "Hide ..." inverted that and made the page contradict itself.
     label: root.tr("settings.declined")
@@ -236,20 +153,13 @@ Column {
 
   // The panel cannot turn writing on by itself: it needs a Google sign-in
   // in a terminal. So the row shows the state and hands over the command.
-  ToggleRow {
+  SettingToggle {
     label: root.tr("settings.write")
     hint: root.tr(root.canWrite
       ? "settings.writeOn"
       : root.writeSetupCopied ? "settings.writeCopied" : "settings.writeOff")
     checked: root.canWrite
     onActivated: if (!root.canWrite) root.writeSetupCopyRequested()
-  }
-
-  ToggleRow {
-    label: root.tr("settings.progress")
-    hint: root.tr("settings.progressHint")
-    checked: root.showYearProgress
-    onActivated: root.yearProgressToggled()
   }
 
   // ---- Language
@@ -265,7 +175,7 @@ Column {
     Repeater {
       model: Strings.languageOptions(root.language)
 
-      Pill {
+      SettingPill {
         required property var modelData
         label: modelData.label
         active: modelData.value === root.languageSetting
@@ -287,7 +197,7 @@ Column {
     Repeater {
       model: [0, 5, 15, 30, 60]
 
-      Pill {
+      SettingPill {
         required property int modelData
         label: modelData === 0 ? root.tr("settings.never") : root.tr("settings.minutes", [modelData])
         active: modelData === root.announceLeadMinutes

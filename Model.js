@@ -1090,6 +1090,81 @@ function notificationArg(value) {
   return /^-/.test(s) ? "\u2060" + s : s
 }
 
+// ---- Layout: which blocks the panel shows
+
+// "click" opens the details column on a click, "pinned" keeps it open and
+// "off" never opens it. The edit form still opens there in every mode.
+var DETAILS_MODES = ["click", "pinned", "off"]
+var LAYOUT_PRESET_NAMES = ["minimal", "standard", "full"]
+// Standard is the panel as it was before these settings existed, so a
+// missing key changes nothing for someone who never opened the menu.
+var LAYOUT_PRESETS = {
+  minimal: {
+    detailsColumn: "off", showYearProgress: false, showCalendarList: false,
+    showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
+  },
+  standard: {
+    detailsColumn: "click", showYearProgress: false, showCalendarList: true,
+    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
+  },
+  full: {
+    detailsColumn: "pinned", showYearProgress: true, showCalendarList: true,
+    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
+  }
+}
+
+// A copy, so the caller can persist or change it without touching the preset.
+function layoutPreset(name) {
+  var preset = LAYOUT_PRESETS[name] || LAYOUT_PRESETS.standard
+  var copy = {}
+  for (var key in preset) copy[key] = preset[key]
+  return copy
+}
+
+// The stored settings as a full layout. shell.json is edited by hand too,
+// so a value of the wrong type falls back to the standard preset.
+function layoutFromSettings(settings) {
+  var stored = settings || {}
+  var layout = layoutPreset("standard")
+  for (var key in layout) {
+    var value = stored[key]
+    if (key === "detailsColumn") {
+      if (DETAILS_MODES.indexOf(value) !== -1) layout[key] = value
+    } else if (typeof value === "boolean") {
+      layout[key] = value
+    }
+  }
+  return layout
+}
+
+// The preset a layout matches exactly, or "" when it was set by hand.
+function layoutPresetName(layout) {
+  for (var i = 0; i < LAYOUT_PRESET_NAMES.length; i++) {
+    var preset = LAYOUT_PRESETS[LAYOUT_PRESET_NAMES[i]]
+    var same = true
+    for (var key in preset) if (layout[key] !== preset[key]) same = false
+    if (same) return LAYOUT_PRESET_NAMES[i]
+  }
+  return ""
+}
+
+// A pinned column stays open on a day with nothing to show, so the panel
+// keeps its width while you move between days.
+function detailsVisible(mode, opened, hasItem) {
+  if (mode === "off") return false
+  if (mode === "pinned") return true
+  return opened && hasItem
+}
+
+// What the details column shows. Pinned with nothing selected, it shows
+// the next event, else the day's first one.
+function inspectorItem(mode, selected, nextUp, items) {
+  if (selected) return selected
+  if (mode !== "pinned") return null
+  if (nextUp) return nextUp
+  return items && items.length > 0 ? items[0] : null
+}
+
 // ---- Sync state
 
 var STALE_INTERVAL_MULTIPLIER = 4

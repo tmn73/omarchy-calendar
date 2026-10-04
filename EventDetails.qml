@@ -19,6 +19,8 @@ Column {
   property bool deletable: false
   property bool snoozable: false
   property string snoozeText: ""
+  // False when the column is pinned open: it has nothing to close then.
+  property bool closable: true
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
@@ -83,7 +85,7 @@ Column {
 
     Row {
       anchors.left: parent.left
-      anchors.right: closeButton.left
+      anchors.right: closeButton.visible ? closeButton.left : parent.right
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(6)
 
@@ -107,10 +109,13 @@ Column {
       }
     }
 
+    // Bordered, so it reads as a button and not as a stray glyph.
     PanelActionButton {
       id: closeButton
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
+      visible: root.closable
+      bordered: true
       iconText: "󰅖"
       tooltipText: root.tr("insp.close")
       foreground: root.foreground

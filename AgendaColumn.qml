@@ -21,6 +21,11 @@ Item {
   property bool canWrite: false
   property bool busy: false
 
+  // The blocks the layout can hide.
+  property bool showQuickAdd: true
+  property bool showNextUp: true
+  property bool showUpcomingDays: true
+
   property string dayHeading: ""
   property string daySummary: ""
   // Model.daySections for the selected day.
@@ -87,6 +92,7 @@ Item {
     QuickAdd {
       id: quickAdd
       width: parent.width
+      visible: root.showQuickAdd
       foreground: root.foreground
       fontFamily: root.fontFamily
       language: root.language
@@ -98,7 +104,7 @@ Item {
 
     NextUpCard {
       width: parent.width
-      item: root.nextUp
+      item: root.showNextUp ? root.nextUp : null
       nowMs: root.nowMs
       timeFormat: root.timeFormat
       snoozable: root.nextUpSnoozable
@@ -118,7 +124,7 @@ Item {
     anchors.right: parent.right
     anchors.top: header.bottom
     anchors.bottom: parent.bottom
-    anchors.topMargin: Style.space(14)
+    anchors.topMargin: header.height > 0 ? Style.space(14) : 0
     contentWidth: width
     contentHeight: dayColumn.implicitHeight + (toast.visible ? toast.height + Style.space(12) : 0)
     clip: true
@@ -291,7 +297,7 @@ Item {
       UpcomingDays {
         id: upcomingDays
         width: parent.width
-        days: root.upcoming
+        days: root.showUpcomingDays ? root.upcoming : []
         timeFormat: root.timeFormat
         foreground: root.foreground
         fontFamily: root.fontFamily
