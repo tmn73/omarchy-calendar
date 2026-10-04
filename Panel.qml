@@ -124,6 +124,21 @@ Panel {
   // would still serve the old value when a second click arrives.
   property var hiddenCalendars: []
   readonly property var knownCalendars: Model.calendarsInDocument(eventDoc)
+  // Events per calendar, hidden ones included, for Settings. By id: a
+  // multi-day event is one row per day.
+  readonly property var calendarCounts: {
+    var seen = {}
+    var counts = {}
+    var events = (root.eventDoc && root.eventDoc.events) || []
+    for (var i = 0; i < events.length; i++) {
+      var event = events[i]
+      var key = event.calendarId + "|" + event.id
+      if (seen[key]) continue
+      seen[key] = true
+      counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
+    }
+    return counts
+  }
 
   // ---- Writing. The sync lists the calendars the panel may change; with no
   //      list, quick add goes to Google Calendar in the browser instead.
@@ -928,8 +943,10 @@ Panel {
               width: root.settingsOpen ? root.settingsWidth : grid.width
               spacing: Style.space(14)
 
+              // Settings bring their own header, with the way back.
               HeroHeader {
                 id: hero
+                visible: !root.settingsOpen
                 width: parent.width
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -1018,11 +1035,15 @@ Panel {
                 languageSetting: String(root.setting("language", "auto"))
                 calendars: root.knownCalendars
                 hiddenCalendars: root.hiddenCalendars
+                calendarCounts: root.calendarCounts
                 layout: root.layout
                 showWorkingLocation: root.showWorkingLocation
                 hideDeclined: root.hideDeclined
                 weekStartsMonday: root.weekStart === 1
                 announceLeadMinutes: root.setting("announceLeadMinutes", 15)
+                duringEvent: String(root.setting("duringEvent", "untilEnd"))
+                nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
+                reminders: root.setting("reminders", true) !== false
                 syncState: root.syncState
                 setupCommand: root.setupCommand
                 setupCommandCopied: root.setupCommandCopied
@@ -1035,12 +1056,12 @@ Panel {
                   : ""
                 onSetupCommandCopyRequested: root.copySetupCommand()
                 onWriteSetupCopyRequested: root.copyWriteSetupCommand()
+                onCloseRequested: root.settingsOpen = false
+                onPicked: function(values) { root.persistSettings(values) }
                 onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
-                onLayoutPicked: function(values) { root.persistSettings(values) }
                 onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
                 onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
                 onWeekStartToggled: root.toggleWeekStart()
-                onLeadMinutesPicked: function(minutes) { root.persistSettings({ announceLeadMinutes: minutes }) }
                 onLanguagePicked: function(value) { root.persistSettings({ language: value }) }
               }
             }

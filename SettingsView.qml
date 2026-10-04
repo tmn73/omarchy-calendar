@@ -4,273 +4,279 @@ import qs.Ui
 
 import "Strings.js" as Strings
 
-// The calendar's settings page, in two columns: what the panel shows on the
-// left, which calendars and how they read on the right. It reads state and
-// emits intent; the panel owns every value and is the only writer of
-// shell.json.
-Row {
+// The calendar's settings page: a header with the way back, the sections
+// down the left, and one section at a time on the right, scrolling inside a
+// fixed height so the panel keeps its size from one section to the next.
+// It reads state and emits intent; the panel owns every value and is the
+// only writer of shell.json.
+Item {
   id: root
 
   property color foreground: "white"
   property string fontFamily: ""
   // The resolved display language ("en" | "pt").
   property string language: "en"
+  property string section: "panel"
 
-  property var calendars: []
-  property var hiddenCalendars: []
+  // Panel
   // Model.layoutFromSettings
   property var layout: ({})
-  property bool weekStartsMonday: true
+
+  // Bar
+  property int announceLeadMinutes: 15
+  property string duringEvent: "untilEnd"
+  property string nextDuringEvent: "announce"
+  property bool reminders: true
+
+  // Calendars
+  property var calendars: []
+  property var hiddenCalendars: []
+  property var calendarCounts: ({})
   property bool showWorkingLocation: false
   property bool hideDeclined: false
-  property int announceLeadMinutes: 15
+
+  // General
   // The stored setting ("auto" | "en" | "pt"), not the resolved language.
   property string languageSetting: "auto"
-
+  property bool weekStartsMonday: true
+  property bool canWrite: false
+  property bool writeSetupCopied: false
   property string syncedAt: ""
   property string sourceLabel: ""
   property int eventCount: 0
   property string syncState: "missing"
   property string setupCommand: ""
   property bool setupCommandCopied: false
-  // True when the events file lists a calendar the panel may write to.
-  property bool canWrite: false
-  property bool writeSetupCopied: false
 
+  signal closeRequested()
+  // The settings to store as they are, for example { reminders: false }.
+  signal picked(var values)
   signal calendarToggled(string calendarId)
-
-  // Folded by default: most visits to this page are not about calendars.
-  property bool calendarsExpanded: false
-  readonly property int hiddenCount: calendars.filter(function(calendar) {
-    return hiddenCalendars.indexOf(String(calendar.id)) !== -1
-  }).length
-  signal layoutPicked(var values)
-  signal weekStartToggled()
   signal workingLocationToggled()
   signal hideDeclinedToggled()
-  signal leadMinutesPicked(int minutes)
+  signal weekStartToggled()
   signal languagePicked(string value)
   signal setupCommandCopyRequested()
   signal writeSetupCopyRequested()
 
-  // Same fade as Panel.quiet(): Qt.darker only reads as quieter on a dark
-  // background, and on a light theme it raises contrast instead.
-  function quiet(amount) {
-    return Qt.rgba(foreground.r, foreground.g, foreground.b, amount)
-  }
+  readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
+  readonly property int visibleCalendars: calendars.filter(function(calendar) {
+    return hiddenCalendars.indexOf(String(calendar.id)) === -1
+  }).length
+  readonly property var sections: [
+    { id: "panel", icon: "󰕭", label: "settings.sectionPanel" },
+    { id: "bar", icon: "󰅐", label: "settings.sectionBar" },
+    { id: "calendars", icon: "󰃭", label: "settings.calendars" },
+    { id: "general", icon: "󰒓", label: "settings.sectionGeneral" }
+  ]
 
   function tr(key, args) {
     return Strings.tr(root.language, key, args)
   }
 
-  readonly property color muted: quiet(0.68)
-  readonly property color faint: quiet(0.50)
+  implicitHeight: Style.space(500)
 
-  // Two columns: the panel gives Settings its whole width.
-  spacing: Style.space(24)
-  readonly property real columnWidth: (width - spacing) / 2
+  // A new section starts at its top.
+  onSectionChanged: content.contentY = 0
 
-  component SectionTitle: Text {
-    width: parent ? parent.width : 0
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    font.letterSpacing: 1
-    font.bold: true
-    font.capitalization: Font.AllUppercase
-  }
+  Item {
+    id: header
+    width: parent.width
+    height: backButton.height
 
-  component Note: Text {
-    width: parent ? parent.width : 0
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
-  // The shared rows, in this page's colours.
-  component SettingToggle: ToggleRow {
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-  }
-
-  // One choice of several: the kit's button, as in its ButtonGroup, but
-  // in a Flow so a long row wraps.
-  component SettingChoice: Button {
-    bordered: true
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    fontSize: Style.font.bodySmall
-  }
-
-  Column {
-    width: root.columnWidth
-    spacing: Style.space(10)
-
-    // ---- Layout
-
-    SectionTitle { text: root.tr("layout.title") }
-
-    LayoutOptions {
-      width: parent.width
+    SecondaryButton {
+      id: backButton
+      iconText: "󰅁"
+      tooltipText: root.tr("nav.backToCalendar")
       foreground: root.foreground
       fontFamily: root.fontFamily
-      language: root.language
-      layout: root.layout
-      onLayoutPicked: function(values) { root.layoutPicked(values) }
+      onClicked: root.closeRequested()
     }
-    // ---- Language
 
-    SectionTitle { text: root.tr("settings.language") }
-
-    Note { text: root.tr("settings.languageHint") }
-
-    Flow {
-      width: parent.width
-      spacing: Style.spacing.md
-
-      Repeater {
-        model: Strings.languageOptions(root.language)
-
-        SettingChoice {
-          required property var modelData
-          text: modelData.label
-          selected: modelData.value === root.languageSetting
-          onClicked: root.languagePicked(modelData.value)
-        }
-      }
+    Text {
+      anchors.left: backButton.right
+      anchors.leftMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.tr("nav.settings")
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.heading
+      font.bold: true
     }
-    // ---- Bar
 
-    SectionTitle { text: root.tr("settings.barLabel") }
-
-    Note { text: root.tr("settings.barLabelHint") }
-
-    Flow {
-      width: parent.width
-      spacing: Style.spacing.md
-
-      Repeater {
-        model: [0, 5, 15, 30, 60]
-
-        SettingChoice {
-          required property int modelData
-          text: modelData === 0 ? root.tr("settings.never") : root.tr("settings.minutes", [modelData])
-          selected: modelData === root.announceLeadMinutes
-          onClicked: root.leadMinutesPicked(modelData)
-        }
-      }
+    Text {
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.tr("layout.saved")
+      color: root.faint
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 
   Column {
-    width: root.columnWidth
-    spacing: Style.space(10)
-
-    // ---- Calendars, folded under a one-line summary.
-
-    FoldHeader {
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      expanded: root.calendarsExpanded
-      text: {
-        var parts = [root.tr("settings.calendars"), String(root.calendars.length)]
-        if (root.hiddenCount > 0) parts.push(Strings.trn(root.language, "settings.hiddenCalendars", root.hiddenCount))
-        return parts.join(" · ")
-      }
-      onToggled: root.calendarsExpanded = !root.calendarsExpanded
-    }
-
-    Note {
-      visible: root.calendars.length === 0
-      text: root.tr("settings.noCalendars")
-    }
+    id: nav
+    anchors.top: header.bottom
+    anchors.topMargin: Style.space(16)
+    anchors.left: parent.left
+    width: Style.space(140)
+    spacing: Style.space(2)
 
     Repeater {
-      model: root.calendars
+      model: root.sections
 
-      SettingToggle {
+      Rectangle {
+        id: navItem
         required property var modelData
+        readonly property bool current: modelData.id === root.section
 
-        visible: root.calendarsExpanded
-        label: modelData.name
-        swatch: modelData.color
-        checked: root.hiddenCalendars.indexOf(modelData.id) === -1
-        onActivated: root.calendarToggled(modelData.id)
+        width: nav.width
+        height: Style.space(30)
+        radius: Style.cornerRadius
+        color: current
+          ? Util.alpha(root.foreground, 0.10)
+          : navMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+
+        Text {
+          id: navIcon
+          anchors.left: parent.left
+          anchors.leftMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          text: navItem.modelData.icon
+          color: navItem.current ? root.foreground : root.faint
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.icon
+        }
+
+        Text {
+          anchors.left: navIcon.right
+          anchors.leftMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.tr(navItem.modelData.label)
+          color: navItem.current ? root.foreground : Util.alpha(root.foreground, 0.75)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: navItem.current
+        }
+
+        Text {
+          visible: navItem.modelData.id === "calendars" && root.calendars.length > 0
+          anchors.right: parent.right
+          anchors.rightMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          text: String(root.visibleCalendars)
+          color: root.faint
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
+        MouseArea {
+          id: navMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.section = navItem.modelData.id
+        }
       }
     }
+  }
 
-    // ---- Display
+  Rectangle {
+    id: divider
+    anchors.left: nav.right
+    anchors.leftMargin: Style.space(12)
+    anchors.top: nav.top
+    anchors.bottom: parent.bottom
+    width: Style.spacing.hairline
+    color: Util.alpha(root.foreground, 0.10)
+  }
 
-    SectionTitle { text: root.tr("settings.display") }
+  Flickable {
+    id: content
+    anchors.left: divider.right
+    anchors.leftMargin: Style.space(16)
+    anchors.right: parent.right
+    anchors.top: nav.top
+    anchors.bottom: parent.bottom
+    contentWidth: width
+    contentHeight: sectionColumn.implicitHeight
+    clip: true
+    boundsBehavior: Flickable.StopAtBounds
+    interactive: contentHeight > height
 
-    SettingToggle {
-      label: root.tr("settings.weekMonday")
-      hint: root.tr("settings.weekMondayHint")
-      checked: root.weekStartsMonday
-      onActivated: root.weekStartToggled()
-    }
+    // One section shows at a time; the hidden ones take no room.
+    Column {
+      id: sectionColumn
+      // Room on the right for the scroll thumb.
+      width: content.width - Style.space(10)
 
-    SettingToggle {
-      label: root.tr("settings.workingLocation")
-      hint: root.tr("settings.workingLocationHint")
-      checked: root.showWorkingLocation
-      onActivated: root.workingLocationToggled()
-    }
-
-    SettingToggle {
-      // Every row on this page reads "checked means shown". Phrasing this one as
-      // "Hide ..." inverted that and made the page contradict itself.
-      label: root.tr("settings.declined")
-      hint: root.tr("settings.declinedHint")
-      checked: !root.hideDeclined
-      onActivated: root.hideDeclinedToggled()
-    }
-
-    // The panel cannot turn writing on by itself: it needs a Google sign-in
-    // in a terminal. So the row shows the state and hands over the command.
-    SettingToggle {
-      label: root.tr("settings.write")
-      hint: root.tr(root.canWrite
-        ? "settings.writeOn"
-        : root.writeSetupCopied ? "settings.writeCopied" : "settings.writeOff")
-      checked: root.canWrite
-      onActivated: if (!root.canWrite) root.writeSetupCopyRequested()
-    }
-    // ---- Sync status. Read-only on purpose: changing the Google account is an
-    //      OAuth browser flow, which belongs to sync/setup and not to a popup
-    //      in a status bar. What belongs here is knowing whether it is working.
-
-    SectionTitle { text: root.tr("settings.sync") }
-
-    Note {
-      readonly property bool missing: root.syncState === "missing"
-
-      // Concatenates sourceLabel, which is whatever wrote the events file.
-      textFormat: Text.PlainText
-      color: missing && syncHover.hovered ? root.foreground : root.faint
-      text: {
-        if (missing)
-          return root.tr(root.setupCommandCopied ? "sync.copied" : "settings.syncMissing", [root.setupCommand])
-        if (root.syncState === "version") return root.tr("settings.syncVersion")
-
-        var lines = [Strings.trn(root.language, "settings.syncEvents", root.eventCount, [root.eventCount, root.sourceLabel])]
-        lines.push(root.syncState === "stale"
-          ? root.tr("settings.syncStale")
-          : root.tr("settings.syncLast", [root.syncedAt]))
-        return lines.join("\n")
+      LayoutOptions {
+        visible: root.section === "panel"
+        width: parent.width
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        language: root.language
+        layout: root.layout
+        showHints: true
+        onLayoutPicked: function(values) { root.picked(values) }
       }
 
-      HoverHandler {
-        id: syncHover
-        enabled: parent.missing
-        cursorShape: Qt.PointingHandCursor
+      BarSettings {
+        visible: root.section === "bar"
+        width: parent.width
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        language: root.language
+        leadMinutes: root.announceLeadMinutes
+        duringEvent: root.duringEvent
+        nextDuringEvent: root.nextDuringEvent
+        reminders: root.reminders
+        onPicked: function(values) { root.picked(values) }
       }
 
-      TapHandler {
-        enabled: parent.missing
-        onTapped: root.setupCommandCopyRequested()
+      CalendarSettings {
+        visible: root.section === "calendars"
+        width: parent.width
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        language: root.language
+        calendars: root.calendars
+        hiddenCalendars: root.hiddenCalendars
+        counts: root.calendarCounts
+        showWorkingLocation: root.showWorkingLocation
+        hideDeclined: root.hideDeclined
+        onCalendarToggled: function(calendarId) { root.calendarToggled(calendarId) }
+        onWorkingLocationToggled: root.workingLocationToggled()
+        onHideDeclinedToggled: root.hideDeclinedToggled()
+      }
+
+      GeneralSettings {
+        visible: root.section === "general"
+        width: parent.width
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        language: root.language
+        languageSetting: root.languageSetting
+        weekStartsMonday: root.weekStartsMonday
+        canWrite: root.canWrite
+        writeSetupCopied: root.writeSetupCopied
+        syncState: root.syncState
+        setupCommand: root.setupCommand
+        setupCommandCopied: root.setupCommandCopied
+        eventCount: root.eventCount
+        sourceLabel: root.sourceLabel
+        syncedAt: root.syncedAt
+        onLanguagePicked: function(value) { root.languagePicked(value) }
+        onWeekStartToggled: root.weekStartToggled()
+        onWriteSetupCopyRequested: root.writeSetupCopyRequested()
+        onSetupCommandCopyRequested: root.setupCommandCopyRequested()
       }
     }
+  }
+
+  ScrollHint {
+    anchors.fill: content
+    flickable: content
+    foreground: root.foreground
   }
 }

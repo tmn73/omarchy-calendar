@@ -52,8 +52,12 @@ time away for an event title would be a downgrade you pay for all day.
   Meet, notifications, colour. Off by default, see
   [Create and edit events](#create-and-edit-events)
 - **The bar escalates** as a meeting nears: a quiet title, then the accent
-  colour and a Join chip, then the urgent colour once it starts. A `+1`
-  shows when two things start at once. Middle click joins
+  colour and a Join chip, then "Now" in the urgent colour until it ends, or
+  for its first 2 minutes if you prefer. When the next event is due, it
+  takes over, unless you keep the current one. A `+1` shows when two things
+  start at once. Middle click joins
+- **Settings in four sections**: Panel, Bar, Calendars and General, one at
+  a time, each setting with a line that says what it does
 - **Desktop reminders** from your Google notification times (10 minutes for
   meetings without one). Clicking one joins the call, also from the
   notification history. A shell reload never repeats them. See

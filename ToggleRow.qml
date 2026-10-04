@@ -3,7 +3,7 @@ import qs.Commons
 import qs.Ui
 
 // A labelled on/off row: an optional colour swatch, the label with a hint
-// under it, and the kit's switch at the right. The whole row takes the
+// under it, an optional note (a count) and the kit's switch at the right. The whole row takes the
 // click, so the switch is not interactive on its own.
 Rectangle {
   id: toggle
@@ -14,6 +14,7 @@ Rectangle {
   property string hint: ""
   property bool checked: false
   property color swatch: "transparent"
+  property string note: ""
 
   signal activated()
 
@@ -51,7 +52,7 @@ Rectangle {
     id: texts
     anchors.left: swatchDot.visible ? swatchDot.right : parent.left
     anchors.leftMargin: Style.space(swatchDot.visible ? 7 : 4)
-    anchors.right: toggleSwitch.left
+    anchors.right: noteText.left
     anchors.rightMargin: Style.space(8)
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(1)
@@ -77,6 +78,17 @@ Rectangle {
       font.pixelSize: Style.font.caption
       wrapMode: Text.WordWrap
     }
+  }
+
+  Text {
+    id: noteText
+    anchors.right: toggleSwitch.left
+    anchors.rightMargin: toggle.note !== "" ? Style.space(8) : 0
+    anchors.verticalCenter: parent.verticalCenter
+    text: toggle.note
+    color: toggle.faint
+    font.family: toggle.fontFamily
+    font.pixelSize: Style.font.caption
   }
 
   ToggleSwitch {

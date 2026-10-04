@@ -6,8 +6,9 @@ import "Model.js" as Model
 import "Strings.js" as Strings
 
 // What the panel shows: a preset, where the agenda sits, and one switch per
-// block. The layout menu and Settings both host it. It reads the layout and
-// emits the settings to store; the panel owns every value.
+// block. The layout menu and the Panel section of Settings both host it; the
+// menu leaves the hints out to stay short. It reads the layout and emits the
+// settings to store; the panel owns every value.
 Column {
   id: root
 
@@ -16,15 +17,19 @@ Column {
   property string language: "en"
   // Model.layoutFromSettings
   property var layout: Model.layoutPreset("standard")
+  property bool showHints: false
 
   // The settings to store, for example { showQuickAdd: false }.
   signal layoutPicked(var values)
 
   readonly property string presetName: Model.layoutPresetName(layout)
-  readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
 
   function tr(key, args) {
     return Strings.tr(root.language, key, args)
+  }
+
+  function hint(key) {
+    return root.showHints ? root.tr(key) : ""
   }
 
   function pick(key, value) {
@@ -33,49 +38,14 @@ Column {
     root.layoutPicked(values)
   }
 
-  function options(pairs) {
-    return pairs.map(function(pair) { return { value: pair[0], label: root.tr(pair[1]) } })
+  spacing: Style.space(8)
+
+  component Caption: SettingsCaption {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
   }
 
-  spacing: Style.space(6)
-
-  component Caption: Text {
-    width: parent ? parent.width : 0
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
-  // One of several: the kit's buttons, as in its ButtonGroup, but in a Flow
-  // so a long label wraps to the next line instead of running out of the
-  // menu. Not Tab stops: the panel's own keys drive the days meanwhile.
-  component Choices: Flow {
-    id: choices
-
-    property var options: []
-    property string value: ""
-
-    signal chosen(string value)
-
-    width: parent ? parent.width : 0
-    spacing: Style.spacing.md
-
-    Repeater {
-      model: choices.options
-
-      Button {
-        required property var modelData
-        text: modelData.label
-        selected: modelData.value === choices.value
-        bordered: true
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.bodySmall
-        onClicked: choices.chosen(modelData.value)
-      }
-    }
-  }
+  component Gap: Item { width: 1; height: Style.space(8) }
 
   component BlockSwitch: ToggleRow {
     property string key: ""
@@ -85,35 +55,44 @@ Column {
     onActivated: root.pick(key, !checked)
   }
 
-  Choices {
-    options: root.options(Model.LAYOUT_PRESET_NAMES.map(function(name) { return [name, "layout." + name] }))
+  Caption {
+    text: root.tr("layout.preset")
+    note: root.presetName === "" ? root.tr("layout.custom") : ""
+    noteColor: Color.accent
+  }
+
+  ChoiceGroup {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hint: root.hint("layout.presetHint")
+    options: Model.LAYOUT_PRESET_NAMES.map(function(name) { return { value: name, label: root.tr("layout." + name) } })
     // Empty for a layout set by hand, so no preset reads as chosen.
     value: root.presetName
     onChosen: function(value) { root.layoutPicked(Model.layoutPreset(value)) }
   }
 
-  Caption {
-    visible: root.presetName === ""
-    text: root.tr("layout.custom")
-  }
-
-  Item { width: 1; height: Style.space(4) }
+  Gap {}
 
   Caption { text: root.tr("layout.calendarSection") }
-  BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress") }
-  BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend") }
+  BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress"); hint: root.hint("layout.progressHint") }
+  BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend"); hint: root.hint("layout.shortcutLegendHint") }
 
-  Item { width: 1; height: Style.space(4) }
+  Gap {}
 
   Caption { text: root.tr("agenda.title") }
 
-  Choices {
-    options: root.options([["beside", "layout.agendaBeside"], ["below", "layout.agendaBelow"]])
+  ChoiceGroup {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    options: [
+      { value: "beside", label: root.tr("layout.agendaBeside") },
+      { value: "below", label: root.tr("layout.agendaBelow") }
+    ]
     value: root.layout.agendaPlacement
     onChosen: function(value) { root.pick("agendaPlacement", value) }
   }
 
-  BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label") }
-  BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp") }
-  BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming") }
+  BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label"); hint: root.hint("layout.quickAddHint") }
+  BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp"); hint: root.hint("layout.nextUpHint") }
+  BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming"); hint: root.hint("layout.upcomingHint") }
 }
