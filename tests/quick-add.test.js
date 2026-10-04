@@ -318,3 +318,26 @@ test('googleTemplateUrl encodes the title so safeUrl accepts it', () => {
 test('googleTemplateUrl is empty without a parse', () => {
   assert.equal(Model.googleTemplateUrl(null), '')
 })
+
+const understood = (text, lang = 'en') =>
+  Model.quickAddUnderstood(text, NOW, lang).map((f) => `${f.kind}:${f.text}`)
+
+test('quickAddUnderstood lists the words read as something else than the title, in typed order', () => {
+  assert.deepEqual(understood('call with Ana tomorrow 2pm for 45m'),
+    ['meet:call', 'date:tomorrow', 'time:2pm', 'duration:for 45m'])
+  assert.deepEqual(understood('call com Ana amanhã 14h por 45min', 'pt'),
+    ['meet:call', 'date:amanhã', 'time:14h', 'duration:por 45min'])
+})
+
+test('quickAddUnderstood keeps a leading word with what it introduces', () => {
+  assert.deepEqual(understood('Dentist next monday at 3pm'), ['date:next monday', 'time:at 3pm'])
+})
+
+test('quickAddUnderstood reads all day', () => {
+  assert.deepEqual(understood('Offsite friday all day'), ['date:friday', 'allDay:all day'])
+})
+
+test('quickAddUnderstood is empty when only a title was typed, or nothing', () => {
+  assert.deepEqual(understood('Lunch with Bea'), [])
+  assert.deepEqual(understood('   '), [])
+})

@@ -1663,34 +1663,83 @@ function readDuration(scanner, hasTime) {
   return minutes
 }
 
+// The stretches of `before` that are blank in `after`, as [{ at, text }]. A
+// space between two blanked words keeps them together: "for 45m".
+function blankedSince(before, after) {
+  var runs = []
+  var start = -1
+  for (var i = 0; i <= before.length; i++) {
+    var gone = i < before.length && before[i] !== " " && after[i] === " "
+    var joins = i < before.length && before[i] === " " && start >= 0
+      && i + 1 < before.length && before[i + 1] !== " " && after[i + 1] === " "
+    if (gone || joins) {
+      if (start < 0) start = i
+    } else if (start >= 0) {
+      runs.push({ at: start, text: before.substring(start, i) })
+      start = -1
+    }
+  }
+  return runs
+}
+
 // { title, dateKey, endDateKey, allDay, startTime, endTime,
 //   durationMinutes, meet }, or null when there is no title to create.
 // `now` is a Date or ms. No time means an all-day event (startTime and
 // endTime "", durationMinutes 0); a time with no length lasts an hour.
 function parseQuickAdd(input, now, lang) {
+  return scanQuickAdd(input, now, lang).parsed
+}
+
+// The words quick add read as something else than the title, in the order
+// they were typed: [{ text, kind }], kind one of "date", "time",
+// "duration", "allDay" and "meet". The panel shows them, so the user can
+// see what was understood. A meeting word stays in the title too.
+function quickAddUnderstood(input, now, lang) {
+  return scanQuickAdd(input, now, lang).found
+}
+
+function scanQuickAdd(input, now, lang) {
   var raw = text(input).trim()
-  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return null
+  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return { parsed: null, found: [] }
 
   var nowDate = typeof now === "number" ? new Date(now) : now
   var today = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate())
   var scanner = quickScanner(raw)
-  var meet = QUICK_PATTERNS.meet.test(scanner.folded)
+  var found = []
+  var meetMatch = scanner.folded.match(QUICK_PATTERNS.meet)
+  var meet = meetMatch !== null
+  if (meet) found.push({ at: meetMatch.index + 1,
+    text: scanner.original.substring(meetMatch.index + 1, meetMatch.index + meetMatch[0].length), kind: "meet" })
+
+  // Each reading blanks what it took; the difference is what it understood.
+  var before = scanner.original
+  function note(kind) {
+    var runs = blankedSince(before, scanner.original)
+    for (var r = 0; r < runs.length; r++) found.push({ at: runs[r].at, text: runs[r].text, kind: kind })
+    before = scanner.original
+  }
 
   var forcedAllDay = take(scanner, QUICK_PATTERNS.allDay, function() { return true }) === true
+  note("allDay")
   var date = readDate(scanner, today, lang) || today
+  note("date")
   var times = readTimes(scanner)
+  note("time")
   var length = readDuration(scanner, times !== null)
+  note("duration")
+  found.sort(function(a, b) { return a.at - b.at })
+  found = found.map(function(f) { return { text: f.text, kind: f.kind } })
 
   // Punctuation stranded by a blanked phrase ("Trip [7 p.m]." ) goes too.
   var title = scanner.original.replace(/(^|\s)[.,;:!?]+(?=\s|$)/g, "$1").replace(/\s+/g, " ")
     .replace(/\s+([,;:.!?])/g, "$1")
     .replace(/^[\s,;:·\-\u2013\u2014]+|[\s,;:·\-\u2013\u2014]+$/g, "")
-  if (title === "") return null
+  if (title === "") return { parsed: null, found: found }
 
   var key = keyForDate(date)
   if (forcedAllDay || times === null)
-    return { title: title, dateKey: key, endDateKey: key, allDay: true,
-             startTime: "", endTime: "", durationMinutes: 0, meet: meet }
+    return { found: found, parsed: { title: title, dateKey: key, endDateKey: key, allDay: true,
+             startTime: "", endTime: "", durationMinutes: 0, meet: meet } }
 
   var duration = times.end !== null
     ? ((times.end - times.start + 24 * 60 - 1) % (24 * 60)) + 1
@@ -1699,9 +1748,9 @@ function parseQuickAdd(input, now, lang) {
   // Ending exactly at midnight stays on the start date, as the event form
   // reads "00:00" as that midnight.
   var endKey = endMinutes > 24 * 60 ? addDays(key, Math.floor(endMinutes / (24 * 60))) : key
-  return { title: title, dateKey: key, endDateKey: endKey, allDay: false,
+  return { found: found, parsed: { title: title, dateKey: key, endDateKey: endKey, allDay: false,
            startTime: clockText(times.start), endTime: clockText(endMinutes % (24 * 60)),
-           durationMinutes: duration, meet: meet }
+           durationMinutes: duration, meet: meet } }
 }
 
 // The event form a quick add opens as, for "More options" or a direct save.

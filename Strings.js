@@ -122,6 +122,10 @@ var STRINGS = {
     "quick.create": "Create",
     "quick.allDay": "all day",
     "quick.needsTitle": "Type a title first",
+    "quick.understood": "Understood:",
+    "quick.nothingUnderstood": "No day or time found, so today, all day.",
+    "quick.helpLabel": "What quick add understands",
+    "quick.help": "Day: tomorrow, friday, next monday, oct 12\nTime: 2pm, 14:30, 9-10am\nLength: for 45m, 1h30\nAll day: all day\nVideo: call, meet or zoom adds Google Meet",
 
     "next.badge": "Next · in %1",
     "next.live": "Happening now",
@@ -459,6 +463,10 @@ var STRINGS = {
     "quick.create": "Criar",
     "quick.allDay": "dia todo",
     "quick.needsTitle": "Digite um título primeiro",
+    "quick.understood": "Entendido:",
+    "quick.nothingUnderstood": "Nenhum dia ou hora encontrado: hoje, dia todo.",
+    "quick.helpLabel": "O que o criar evento rápido entende",
+    "quick.help": "Dia: amanhã, sexta, próxima segunda, 12 de outubro\nHora: 14h, 14:30, 9h-10h\nDuração: por 45min, 1h30\nDia todo: dia todo\nVídeo: call, meet ou chamada adiciona o Google Meet",
 
     "next.badge": "Próximo · em %1",
     "next.live": "Acontecendo agora",

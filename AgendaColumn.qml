@@ -43,6 +43,7 @@ Item {
 
   property string quickPreviewTitle: ""
   property string quickPreviewWhen: ""
+  property var quickUnderstood: []
   property alias quickText: quickAdd.text
 
   property string toastText: ""
@@ -100,6 +101,7 @@ Item {
       language: root.language
       previewTitle: root.quickPreviewTitle
       previewWhen: root.quickPreviewWhen
+      understood: root.quickUnderstood
       onSubmitted: function(moreOptions) { root.quickSubmitted(moreOptions) }
       onEscaped: root.quickEscaped()
     }

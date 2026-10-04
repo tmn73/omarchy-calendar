@@ -226,6 +226,7 @@ Panel {
 
   // ---- Quick add.
   readonly property var quickParsed: Model.parseQuickAdd(agenda.quickText, nowTick, language)
+  readonly property var quickUnderstood: Model.quickAddUnderstood(agenda.quickText, nowTick, language)
   readonly property string quickPreviewWhen: {
     var parsed = root.quickParsed
     if (!parsed) return ""
@@ -1115,6 +1116,7 @@ Panel {
               setupCommandCopied: root.setupCommandCopied
               quickPreviewTitle: root.quickParsed ? root.quickParsed.title : ""
               quickPreviewWhen: root.quickPreviewWhen
+              quickUnderstood: root.quickUnderstood
               toastText: root.toastText
               toastError: root.toastError
               onItemSelected: function(item) { root.selectEvent(item) }

@@ -5,8 +5,10 @@ import qs.Ui
 import "Strings.js" as Strings
 
 // "call with Ana tomorrow 2pm for 45m", read as you type. The panel parses
-// the text and hands back a preview line; Enter creates, Ctrl+Enter (or
-// "More options") opens the full form with the parsed fields filled in.
+// the text and hands back a preview: the title, when it lands, and the words
+// it understood, so a word read as a date or a meeting never goes unseen.
+// The "?" lists what it reads. Enter creates, Ctrl+Enter (or "More
+// options") opens the full form with the parsed fields filled in.
 Rectangle {
   id: root
 
@@ -15,6 +17,8 @@ Rectangle {
   property string language: "en"
   property string previewTitle: ""
   property string previewWhen: ""
+  // [{ text, kind }] from Model.quickAddUnderstood
+  property var understood: []
   property alias text: field.text
   readonly property bool hasPreview: previewTitle !== ""
 
@@ -68,7 +72,7 @@ Rectangle {
       TextField {
         id: field
         anchors.left: plus.right
-        anchors.right: keyHint.left
+        anchors.right: helpButton.left
         anchors.leftMargin: Style.space(4)
         anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
@@ -88,6 +92,40 @@ Rectangle {
             else root.escaped()
             event.accepted = true
           }
+        }
+      }
+
+      Rectangle {
+        id: helpButton
+        anchors.right: keyHint.left
+        anchors.rightMargin: keyHint.visible ? Style.space(6) : Style.space(4)
+        anchors.verticalCenter: parent.verticalCenter
+        width: Style.space(16)
+        height: width
+        radius: width / 2
+        color: "transparent"
+        border.width: Style.spacing.hairline
+        border.color: Util.alpha(root.foreground, helpHover.hovered ? 0.8 : 0.4)
+        Accessible.name: root.tr("quick.helpLabel")
+
+        Text {
+          anchors.centerIn: parent
+          text: "?"
+          color: Util.alpha(root.foreground, helpHover.hovered ? 0.9 : 0.6)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+
+        HoverHandler {
+          id: helpHover
+          cursorShape: Qt.WhatsThisCursor
+        }
+
+        PanelToolTip {
+          visible: helpHover.hovered
+          text: root.tr("quick.help")
+          fontFamily: root.fontFamily
         }
       }
 
@@ -151,6 +189,43 @@ Rectangle {
           color: Util.alpha(root.foreground, 0.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
+        }
+
+        // The words read as a date, a time, a length or a meeting, each in
+        // the accent colour. A meeting word also says what it adds.
+        Flow {
+          width: parent.width
+          topPadding: Style.space(2)
+          spacing: Style.space(4)
+
+          Text {
+            text: root.tr(root.understood.length > 0 ? "quick.understood" : "quick.nothingUnderstood")
+            color: Util.alpha(root.foreground, 0.6)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Repeater {
+            model: root.understood
+
+            Rectangle {
+              required property var modelData
+              width: chipLabel.implicitWidth + Style.space(5) * 2
+              height: chipLabel.implicitHeight + Style.space(1) * 2
+              radius: Style.cornerRadius
+              color: Util.alpha(Color.accent, 0.14)
+
+              Text {
+                id: chipLabel
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: modelData.kind === "meet" ? modelData.text + " → Google Meet" : modelData.text
+                color: Color.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+          }
         }
       }
 
