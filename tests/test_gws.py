@@ -428,9 +428,8 @@ class TestWriteSignIn(unittest.TestCase):
         client, runner, http = writer([(200, json.dumps({"id": "n"}))])
         client.create("me@example.com", {})
         argv, env = runner.calls[0]
-        self.assertEqual(argv[1:3], ["auth", "export"])
-        self.assertIn("--unmask", argv)
-        self.assertIn("--unmasked", argv)
+        # --unmasked has to be the first argument after export.
+        self.assertEqual(argv[1:], ["auth", "export", "--unmasked"])
         self.assertEqual(env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"], "/tmp/profile")
         token_call = http.calls[0]
         self.assertEqual(token_call["url"], gws.TOKEN_URL)

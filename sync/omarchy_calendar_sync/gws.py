@@ -243,9 +243,9 @@ class Gws:
         """
         if self._access_token:
             return self._access_token
-        # gws 0.13 spells the flag --unmask, later releases --unmasked;
-        # export ignores the one it does not know.
-        exit_code, stdout, _ = self._run(["auth", "export", "--unmask", "--unmasked"])
+        # export reads only its first argument, and only as --unmasked
+        # (gws 0.13.2 src/auth_commands.rs): anything else leaves it masked.
+        exit_code, stdout, _ = self._run(["auth", "export", "--unmasked"])
         try:
             credentials = json.loads(stdout)
         except json.JSONDecodeError:
