@@ -1131,7 +1131,8 @@ Panel {
           Flickable {
             id: inspector
             visible: root.inspectorOpen
-            width: visible ? root.inspectorWidth + root.columnPadding : 0
+            // Room on the right for the scroll thumb, off the buttons.
+            width: visible ? root.inspectorWidth + root.columnPadding + Style.space(10) : 0
             height: parent.height
             contentWidth: width
             contentHeight: inspectorContent.implicitHeight

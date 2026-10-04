@@ -205,15 +205,66 @@ Column {
     }
   }
 
+  // The form's title and its two actions, on top: Save shows without
+  // scrolling, and no field above it can change height and move it away
+  // from the pointer between a press and its release.
+  Item {
+    width: parent.width
+    height: Math.max(formTitle.implicitHeight, saveButton.height)
+
+    Text {
+      id: formTitle
+      anchors.left: parent.left
+      anchors.right: formActions.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.isEditing ? root.tr("form.editEvent") : root.tr("form.newEvent")
+      elide: Text.ElideRight
+      color: root.faint
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.letterSpacing: 1
+      font.bold: true
+      font.capitalization: Font.AllUppercase
+    }
+
+    Row {
+      id: formActions
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(6)
+
+      SecondaryButton {
+        text: root.tr("common.cancel")
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        enabled: !root.busy
+        onClicked: root.canceled()
+      }
+
+      AccentButton {
+        id: saveButton
+        text: root.busy
+          ? root.tr("form.saving")
+          : root.tr(root.isEditing ? "form.save" : "form.create")
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        enabled: !root.busy
+        onClicked: root.submit()
+      }
+    }
+  }
+
+  // Can quote gws stderr, so never rich text.
   Text {
     width: parent.width
-    text: root.isEditing ? root.tr("form.editEvent") : root.tr("form.newEvent")
-    color: root.faint
+    visible: root.errorText !== ""
+    text: root.errorText
+    textFormat: Text.PlainText
+    color: Color.urgent
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
-    font.letterSpacing: 1
-    font.bold: true
-    font.capitalization: Font.AllUppercase
+    wrapMode: Text.WordWrap
   }
 
   TextField {
@@ -412,42 +463,5 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     onEdited: function(patch) { root.update(patch) }
-  }
-
-  // Can quote gws stderr, so never rich text.
-  Text {
-    width: parent.width
-    visible: root.errorText !== ""
-    text: root.errorText
-    textFormat: Text.PlainText
-    color: Color.urgent
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
-  }
-
-  Row {
-    width: parent.width
-    spacing: Style.space(8)
-    layoutDirection: Qt.RightToLeft
-
-    Button {
-      text: root.busy
-        ? root.tr("form.saving")
-        : root.tr(root.isEditing ? "form.save" : "form.create")
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      enabled: !root.busy
-      onClicked: root.submit()
-    }
-
-    Button {
-      text: root.tr("common.cancel")
-      foreground: root.muted
-      fontFamily: root.fontFamily
-      enabled: !root.busy
-      onClicked: root.canceled()
-    }
   }
 }

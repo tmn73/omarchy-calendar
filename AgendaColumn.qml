@@ -315,6 +315,8 @@ Item {
   // The day can run past the column: say so, under the toast.
   ScrollHint {
     anchors.fill: scroll
+    // In the column's padding, so the thumb never covers a Join button.
+    anchors.rightMargin: -Style.space(9)
     flickable: scroll
     foreground: root.foreground
   }
