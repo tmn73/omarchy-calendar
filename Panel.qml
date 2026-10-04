@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "QuickAddParser.js" as QuickAddParser
 import "Strings.js" as Strings
 
 // The clock's calendar popup, in three columns: the month on the left, the
@@ -224,24 +225,36 @@ Panel {
   }
 
   // ---- Quick add.
-  readonly property var quickParsed: Model.parseQuickAdd(agenda.quickText, nowTick, language)
-  readonly property var quickUnderstood: Model.quickAddUnderstood(agenda.quickText, nowTick, language)
-  readonly property string quickPreviewWhen: {
-    var parsed = root.quickParsed
-    if (!parsed) return ""
-    var parts = [root.formatDate(Model.dateFromKey(parsed.dateKey, root.today), "short")]
-    if (parsed.allDay) {
-      parts.push(root.tr("quick.allDay"))
-    } else {
-      var start = Model.dateFromKey(parsed.dateKey, root.today)
-      start.setHours(Number(parsed.startTime.substr(0, 2)), Number(parsed.startTime.substr(3, 2)))
-      var end = new Date(start.getTime() + parsed.durationMinutes * 60000)
-      parts.push(root.formatTime(start.getTime()) + "–" + root.formatTime(end.getTime())
-        + " (" + Model.spanText(parsed.durationMinutes, root.language) + ")")
+  readonly property var quickParsed: QuickAddParser.parseQuickAdd(agenda.quickText, nowTick, language)
+  readonly property var quickUnderstood: QuickAddParser.quickAddUnderstood(agenda.quickText, nowTick, language)
+  // The rows under the field, written in the panel's locale. A read-only
+  // setup hands every event to Google, so nothing opens the form there.
+  readonly property var quickPreview: {
+    var preview = QuickAddParser.quickAddPreview(agenda.quickText, nowTick, language, {
+      day: function(key) {
+        return key === root.todayKey ? root.tr("day.today") : root.formatDate(Model.dateFromKey(key, root.today), "short")
+      },
+      time: function(minutes) {
+        var at = new Date(root.today)
+        at.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+        return root.formatTime(at.getTime())
+      },
+      span: function(minutes) { return Model.spanText(minutes, root.language) },
+      days: function(count) { return Strings.trn(root.language, "quick.days", count) },
+      ends: function(text) { return root.tr("quick.ends", [text]) },
+      repeat: function(preset, key) {
+        var options = Model.repeatOptions(key, root.language, false)
+        for (var i = 0; i < options.length; i++)
+          if (options[i].value === preset) return options[i].label
+        return preset
+      },
+      allDay: function() { return root.tr("quick.allDay") }
+    })
+    if (!root.canWrite) {
+      preview.opensForm = false
+      if (preview.hint === "quick.hintGuest") preview.hint = ""
     }
-    if (root.canWrite) parts.push(root.writableCalendars[0].name)
-    if (parsed.meet) parts.push("Google Meet")
-    return parts.join(" · ")
+    return preview
   }
 
   // ---- Feedback.
@@ -577,7 +590,7 @@ Panel {
   function submitQuickAdd(moreOptions) {
     var parsed = root.quickParsed
     if (moreOptions && root.canWrite) {
-      if (parsed) root.openForm(Model.quickAddForm(parsed, root.writableCalendars[0].id))
+      if (parsed) root.openForm(QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id))
       else root.newEvent()
       agenda.clearQuickAdd()
       return
@@ -587,8 +600,15 @@ Panel {
       return
     }
     if (!root.canWrite) {
-      Qt.openUrlExternally(Model.safeUrl(Model.googleTemplateUrl(parsed)))
+      Qt.openUrlExternally(Model.safeUrl(QuickAddParser.googleTemplateUrl(parsed)))
       root.showToast(root.tr("toast.openedInGoogle"))
+      agenda.clearQuickAdd()
+      return
+    }
+    // Guests get the form first: a mistyped address shows there, and
+    // saving asks whether to email the invitations.
+    if (parsed.guests.length > 0) {
+      root.openForm(QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id))
       agenda.clearQuickAdd()
       return
     }
@@ -598,7 +618,7 @@ Panel {
       action: "create",
       scope: "this",
       sendUpdates: "none",
-      event: Model.quickAddForm(parsed, root.writableCalendars[0].id)
+      event: QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id)
     }, "save")
     agenda.clearQuickAdd()
     root.selectDay(parsed.dateKey)
@@ -1114,8 +1134,8 @@ Panel {
               syncState: root.syncState
               setupCommand: root.setupCommand
               setupCommandCopied: root.setupCommandCopied
-              quickPreviewTitle: root.quickParsed ? root.quickParsed.title : ""
-              quickPreviewWhen: root.quickPreviewWhen
+              quickPreview: root.quickPreview
+              quickCalendarName: root.canWrite ? root.writableCalendars[0].name : ""
               quickUnderstood: root.quickUnderstood
               toastText: root.toastText
               toastError: root.toastError

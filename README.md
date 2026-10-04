@@ -41,9 +41,13 @@ time away for an event title would be a downgrade you pay for all day.
 - **Next up card**: what is next today, with a countdown and Join
 - **Upcoming days** under the selected day, so the week is one glance away
 - **Quick add** in plain English or Portuguese: `call with Ana tomorrow 2pm
-  for 45m`, `dentista sexta às 15h`. You see the parsed date and the words it
-  understood before you press Enter, and the "?" lists what it reads.
-  Read-only sources open Google Calendar with the event filled in
+  for 45m`, `dentista sexta às 15h`, `gym every monday 6pm`, `trip friday to
+  sunday`, `call in 20 min`. You see the parsed date and the words it
+  understood before you press Enter, and the "?" lists what it reads. A day
+  with no time is all day, and no day and no time is the next half hour. An
+  email address adds a guest, and then Enter opens the form, so you check the
+  address before anyone gets an invitation. Read-only sources open Google
+  Calendar with the event filled in
 
   ![Quick add showing the words it understood](docs/images/quick-add.png)
 - **Details** on click: full title, when, Join, directions, description,
@@ -520,12 +524,12 @@ node --test tests/*.test.js
 ```
 
 No dependencies, no dev dependencies. The Python sync is standard library only
-and the QML logic lives in `Model.js`, which loads under Node precisely so it
-can be tested.
+and the QML logic lives in `Model.js` and `QuickAddParser.js`, which load under
+Node precisely so they can be tested.
 
 `Panel.qml` and `BarWidget.qml` are not unit tested. Quickshell widgets need a
 live shell to render, and building that harness would cost more than it catches.
-Anything worth testing was deliberately pushed down into `Model.js`.
+Anything worth testing was deliberately pushed down into those two files.
 
 ## License
 

@@ -446,11 +446,12 @@ test('repeatOptions labels the presets from the start date', () => {
     'Daily',
     'Weekly on Saturday',
     'Monthly on the last Saturday',
+    'Monthly on day 26',
     'Annually on September 26',
     'Every weekday (Monday to Friday)'
   ])
   assert.deepEqual(Model.repeatOptions('2026-09-26').map(o => o.value),
-    ['none', 'daily', 'weekly', 'monthly', 'yearly', 'weekdays'])
+    ['none', 'daily', 'weekly', 'monthly', 'monthlyDate', 'yearly', 'weekdays'])
   assert.equal(Model.repeatOptions('2026-09-12')[3].label, 'Monthly on the second Saturday')
 })
 
@@ -607,6 +608,7 @@ test('repeatOptions in Portuguese agree with the weekday', () => {
     'Todos os dias',
     'Toda semana no sábado',
     'Todo mês no último sábado',
+    'Todo mês no dia 26',
     'Todo ano em 26 de setembro',
     'Dias úteis (segunda a sexta)'
   ])
@@ -618,7 +620,7 @@ test('repeatOptions can add the entry for a rule kept as it is', () => {
   const options = Model.repeatOptions('2026-09-26', 'en', true)
   assert.deepEqual(options[options.length - 1], { value: 'custom', label: 'Custom rule (kept as it is)' })
   assert.equal(Model.repeatOptions('2026-09-26', 'pt', true).pop().label, 'Regra personalizada (mantida como está)')
-  assert.equal(Model.repeatOptions('2026-09-26', 'en').length, 6)
+  assert.equal(Model.repeatOptions('2026-09-26', 'en').length, 7)
 })
 
 test('reminderOptions lists the menu, with custom only for an unexpressible setting', () => {

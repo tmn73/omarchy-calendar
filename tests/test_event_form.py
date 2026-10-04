@@ -84,6 +84,10 @@ class TestRepeatRule(unittest.TestCase):
     def test_monthly_uses_the_nth_weekday_otherwise(self):
         self.assertEqual(event_form.repeat_rule("monthly", date(2026, 9, 12)), ["RRULE:FREQ=MONTHLY;BYDAY=2SA"])
 
+    def test_monthly_by_date_repeats_the_day_of_the_month(self):
+        # With no BYDAY, RFC 5545 repeats on the start date's day number.
+        self.assertEqual(event_form.repeat_rule("monthlyDate", self.SAT_26), ["RRULE:FREQ=MONTHLY"])
+
     def test_an_unknown_preset_is_refused(self):
         with self.assertRaises(WriteRequestError):
             event_form.repeat_rule("hourly", self.SAT_26)
@@ -92,6 +96,10 @@ class TestRepeatRule(unittest.TestCase):
 class TestRepeatPreset(unittest.TestCase):
     def test_a_rule_that_equals_a_preset_maps_to_it(self):
         self.assertEqual(event_form.repeat_preset(["RRULE:FREQ=WEEKLY;BYDAY=SA"], date(2026, 9, 26)), "weekly")
+
+    def test_both_monthly_rules_map_back_to_their_preset(self):
+        self.assertEqual(event_form.repeat_preset(["RRULE:FREQ=MONTHLY"], date(2026, 10, 6)), "monthlyDate")
+        self.assertEqual(event_form.repeat_preset(["RRULE:FREQ=MONTHLY;BYDAY=1TU"], date(2026, 10, 6)), "monthly")
 
     def test_any_other_rule_is_custom(self):
         self.assertEqual(event_form.repeat_preset(["RRULE:FREQ=YEARLY;WKST=TU"], date(2020, 3, 19)), "custom")
