@@ -41,8 +41,11 @@ time away for an event title would be a downgrade you pay for all day.
 - **Next up card**: what is next today, with a countdown and Join
 - **Upcoming days** under the selected day, so the week is one glance away
 - **Quick add** in plain English or Portuguese: `call with Ana tomorrow 2pm
-  for 45m`, `dentista sexta às 15h`. You see the parsed date before you
-  press Enter. Read-only sources open Google Calendar with the event filled in
+  for 45m`, `dentista sexta às 15h`. You see the parsed date and the words it
+  understood before you press Enter, and the "?" lists what it reads.
+  Read-only sources open Google Calendar with the event filled in
+
+  ![Quick add showing the words it understood](docs/images/quick-add.png)
 - **Details** on click: full title, when, Join, directions, description,
   reminder, and buttons to edit the event (writable calendars), open it in
   Google or delete it
@@ -433,17 +436,18 @@ Click the clock, then the gear icon in the panel header.
 
 ![The settings page](docs/images/settings.png)
 
-| Section | What it does |
+One section at a time, from the menu on the left. Every setting has a line
+under it that says what it does.
+
+| Section | What it holds |
 |---|---|
-| Calendars | Show or hide each calendar. The list comes from your own events, so it needs no configuration |
-| Week starts on Monday | Off starts the week on Sunday |
-| Working location events | Google's work-from-home markers. Hidden by default because they are all-day rows describing no commitment |
-| Declined invitations | On lists them struck through, off hides them entirely |
-| Year and life progress | Brings back the built-in clock's bars, off by default |
-| Bar label | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes |
-| Language | Automatic (follows your locale), English or Português |
-| Event times | Set `eventTimeFormat` in `shell.json` to a Qt date-time format such as `HH:mm` or `h:mm AP` |
-| Sync | Event count, source and last sync time, for diagnosing a quiet calendar |
+| Panel | A preset: Minimal or Standard. Where the agenda sits: beside or under the calendar. A switch for each block: year and life progress, shortcut legend, quick add, next event card, upcoming days |
+| Bar | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How long "Now" stays on during an event, and whether the next event takes over. Desktop reminders. A preview puts your choices in words |
+| Calendars | Show or hide each calendar, with its event count. The list comes from your own events, so it needs no configuration. Then working location events (Google's work-from-home markers, hidden by default) and declined invitations (struck through when shown) |
+| General | Language: Automatic follows your locale, or English, or Português. The first day of the week. Whether the panel can create and edit events. The sync state: event count, source and last sync time |
+
+Event times follow `eventTimeFormat` in `shell.json`, a Qt date-time format
+such as `HH:mm` or `h:mm AP`.
 
 Hiding a calendar is instant and does not change what the sync fetches, so
 bringing one back does not wait for the next run.
