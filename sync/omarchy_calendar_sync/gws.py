@@ -1,19 +1,32 @@
-"""Adapter around the gws CLI.
+"""Adapter around the gws CLI, and the Google Calendar API for writes.
 
-The only module in this package that touches a subprocess. Everything it
-returns is plain data, so the rest of the sync is testable without Google.
+Reads go through gws. Writes go to the API over HTTPS, with a token made
+from the sign-in gws holds: gws takes a request body only as a --json
+argument, and arguments show an event's description and guests to every
+user on the machine through ps. Everything this module returns is plain
+data, so the rest of the sync is testable without Google.
 """
 
 import json
 import os
 import re
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from .errors import SyncError
 
 MINIMUM_VERSION = (0, 13, 2)
 FALLBACK_COLOR = "#9e9e9e"
 MAX_PAGES = 50
+
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+SIGN_IN_EXPIRED = "Your Google sign-in expired. Run sync/setup --write."
+NO_SIGN_IN = "No Google sign-in to write with. Run sync/setup --write."
+MASKED_SIGN_IN = "gws did not hand over the sign-in. Update gws, then try again."
+CALENDAR_API = "https://www.googleapis.com/calendar/v3"
+HTTP_TIMEOUT_SECONDS = 30
 
 _VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
@@ -32,6 +45,10 @@ class GwsTooOld(GwsError):
 
 class GwsAuthError(GwsError):
     """Credentials are absent, expired, or lack the calendar scope."""
+
+
+class GwsSignInError(GwsAuthError):
+    """No usable sign-in to write with. The message is for a person."""
 
 
 class GwsApiError(GwsError):
@@ -61,6 +78,25 @@ def _subprocess_runner(argv, env):
     return completed.returncode, completed.stdout, completed.stderr
 
 
+def _https(method, url, headers, data):
+    """One request: (status, body text). An HTTP error status is a reply,
+    not an exception; only a request that never got one raises."""
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError) as error:
+        raise GwsApiError(f"cannot reach Google: {getattr(error, 'reason', error)}") from error
+
+
+def _quote(value):
+    # Calendar ids hold @ and #, and an event id is opaque: nothing in them
+    # may read as a path separator or a query.
+    return urllib.parse.quote(str(value), safe="")
+
+
 class Gws:
     SOURCE_NAME = "gws"
 
@@ -68,10 +104,12 @@ class Gws:
     # can write. A backend without create/update/delete sets this to False.
     can_write = True
 
-    def __init__(self, profile, runner=None, binary="gws"):
+    def __init__(self, profile, runner=None, binary="gws", http=None):
         self.profile = str(profile)
         self.binary = str(binary or "gws")
         self._runner = runner or _subprocess_runner
+        self._http = http or _https
+        self._access_token = None
 
     def _run(self, args):
         env = dict(os.environ)
@@ -160,45 +198,82 @@ class Gws:
         ])
 
     def create(self, calendar_id, body, send_updates="none"):
-        params = {"calendarId": calendar_id, **_write_params(send_updates)}
-        return self._json([
-            "calendar", "events", "insert",
-            "--params", json.dumps(params),
-            "--json", json.dumps(body),
-        ])
+        return self._write("POST", _events_path(calendar_id), _write_params(send_updates), body)
 
     def update(self, calendar_id, event_id, body, send_updates="none"):
         # patch, not update: only the fields in `body` change, so anything
         # the form does not show survives an edit from the panel.
-        params = {"calendarId": calendar_id, "eventId": event_id, **_write_params(send_updates)}
-        return self._json([
-            "calendar", "events", "patch",
-            "--params", json.dumps(params),
-            "--json", json.dumps(body),
-        ])
+        return self._write("PATCH", _events_path(calendar_id, event_id), _write_params(send_updates), body)
 
     def replace(self, calendar_id, event_id, resource, send_updates="none"):
         # PUT: the whole event, so a field left out is removed. The only way
         # to remove a Meet, since a patch cannot.
-        params = {"calendarId": calendar_id, "eventId": event_id, **_write_params(send_updates)}
-        return self._json([
-            "calendar", "events", "update",
-            "--params", json.dumps(params),
-            "--json", json.dumps(resource),
-        ])
+        return self._write("PUT", _events_path(calendar_id, event_id), _write_params(send_updates), resource)
 
     def delete(self, calendar_id, event_id, send_updates="none"):
-        params = {"calendarId": calendar_id, "eventId": event_id,
-                  "sendUpdates": _send_updates(send_updates)}
-        exit_code, stdout, stderr = self._run([
-            "calendar", "events", "delete",
-            "--params", json.dumps(params),
-        ])
         # Google answers a delete with HTTP 204 and no body.
-        if exit_code == 0 and not stdout.strip():
-            return None
-        self._parse(exit_code, stdout, stderr)
+        self._write("DELETE", _events_path(calendar_id, event_id),
+                    {"sendUpdates": _send_updates(send_updates)})
         return None
+
+    def _write(self, method, path, params, body=None):
+        headers = {"Authorization": "Bearer " + self._token()}
+        data = None
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(body).encode("utf-8")
+        status, text = self._http(method, f"{CALENDAR_API}{path}?{urllib.parse.urlencode(params)}", headers, data)
+        try:
+            payload = json.loads(text) if text.strip() else None
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+            _raise_api_error(payload["error"])
+        if not 200 <= status < 300:
+            raise GwsApiError(f"Google answered HTTP {status}")
+        if payload is None and text.strip():
+            raise GwsApiError("Google returned unparseable output")
+        return payload
+
+    def _token(self):
+        """An access token made from the sign-in gws holds, once per run.
+
+        gws prints the credentials on stdout, which no other user can read,
+        and they stay in this process. No message here may quote them.
+        """
+        if self._access_token:
+            return self._access_token
+        # gws 0.13 spells the flag --unmask, later releases --unmasked;
+        # export ignores the one it does not know.
+        exit_code, stdout, _ = self._run(["auth", "export", "--unmask", "--unmasked"])
+        try:
+            credentials = json.loads(stdout)
+        except json.JSONDecodeError:
+            credentials = None
+        if exit_code != 0 or not isinstance(credentials, dict):
+            raise GwsSignInError(NO_SIGN_IN)
+        fields = {key: credentials.get(key) for key in ("client_id", "client_secret", "refresh_token")}
+        if not all(isinstance(value, str) and value for value in fields.values()):
+            raise GwsSignInError(NO_SIGN_IN)
+        # A masked export reads "GOCS...jmye".
+        if "..." in fields["client_secret"] or "..." in fields["refresh_token"]:
+            raise GwsSignInError(MASKED_SIGN_IN)
+
+        data = urllib.parse.urlencode({**fields, "grant_type": "refresh_token"}).encode("utf-8")
+        status, text = self._http("POST", TOKEN_URL, {"Content-Type": "application/x-www-form-urlencoded"}, data)
+        try:
+            reply = json.loads(text)
+        except json.JSONDecodeError:
+            reply = None
+        token = reply.get("access_token") if isinstance(reply, dict) else None
+        if status != 200 or not isinstance(token, str) or not token:
+            reason = reply.get("error") if isinstance(reply, dict) else None
+            # invalid_grant: the refresh token expired or was revoked.
+            if status in (400, 401) or reason == "invalid_grant":
+                raise GwsSignInError(SIGN_IN_EXPIRED)
+            raise GwsApiError(f"Google answered the token request with HTTP {status}")
+        self._access_token = token
+        return token
 
     def _json(self, args):
         """Run gws and parse stdout."""
@@ -221,21 +296,7 @@ class Gws:
             decode_error = error
 
         if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-            error = payload["error"]
-            error_code = error.get("code")
-            if error_code is None:
-                error_code = "unknown"
-            message = error.get("message", "unknown error")
-            reasons = {str(e.get("reason") or "") for e in error.get("errors") or [] if isinstance(e, dict)}
-            # A quota 403 is not a sign-in problem.
-            if error_code == 403 and reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
-                raise GwsApiError(f"{error_code}: {message}")
-            if error_code in (401, 403):
-                raise GwsAuthError(f"{error_code}: {message}")
-            # 410 is what Google answers for an event that was deleted.
-            if error_code in (404, 410):
-                raise GwsNotFound(f"{error_code}: {message}")
-            raise GwsApiError(f"{error_code}: {message}")
+            _raise_api_error(payload["error"])
 
         if exit_code != 0:
             excerpt = stderr.strip()[:200] or "no stderr output"
@@ -253,3 +314,26 @@ class Gws:
             "gws auth login --scopes "
             "https://www.googleapis.com/auth/calendar.readonly"
         )
+
+
+def _events_path(calendar_id, event_id=None):
+    path = f"/calendars/{_quote(calendar_id)}/events"
+    return path if event_id is None else f"{path}/{_quote(event_id)}"
+
+
+def _raise_api_error(error):
+    """Raise what one Google error object means, the same for gws and HTTPS."""
+    error_code = error.get("code")
+    if error_code is None:
+        error_code = "unknown"
+    message = error.get("message", "unknown error")
+    reasons = {str(e.get("reason") or "") for e in error.get("errors") or [] if isinstance(e, dict)}
+    # A quota 403 is not a sign-in problem.
+    if error_code == 403 and reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
+        raise GwsApiError(f"{error_code}: {message}")
+    if error_code in (401, 403):
+        raise GwsAuthError(f"{error_code}: {message}")
+    # 410 is what Google answers for an event that was deleted.
+    if error_code in (404, 410):
+        raise GwsNotFound(f"{error_code}: {message}")
+    raise GwsApiError(f"{error_code}: {message}")

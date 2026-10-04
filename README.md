@@ -206,13 +206,11 @@ entry for, stays as it is unless you pick another one.
 
 The EDS backend cannot write yet, so the panel shows none of this there.
 
-> **On a shared machine, leave writing off.** gws takes an event only as a
-> command-line argument, so while a save runs, the event's title,
-> description and guest addresses show to the other users of the machine
-> through `ps`. The panel sends the event to the sync on stdin, so nothing
-> shows before gws. A request for gws to read stdin is open in
-> [googleworkspace/cli#952](https://github.com/googleworkspace/cli/issues/952).
-> On a desktop that only you use, nobody else can see it.
+A save goes straight to the Google Calendar API over HTTPS, with a token
+made from the sign-in gws already holds. The event, its description and its
+guests never appear in the arguments of a process, so the other users of
+the machine cannot see them through `ps`. Reading your calendar still goes
+through gws.
 
 ## Sync from the secret iCal address
 

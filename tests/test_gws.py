@@ -1,5 +1,6 @@
 import json
 import unittest
+import urllib.parse
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -260,57 +261,155 @@ class TestConfigurableBinary(unittest.TestCase):
         self.assertIn("gwsPath", message)
 
 
+CREDENTIALS = {
+    "client_id": "123-abc.apps.googleusercontent.com",
+    "client_secret": "client-secret-value",
+    "refresh_token": "1//refresh-token-value",
+    "type": "authorized_user",
+}
+TOKEN_REPLY = {"access_token": "access-token-value", "expires_in": 3599, "token_type": "Bearer"}
+
+
+class FakeHttp:
+    """Records each HTTPS request and replays canned (status, body) replies.
+
+    The token endpoint always answers with TOKEN_REPLY unless a reply for
+    it is given; Calendar requests take the canned replies in order.
+    """
+
+    def __init__(self, replies, token_reply=(200, json.dumps(TOKEN_REPLY))):
+        self.replies = list(replies)
+        self.token_reply = token_reply
+        self.calls = []
+
+    def __call__(self, method, url, headers, data):
+        self.calls.append({"method": method, "url": url, "headers": headers, "data": data})
+        if url == gws.TOKEN_URL:
+            return self.token_reply
+        return self.replies.pop(0)
+
+    def api_calls(self):
+        return [call for call in self.calls if call["url"] != gws.TOKEN_URL]
+
+
+def writer(replies, credentials=CREDENTIALS, export=None, token_reply=None):
+    export = export or (0, json.dumps(credentials), "Using keyring backend: keyring\n")
+    runner = FakeRunner({"export": export})
+    http = FakeHttp(replies) if token_reply is None else FakeHttp(replies, token_reply)
+    return gws.Gws("/tmp/profile", runner=runner, http=http), runner, http
+
+
+def query(url):
+    return dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+
+
+def path(url):
+    return urllib.parse.urlsplit(url).path
+
+
 class TestWrites(unittest.TestCase):
     BODY = {
         "summary": "Lunch",
+        "description": "Private notes",
+        "attendees": [{"email": "guest@example.com"}],
         "start": {"dateTime": "2026-09-26T12:00:00-05:00"},
         "end": {"dateTime": "2026-09-26T12:30:00-05:00"},
     }
 
-    def test_create_sends_the_calendar_and_the_body_as_json(self):
+    def test_create_posts_the_body_to_the_calendar(self):
         reply = {"id": "new1", "summary": "Lunch"}
-        runner = FakeRunner({"insert": (0, json.dumps(reply), "")})
-        client = gws.Gws("/tmp/profile", runner=runner)
+        client, _, http = writer([(200, json.dumps(reply))])
         self.assertEqual(client.create("me@example.com", self.BODY), reply)
-        argv = runner.calls[0][0]
-        self.assertEqual(argv[1:4], ["calendar", "events", "insert"])
-        self.assertEqual(
-            json.loads(argv[argv.index("--params") + 1]),
-            {"calendarId": "me@example.com", "sendUpdates": "none", "conferenceDataVersion": 1},
-        )
-        self.assertEqual(json.loads(argv[argv.index("--json") + 1]), self.BODY)
+        call = http.api_calls()[0]
+        self.assertEqual(call["method"], "POST")
+        self.assertEqual(path(call["url"]), "/calendar/v3/calendars/me%40example.com/events")
+        self.assertEqual(query(call["url"]), {"sendUpdates": "none", "conferenceDataVersion": "1"})
+        self.assertEqual(json.loads(call["data"]), self.BODY)
+        self.assertEqual(call["headers"]["Authorization"], "Bearer access-token-value")
+        self.assertEqual(call["headers"]["Content-Type"], "application/json")
+
+    def test_the_event_never_reaches_a_process_argument(self):
+        # The point of writing over HTTPS: arguments show to every user on
+        # the machine through ps, and the event carries notes and guests.
+        client, runner, _ = writer([(200, json.dumps({"id": "n"}))] * 3)
+        client.create("me@example.com", self.BODY)
+        client.update("me@example.com", "ev1", self.BODY)
+        client.replace("me@example.com", "ev1", self.BODY)
+        for argv, _ in runner.calls:
+            joined = " ".join(argv)
+            for private in ("Lunch", "Private notes", "guest@example.com"):
+                self.assertNotIn(private, joined)
 
     def test_update_patches_by_event_id(self):
-        runner = FakeRunner({"patch": (0, json.dumps({"id": "ev1"}), "")})
-        client = gws.Gws("/tmp/profile", runner=runner)
+        client, _, http = writer([(200, json.dumps({"id": "ev1"}))])
         client.update("me@example.com", "ev1", self.BODY)
-        argv = runner.calls[0][0]
-        self.assertEqual(argv[1:4], ["calendar", "events", "patch"])
+        call = http.api_calls()[0]
+        self.assertEqual(call["method"], "PATCH")
+        self.assertEqual(path(call["url"]), "/calendar/v3/calendars/me%40example.com/events/ev1")
+        self.assertEqual(query(call["url"]), {"sendUpdates": "none", "conferenceDataVersion": "1"})
+
+    def test_replace_puts_the_whole_event(self):
+        client, _, http = writer([(200, json.dumps({"id": "ev1"}))])
+        client.replace("me@example.com", "ev1", {"summary": "S"}, send_updates="none")
+        call = http.api_calls()[0]
+        self.assertEqual(call["method"], "PUT")
+        self.assertEqual(json.loads(call["data"]), {"summary": "S"})
+
+    def test_ids_are_escaped_in_the_path(self):
+        client, _, http = writer([(200, json.dumps({"id": "x"}))])
+        client.update("team#holiday@group.v.calendar.google.com", "abc/def", {})
         self.assertEqual(
-            json.loads(argv[argv.index("--params") + 1]),
-            {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "none", "conferenceDataVersion": 1},
+            path(http.api_calls()[0]["url"]),
+            "/calendar/v3/calendars/team%23holiday%40group.v.calendar.google.com/events/abc%2Fdef",
         )
 
     def test_delete_accepts_an_empty_reply(self):
-        runner = FakeRunner({"delete": (0, "", "keyring noise")})
-        client = gws.Gws("/tmp/profile", runner=runner)
+        client, _, http = writer([(204, "")])
         self.assertIsNone(client.delete("me@example.com", "ev1"))
-        self.assertNotIn("--json", runner.calls[0][0])
-        self.assertEqual(len(runner.calls), 1)
+        call = http.api_calls()[0]
+        self.assertEqual(call["method"], "DELETE")
+        self.assertIsNone(call["data"])
+        self.assertEqual(query(call["url"]), {"sendUpdates": "none"})
 
-    def test_delete_of_a_missing_event_raises_not_found(self):
-        body = json.dumps({"error": {"code": 404, "message": "Not Found"}})
-        runner = FakeRunner({"delete": (0, body, "")})
-        client = gws.Gws("/tmp/profile", runner=runner)
-        with self.assertRaises(gws.GwsNotFound):
-            client.delete("me@example.com", "gone")
-        self.assertEqual(len(runner.calls), 1)
+    def test_delete_of_a_missing_or_deleted_event_raises_not_found(self):
+        for code in (404, 410):
+            body = json.dumps({"error": {"code": code, "message": "Not Found"}})
+            client, _, _ = writer([(code, body)])
+            with self.assertRaises(gws.GwsNotFound):
+                client.delete("me@example.com", "gone")
 
     def test_a_write_without_the_scope_raises_auth_error(self):
         body = json.dumps({"error": {"code": 403, "message": "insufficient scopes"}})
-        client = gws.Gws("/tmp/profile", runner=FakeRunner({"insert": (0, body, "")}))
-        with self.assertRaises(gws.GwsAuthError):
+        client, _, _ = writer([(403, body)])
+        with self.assertRaises(gws.GwsAuthError) as caught:
             client.create("me@example.com", self.BODY)
+        self.assertIn("insufficient scopes", str(caught.exception))
+
+    def test_a_rate_limit_is_not_an_auth_error(self):
+        body = json.dumps({"error": {"code": 403, "message": "Rate Limit Exceeded",
+                                     "errors": [{"reason": "rateLimitExceeded"}]}})
+        client, _, _ = writer([(403, body)])
+        with self.assertRaises(gws.GwsApiError) as caught:
+            client.create("me@example.com", {})
+        self.assertNotIsInstance(caught.exception, gws.GwsAuthError)
+
+    def test_a_server_error_without_a_json_body_is_an_api_error(self):
+        client, _, _ = writer([(502, "<html>Bad Gateway</html>")])
+        with self.assertRaises(gws.GwsApiError) as caught:
+            client.create("me@example.com", {})
+        self.assertIn("502", str(caught.exception))
+
+    def test_invitations_are_sent_only_when_asked(self):
+        client, _, http = writer([(200, json.dumps({"id": "n"})), (204, "")])
+        client.create("me@example.com", {}, send_updates="all")
+        client.delete("me@example.com", "ev1", send_updates="all")
+        self.assertEqual([query(c["url"])["sendUpdates"] for c in http.api_calls()], ["all", "all"])
+
+    def test_an_unknown_send_updates_value_is_refused_before_any_request(self):
+        client, runner, http = writer([])
+        with self.assertRaises(ValueError):
+            client.create("me@example.com", {}, send_updates="externalOnly")
+        self.assertEqual((runner.calls, http.calls), ([], []))
 
     def test_owner_and_writer_calendars_are_writable(self):
         body = json.dumps({"items": [
@@ -322,6 +421,61 @@ class TestWrites(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
         writable = {c["id"]: c["writable"] for c in client.calendars()}
         self.assertEqual(writable, {"a": True, "b": True, "c": False, "d": False})
+
+
+class TestWriteSignIn(unittest.TestCase):
+    def test_credentials_come_from_gws_unmasked_in_the_profile(self):
+        client, runner, http = writer([(200, json.dumps({"id": "n"}))])
+        client.create("me@example.com", {})
+        argv, env = runner.calls[0]
+        self.assertEqual(argv[1:3], ["auth", "export"])
+        self.assertIn("--unmask", argv)
+        self.assertIn("--unmasked", argv)
+        self.assertEqual(env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"], "/tmp/profile")
+        token_call = http.calls[0]
+        self.assertEqual(token_call["url"], gws.TOKEN_URL)
+        self.assertEqual(dict(urllib.parse.parse_qsl(token_call["data"].decode())), {
+            "client_id": CREDENTIALS["client_id"],
+            "client_secret": CREDENTIALS["client_secret"],
+            "refresh_token": CREDENTIALS["refresh_token"],
+            "grant_type": "refresh_token",
+        })
+
+    def test_one_token_serves_every_write_of_a_run(self):
+        client, runner, http = writer([(200, json.dumps({"id": "n"})), (204, "")])
+        client.create("me@example.com", {})
+        client.delete("me@example.com", "n")
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual(sum(1 for c in http.calls if c["url"] == gws.TOKEN_URL), 1)
+
+    def test_masked_credentials_are_refused(self):
+        masked = dict(CREDENTIALS, client_secret="GOCS...jmye", refresh_token="1//0...r5IQ")
+        client, _, http = writer([], credentials=masked)
+        with self.assertRaises(gws.GwsSignInError):
+            client.create("me@example.com", {})
+        self.assertEqual(http.calls, [])
+
+    def test_no_sign_in_raises_auth_error(self):
+        client, _, http = writer([], export=(1, "", "No credentials found"))
+        with self.assertRaises(gws.GwsSignInError):
+            client.create("me@example.com", {})
+        self.assertEqual(http.calls, [])
+
+    def test_an_expired_refresh_token_raises_auth_error(self):
+        refused = (400, json.dumps({"error": "invalid_grant", "error_description": "Token has been expired or revoked."}))
+        client, _, http = writer([], token_reply=refused)
+        with self.assertRaises(gws.GwsSignInError) as caught:
+            client.create("me@example.com", {})
+        self.assertIn("sign-in expired", str(caught.exception))
+        self.assertEqual(len(http.api_calls()), 0)
+
+    def test_no_secret_reaches_an_error_message(self):
+        refused = (400, json.dumps({"error": "invalid_grant"}))
+        client, _, _ = writer([], token_reply=refused)
+        with self.assertRaises(gws.GwsAuthError) as caught:
+            client.create("me@example.com", {})
+        for secret in (CREDENTIALS["client_secret"], CREDENTIALS["refresh_token"]):
+            self.assertNotIn(secret, str(caught.exception))
 
 
 class TestErrorsWithANonzeroExit(unittest.TestCase):
@@ -336,62 +490,14 @@ class TestErrorsWithANonzeroExit(unittest.TestCase):
             client.events("a", "MIN", "MAX")
         self.assertIn("insufficient scopes", str(caught.exception))
 
-    def test_a_deleted_event_raises_not_found(self):
-        body = json.dumps({"error": {"code": 410, "message": "Resource has been deleted", "reason": "deleted"}})
-        client = gws.Gws("/tmp/profile", runner=FakeRunner({"delete": (1, body, self.NOISE)}))
-        with self.assertRaises(gws.GwsNotFound):
-            client.delete("me@example.com", "gone")
 
-
-class TestGetAndParameters(unittest.TestCase):
-    def params(self, runner):
-        argv = runner.calls[0][0]
-        return json.loads(argv[argv.index("--params") + 1])
-
-    def test_get_reads_one_event(self):
+class TestGet(unittest.TestCase):
+    def test_get_reads_one_event_through_gws(self):
         runner = FakeRunner({"get": (0, json.dumps({"id": "ev1"}), "")})
         self.assertEqual(gws.Gws("/tmp/profile", runner=runner).get("me@example.com", "ev1"), {"id": "ev1"})
         argv = runner.calls[0][0]
         self.assertEqual(argv[1:4], ["calendar", "events", "get"])
-        self.assertEqual(self.params(runner), {"calendarId": "me@example.com", "eventId": "ev1"})
-
-    def test_invitations_are_sent_only_when_asked(self):
-        runner = FakeRunner({"insert": (0, json.dumps({"id": "n"}), "")})
-        gws.Gws("/tmp/profile", runner=runner).create("me@example.com", {}, send_updates="all")
-        self.assertEqual(self.params(runner)["sendUpdates"], "all")
-
-    def test_delete_passes_send_updates(self):
-        runner = FakeRunner({"delete": (0, "", "")})
-        gws.Gws("/tmp/profile", runner=runner).delete("me@example.com", "ev1", send_updates="all")
-        self.assertEqual(self.params(runner), {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "all"})
-
-    def test_an_unknown_send_updates_value_is_refused(self):
-        client = gws.Gws("/tmp/profile", runner=FakeRunner({}))
-        with self.assertRaises(ValueError):
-            client.create("me@example.com", {}, send_updates="externalOnly")
-
-
-class TestReplace(unittest.TestCase):
-    def test_replace_puts_the_whole_event(self):
-        runner = FakeRunner({"update": (0, json.dumps({"id": "ev1"}), "")})
-        gws.Gws("/tmp/profile", runner=runner).replace("me@example.com", "ev1", {"summary": "S"}, send_updates="none")
-        argv = runner.calls[0][0]
-        self.assertEqual(argv[1:4], ["calendar", "events", "update"])
-        self.assertEqual(
-            json.loads(argv[argv.index("--params") + 1]),
-            {"calendarId": "me@example.com", "eventId": "ev1", "sendUpdates": "none", "conferenceDataVersion": 1},
-        )
-        self.assertEqual(json.loads(argv[argv.index("--json") + 1]), {"summary": "S"})
-
-
-class TestForbiddenReasons(unittest.TestCase):
-    def test_a_rate_limit_is_not_an_auth_error(self):
-        body = json.dumps({"error": {"code": 403, "message": "Rate Limit Exceeded",
-                                     "errors": [{"reason": "rateLimitExceeded"}]}})
-        client = gws.Gws("/tmp/profile", runner=FakeRunner({"insert": (1, body, "")}))
-        with self.assertRaises(gws.GwsApiError) as caught:
-            client.create("me@example.com", {})
-        self.assertNotIsInstance(caught.exception, gws.GwsAuthError)
+        self.assertEqual(json.loads(argv[argv.index("--params") + 1]), {"calendarId": "me@example.com", "eventId": "ev1"})
 
 
 if __name__ == "__main__":

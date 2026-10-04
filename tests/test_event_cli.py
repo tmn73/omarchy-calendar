@@ -8,7 +8,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from omarchy_calendar_sync import event_cli
-from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound
+from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound, GwsSignInError
 
 BOGOTA = ZoneInfo("America/Bogota")
 ME = {"id": "me@example.com", "name": "Me", "color": "#7bd148"}
@@ -280,6 +280,12 @@ class TestPerform(unittest.TestCase):
         client = FakeClient(raises=GwsAuthError("401: invalid_grant"))
         _, reply = self.run_event({"action": "create", "event": form()}, client)
         self.assertEqual(reply["error"], event_cli.EXPIRED)
+
+    def test_a_sign_in_problem_shows_its_own_message(self):
+        message = "gws did not hand over the sign-in. Update gws, then try again."
+        client = FakeClient(raises=GwsSignInError(message))
+        _, reply = self.run_event({"action": "create", "event": form()}, client)
+        self.assertEqual(reply["error"], message)
 
     def test_an_event_that_is_gone_still_starts_the_sync(self):
         client = FakeClient(raises=GwsNotFound("410: Resource has been deleted"))
