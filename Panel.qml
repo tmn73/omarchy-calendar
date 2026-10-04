@@ -230,18 +230,28 @@ Panel {
   readonly property string quickPreviewWhen: {
     var parsed = root.quickParsed
     if (!parsed) return ""
+    var severalDays = parsed.endDateKey !== parsed.dateKey
     var parts = [root.formatDate(Model.dateFromKey(parsed.dateKey, root.today), "short")]
     if (parsed.allDay) {
+      if (severalDays) parts[0] += "–" + root.formatDate(Model.dateFromKey(parsed.endDateKey, root.today), "short")
       parts.push(root.tr("quick.allDay"))
     } else {
       var start = Model.dateFromKey(parsed.dateKey, root.today)
       start.setHours(Number(parsed.startTime.substr(0, 2)), Number(parsed.startTime.substr(3, 2)))
       var end = new Date(start.getTime() + parsed.durationMinutes * 60000)
-      parts.push(root.formatTime(start.getTime()) + "–" + root.formatTime(end.getTime())
+      var endText = root.formatTime(end.getTime())
+      if (severalDays) endText = root.formatDate(end, "short") + " " + endText
+      parts.push(root.formatTime(start.getTime()) + "–" + endText
         + " (" + Model.spanText(parsed.durationMinutes, root.language) + ")")
+    }
+    if (parsed.repeat !== "none") {
+      var options = Model.repeatOptions(parsed.dateKey, root.language, false)
+      for (var i = 0; i < options.length; i++)
+        if (options[i].value === parsed.repeat) parts.push(options[i].label)
     }
     if (root.canWrite) parts.push(root.writableCalendars[0].name)
     if (parsed.meet) parts.push("Google Meet")
+    if (parsed.guests.length > 0) parts.push(parsed.guests.join(", "))
     return parts.join(" · ")
   }
 
@@ -590,6 +600,13 @@ Panel {
     if (!root.canWrite) {
       Qt.openUrlExternally(Model.safeUrl(QuickAddParser.googleTemplateUrl(parsed)))
       root.showToast(root.tr("toast.openedInGoogle"))
+      agenda.clearQuickAdd()
+      return
+    }
+    // Guests get the form first: a mistyped address shows there, and
+    // saving asks whether to email the invitations.
+    if (parsed.guests.length > 0) {
+      root.openForm(QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id))
       agenda.clearQuickAdd()
       return
     }

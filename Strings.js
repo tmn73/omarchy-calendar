@@ -123,9 +123,9 @@ var STRINGS = {
     "quick.allDay": "all day",
     "quick.needsTitle": "Type a title first",
     "quick.understood": "Understood:",
-    "quick.nothingUnderstood": "No day or time found, so today, all day.",
+    "quick.nothingUnderstood": "No day or time found, so the next half hour.",
     "quick.helpLabel": "What quick add understands",
-    "quick.help": "Day: tomorrow, friday, next monday, oct 12\nTime: 2pm, 14:30, 9-10am\nLength: for 45m, 1h30\nAll day: all day\nVideo: call, meet or zoom adds Google Meet",
+    "quick.help": "Day: tomorrow, friday, next monday, oct 12, in 3 days\nTime: 2pm, 14:30, 9-10am, in 20 min, tonight\nLength: for 45m, 1h30, for two hours\nSeveral days: friday to sunday, oct 12-14, for 3 days\nRepeat: every monday, daily, weekdays\nGuests: an email address, then the form opens to check it\nAll day: a day with no time, or all day\nNo day and no time: the next half hour\nVideo: call, meet or zoom adds Google Meet",
 
     "next.badge": "Next · in %1",
     "next.live": "Happening now",
@@ -462,9 +462,9 @@ var STRINGS = {
     "quick.allDay": "dia todo",
     "quick.needsTitle": "Digite um título primeiro",
     "quick.understood": "Entendido:",
-    "quick.nothingUnderstood": "Nenhum dia ou hora encontrado: hoje, dia todo.",
+    "quick.nothingUnderstood": "Nenhum dia ou hora encontrado: a próxima meia hora.",
     "quick.helpLabel": "O que o criar evento rápido entende",
-    "quick.help": "Dia: amanhã, sexta, próxima segunda, 12 de outubro\nHora: 14h, 14:30, 9h-10h\nDuração: por 45min, 1h30\nDia todo: dia todo\nVídeo: call, meet ou chamada adiciona o Google Meet",
+    "quick.help": "Dia: amanhã, sexta, próxima segunda, 12 de outubro, daqui a 3 dias\nHora: 14h, 14:30, 9h-10h, em 20 min, à noite\nDuração: por 45min, 1h30, por duas horas\nVários dias: de sexta a domingo, 12 a 14 de outubro, por 3 dias\nRepetir: toda segunda, todo dia, dias úteis\nConvidados: um email, e o formulário abre para conferir\nDia todo: um dia sem hora, ou dia todo\nSem dia nem hora: a próxima meia hora\nVídeo: call, meet ou chamada adiciona o Google Meet",
 
     "next.badge": "Próximo · em %1",
     "next.live": "Acontecendo agora",
