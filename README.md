@@ -520,12 +520,12 @@ node --test tests/*.test.js
 ```
 
 No dependencies, no dev dependencies. The Python sync is standard library only
-and the QML logic lives in `Model.js`, which loads under Node precisely so it
-can be tested.
+and the QML logic lives in `Model.js` and `QuickAddParser.js`, which load under
+Node precisely so they can be tested.
 
 `Panel.qml` and `BarWidget.qml` are not unit tested. Quickshell widgets need a
 live shell to render, and building that harness would cost more than it catches.
-Anything worth testing was deliberately pushed down into `Model.js`.
+Anything worth testing was deliberately pushed down into those two files.
 
 ## License
 

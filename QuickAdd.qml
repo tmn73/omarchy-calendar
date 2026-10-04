@@ -17,7 +17,7 @@ Rectangle {
   property string language: "en"
   property string previewTitle: ""
   property string previewWhen: ""
-  // [{ text, kind }] from Model.quickAddUnderstood
+  // [{ text, kind }] from QuickAddParser.quickAddUnderstood
   property var understood: []
   property alias text: field.text
   readonly property bool hasPreview: previewTitle !== ""

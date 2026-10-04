@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "QuickAddParser.js" as QuickAddParser
 import "Strings.js" as Strings
 
 // The clock's calendar popup, in three columns: the month on the left, the
@@ -224,8 +225,8 @@ Panel {
   }
 
   // ---- Quick add.
-  readonly property var quickParsed: Model.parseQuickAdd(agenda.quickText, nowTick, language)
-  readonly property var quickUnderstood: Model.quickAddUnderstood(agenda.quickText, nowTick, language)
+  readonly property var quickParsed: QuickAddParser.parseQuickAdd(agenda.quickText, nowTick, language)
+  readonly property var quickUnderstood: QuickAddParser.quickAddUnderstood(agenda.quickText, nowTick, language)
   readonly property string quickPreviewWhen: {
     var parsed = root.quickParsed
     if (!parsed) return ""
@@ -577,7 +578,7 @@ Panel {
   function submitQuickAdd(moreOptions) {
     var parsed = root.quickParsed
     if (moreOptions && root.canWrite) {
-      if (parsed) root.openForm(Model.quickAddForm(parsed, root.writableCalendars[0].id))
+      if (parsed) root.openForm(QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id))
       else root.newEvent()
       agenda.clearQuickAdd()
       return
@@ -587,7 +588,7 @@ Panel {
       return
     }
     if (!root.canWrite) {
-      Qt.openUrlExternally(Model.safeUrl(Model.googleTemplateUrl(parsed)))
+      Qt.openUrlExternally(Model.safeUrl(QuickAddParser.googleTemplateUrl(parsed)))
       root.showToast(root.tr("toast.openedInGoogle"))
       agenda.clearQuickAdd()
       return
@@ -598,7 +599,7 @@ Panel {
       action: "create",
       scope: "this",
       sendUpdates: "none",
-      event: Model.quickAddForm(parsed, root.writableCalendars[0].id)
+      event: QuickAddParser.quickAddForm(parsed, root.writableCalendars[0].id)
     }, "save")
     agenda.clearQuickAdd()
     root.selectDay(parsed.dateKey)

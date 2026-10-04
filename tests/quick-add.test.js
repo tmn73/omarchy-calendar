@@ -3,10 +3,11 @@ const assert = require('node:assert')
 const { loadQmlJs } = require('./load-qml-js.js')
 
 const Model = loadQmlJs('Model.js')
+const QuickAdd = loadQmlJs('QuickAddParser.js')
 
 // Tuesday 2026-10-06, 12:52 local.
 const NOW = new Date(2026, 9, 6, 12, 52)
-const parse = (text, lang = 'pt') => Model.parseQuickAdd(text, NOW, lang)
+const parse = (text, lang = 'pt') => QuickAdd.parseQuickAdd(text, NOW, lang)
 const when = (text, lang) => {
   const p = parse(text, lang)
   return p && [p.dateKey, p.allDay ? 'all day' : `${p.startTime}-${p.endTime}`]
@@ -110,9 +111,9 @@ test('parseQuickAdd: "dia 12" and "the 12th", rolling to next month once past', 
 
 test('parseQuickAdd: a day the next month lacks rolls to the first month that has it', () => {
   const lateJan = new Date(2027, 0, 31, 10, 0)
-  assert.equal(Model.parseQuickAdd('x dia 30', lateJan, 'pt').dateKey, '2027-03-30')
-  assert.equal(Model.parseQuickAdd('x dia 31', NOW, 'pt').dateKey, '2026-10-31')
-  assert.equal(Model.parseQuickAdd('x dia 40', NOW, 'pt').title, 'x dia 40')
+  assert.equal(QuickAdd.parseQuickAdd('x dia 30', lateJan, 'pt').dateKey, '2027-03-30')
+  assert.equal(QuickAdd.parseQuickAdd('x dia 31', NOW, 'pt').dateKey, '2026-10-31')
+  assert.equal(QuickAdd.parseQuickAdd('x dia 40', NOW, 'pt').title, 'x dia 40')
 })
 
 test('parseQuickAdd: d/m in Portuguese, m/d in English, next year once past', () => {
@@ -266,18 +267,18 @@ test('parseQuickAdd: empty, garbage or title-less input gives null', () => {
 })
 
 test('parseQuickAdd accepts now as milliseconds', () => {
-  assert.equal(Model.parseQuickAdd('x amanhã', NOW.getTime(), 'pt').dateKey, '2026-10-07')
+  assert.equal(QuickAdd.parseQuickAdd('x amanhã', NOW.getTime(), 'pt').dateKey, '2026-10-07')
 })
 
 test('parseQuickAdd: dates cross month and year ends by calendar day', () => {
   const nye = new Date(2026, 11, 31, 20, 0)
-  assert.equal(Model.parseQuickAdd('x tomorrow', nye, 'en').dateKey, '2027-01-01')
-  assert.equal(Model.parseQuickAdd('x friday', nye, 'en').dateKey, '2027-01-01')
-  assert.equal(Model.parseQuickAdd('x dia 5', nye, 'pt').dateKey, '2027-01-05')
+  assert.equal(QuickAdd.parseQuickAdd('x tomorrow', nye, 'en').dateKey, '2027-01-01')
+  assert.equal(QuickAdd.parseQuickAdd('x friday', nye, 'en').dateKey, '2027-01-01')
+  assert.equal(QuickAdd.parseQuickAdd('x dia 5', nye, 'pt').dateKey, '2027-01-05')
 })
 
 test('quickAddForm turns a parse into the event form', () => {
-  const form = Model.quickAddForm(parse('call com Ana amanhã 14h por 45min'), 'me@example.com')
+  const form = QuickAdd.quickAddForm(parse('call com Ana amanhã 14h por 45min'), 'me@example.com')
   assert.equal(form.calendarId, 'me@example.com')
   assert.equal(form.title, 'call com Ana')
   assert.deepEqual([form.startDate, form.startTime, form.endDate, form.endTime],
@@ -289,38 +290,38 @@ test('quickAddForm turns a parse into the event form', () => {
 })
 
 test('quickAddForm: all day and past midnight', () => {
-  const allDay = Model.quickAddForm(parse('Feriado sexta'), 'me')
+  const allDay = QuickAdd.quickAddForm(parse('Feriado sexta'), 'me')
   assert.deepEqual([allDay.allDay, allDay.startDate, allDay.endDate, allDay.startTime], [true, '2026-10-09', '2026-10-09', ''])
-  const late = Model.quickAddForm(parse('show 23:30'), 'me')
+  const late = QuickAdd.quickAddForm(parse('show 23:30'), 'me')
   assert.deepEqual([late.endDate, late.endTime], ['2026-10-07', '00:30'])
 })
 
 test('googleTemplateUrl: a timed event in local, unzoned time', () => {
-  assert.equal(Model.googleTemplateUrl(parse('call com Ana amanhã 14h por 45min')),
+  assert.equal(QuickAdd.googleTemplateUrl(parse('call com Ana amanhã 14h por 45min')),
     'https://calendar.google.com/calendar/render?action=TEMPLATE&text=call%20com%20Ana&dates=20261007T140000/20261007T144500')
 })
 
 test('googleTemplateUrl: an all-day event ends the day after, exclusively', () => {
-  assert.equal(Model.googleTemplateUrl(parse('Feriado 31 de dezembro')),
+  assert.equal(QuickAdd.googleTemplateUrl(parse('Feriado 31 de dezembro')),
     'https://calendar.google.com/calendar/render?action=TEMPLATE&text=Feriado&dates=20261231/20270101')
 })
 
 test('googleTemplateUrl: past midnight ends on the next date', () => {
-  assert.match(Model.googleTemplateUrl(parse('show 23:30')), /dates=20261006T233000\/20261007T003000$/)
+  assert.match(QuickAdd.googleTemplateUrl(parse('show 23:30')), /dates=20261006T233000\/20261007T003000$/)
 })
 
 test('googleTemplateUrl encodes the title so safeUrl accepts it', () => {
-  const url = Model.googleTemplateUrl(parse("Ana's \"party\" & <drinks> #1 (maybe) amanhã", 'pt'))
+  const url = QuickAdd.googleTemplateUrl(parse("Ana's \"party\" & <drinks> #1 (maybe) amanhã", 'pt'))
   assert.match(url, /text=Ana%27s%20%22party%22%20%26%20%3Cdrinks%3E%20%231%20%28maybe%29&/)
   assert.equal(Model.safeUrl(url), url)
 })
 
 test('googleTemplateUrl is empty without a parse', () => {
-  assert.equal(Model.googleTemplateUrl(null), '')
+  assert.equal(QuickAdd.googleTemplateUrl(null), '')
 })
 
 const understood = (text, lang = 'en') =>
-  Model.quickAddUnderstood(text, NOW, lang).map((f) => `${f.kind}:${f.text}`)
+  QuickAdd.quickAddUnderstood(text, NOW, lang).map((f) => `${f.kind}:${f.text}`)
 
 test('quickAddUnderstood lists the words read as something else than the title, in typed order', () => {
   assert.deepEqual(understood('call with Ana tomorrow 2pm for 45m'),
