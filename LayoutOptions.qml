@@ -5,10 +5,9 @@ import qs.Ui
 import "Model.js" as Model
 import "Strings.js" as Strings
 
-// What the panel shows: a preset, where the agenda sits, the details column
-// mode, and one switch per block. The layout menu and Settings both host
-// it. It reads the layout and emits the settings to store; the panel owns
-// every value.
+// What the panel shows: a preset, where the agenda sits, and one switch per
+// block. The layout menu and Settings both host it. It reads the layout and
+// emits the settings to store; the panel owns every value.
 Column {
   id: root
 
@@ -85,20 +84,6 @@ Column {
     options: root.options([["beside", "layout.agendaBeside"], ["below", "layout.agendaBelow"]])
     value: root.layout.agendaPlacement
     onChanged: function(value) { root.pick("agendaPlacement", value) }
-  }
-
-  Item { width: 1; height: Style.space(4) }
-
-  Caption { text: root.tr("layout.details") }
-
-  Choices {
-    options: root.options([["click", "layout.detailsClick"], ["pinned", "layout.detailsPinned"]])
-    value: root.layout.detailsColumn
-    onChanged: function(value) { root.pick("detailsColumn", value) }
-  }
-
-  Caption {
-    text: root.tr(root.layout.detailsColumn === "pinned" ? "layout.detailsPinnedHint" : "layout.detailsClickHint")
   }
 
   Item { width: 1; height: Style.space(4) }

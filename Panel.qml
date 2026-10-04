@@ -107,7 +107,6 @@ Panel {
 
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
-  readonly property string detailsMode: root.layout.detailsColumn
   readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
   readonly property bool calendarListExpanded: setting("calendarListExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
@@ -194,11 +193,8 @@ Panel {
       if (String(root.dayItems[i].id) === root.selectedEventId) return root.dayItems[i]
     return null
   }
-  // What the details column shows: the selection, or when pinned the next
-  // event. The form opens there in every mode.
-  readonly property var inspectorItem: Model.inspectorItem(root.detailsMode, root.selectedItem, root.nextUp, root.dayItems)
-  readonly property bool inspectorOpen: formOpen
-    || Model.detailsVisible(root.detailsMode, root.detailsOpen, root.inspectorItem !== null)
+  // Settings take the whole panel, so the details step aside while it is open.
+  readonly property bool inspectorOpen: !settingsOpen && (formOpen || (detailsOpen && selectedItem !== null))
 
   // Today's first timed event not yet over, shown above today's agenda.
   readonly property var nextUp: {
@@ -216,7 +212,6 @@ Panel {
   readonly property var recentlyFired: hostWidget && hostWidget.recentlyFired ? hostWidget.recentlyFired : ({})
   readonly property string snoozeText: tr("notify.snooze", [snoozeMinutes])
   readonly property bool selectedSnoozable: recentlyFired !== null && canSnooze(selectedItem)
-  readonly property bool inspectorSnoozable: recentlyFired !== null && canSnooze(inspectorItem)
   readonly property bool nextUpSnoozable: recentlyFired !== null && canSnooze(nextUp)
 
   function canSnooze(event) {
@@ -276,8 +271,11 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property int agendaWidth: Style.space(330)
-  // Under the month, past this the agenda scrolls inside the panel.
+  // Under the calendar, past this the agenda scrolls inside the panel.
   readonly property int agendaBelowMaxHeight: Style.space(420)
+  // Settings fill the panel at the width of the standard layout, the same
+  // whatever the layout, so the page never changes shape.
+  readonly property int settingsWidth: grid.width + Style.spacing.hairline + root.agendaWidth + root.columnPadding * 2
   readonly property int inspectorWidth: Style.space(290)
   readonly property int columnPadding: Style.space(14)
 
@@ -875,15 +873,15 @@ Panel {
     focusTarget: keyFocus
     contentWidth: panel.fittedContentWidth(columns.width + panel.padding * 2
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec))
-    // Beside the month, fixed while the panel is up, whatever the day holds:
-    // the agenda and the inspector scroll inside it, so moving between days
-    // never makes the popup jump. The floor keeps room for that agenda when
-    // the left column is short. Under the month, the panel fits the day, as
-    // it did before the redesign. The open layout menu always fits.
+    // As tall as the tallest column, so a quiet day leaves no empty space
+    // under the calendar. A busy day makes the panel taller, up to what the
+    // screen allows; past that the agenda and the details scroll. The open
+    // layout menu always fits.
     contentHeight: panel.fittedContentHeight(Math.max(
-      root.agendaBelow ? 0 : Style.space(480),
-      leftContent.implicitHeight + root.columnPadding,
-      layoutMenu.visible ? layoutMenu.y + layoutMenu.height + root.columnPadding : 0))
+      leftContent.implicitHeight,
+      agendaBesideSlot.visible ? agenda.naturalHeight : 0,
+      root.inspectorOpen ? inspectorContent.implicitHeight : 0,
+      layoutMenu.visible ? layoutMenu.y + layoutMenu.height : 0) + root.columnPadding)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -943,7 +941,7 @@ Panel {
 
             Column {
               id: leftContent
-              width: grid.width
+              width: root.settingsOpen ? root.settingsWidth : grid.width
               spacing: Style.space(14)
 
               HeroHeader {
@@ -1077,7 +1075,7 @@ Panel {
           }
 
           Rectangle {
-            visible: !root.agendaBelow
+            visible: !root.agendaBelow && !root.settingsOpen
             width: Style.spacing.hairline
             height: parent.height
             color: Util.alpha(root.contentForeground, 0.1)
@@ -1086,7 +1084,7 @@ Panel {
           // ---- Middle: the agenda, unless it sits under the month.
           Item {
             id: agendaBesideSlot
-            visible: !root.agendaBelow
+            visible: !root.agendaBelow && !root.settingsOpen
             width: root.agendaWidth + root.columnPadding * 2
             height: parent.height
 
@@ -1163,37 +1161,25 @@ Panel {
               width: root.inspectorWidth
 
               EventDetails {
-                visible: !root.formOpen && root.inspectorItem !== null
+                visible: !root.formOpen && root.selectedItem !== null
                 width: parent.width
-                item: root.inspectorItem || ({})
-                whenText: root.whenText(root.inspectorItem)
+                item: root.selectedItem || ({})
+                whenText: root.whenText(root.selectedItem)
                 nowMs: root.nowMs
-                editable: root.isEditable(root.inspectorItem) && !root.writeBusy
-                deletable: root.isEditable(root.inspectorItem) && !root.writeBusy
-                snoozable: root.inspectorSnoozable
+                editable: root.isEditable(root.selectedItem) && !root.writeBusy
+                deletable: root.isEditable(root.selectedItem) && !root.writeBusy
+                snoozable: root.selectedSnoozable
                 snoozeText: root.snoozeText
-                closable: root.detailsMode !== "pinned"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
                 onCloseRequested: root.detailsOpen = false
-                onEditRequested: root.editEvent(root.inspectorItem)
-                onDeleteRequested: root.deleteEvent(root.inspectorItem)
-                onJoinRequested: root.joinItem(root.inspectorItem)
-                onSnoozeRequested: root.snooze(root.inspectorItem)
+                onEditRequested: root.editEvent(root.selectedItem)
+                onDeleteRequested: root.deleteEvent(root.selectedItem)
+                onJoinRequested: root.joinItem(root.selectedItem)
+                onSnoozeRequested: root.snooze(root.selectedItem)
                 onLinkOpened: function(url) { root.openExternally(url) }
                 onLinkCopied: function(url) { root.copyLink(url) }
-              }
-
-              // Pinned open on a day with nothing in it.
-              Text {
-                visible: !root.formOpen && root.inspectorItem === null
-                width: parent.width
-                text: root.tr("layout.nothingSelected")
-                color: Util.alpha(root.contentForeground, 0.6)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.bodySmall
-                wrapMode: Text.WordWrap
               }
 
               // A Loader, so every open gets a fresh form: the shell's menus

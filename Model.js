@@ -1092,26 +1092,19 @@ function notificationArg(value) {
 
 // ---- Layout: which blocks the panel shows
 
-// The agenda sits in its own column beside the month, or under it in one
+// The agenda sits in its own column beside the calendar, or under it in one
 // narrow column, the way the panel looked before the redesign.
 var AGENDA_PLACEMENTS = ["beside", "below"]
-// "click" opens the details column on a click and "pinned" keeps it open.
-// The edit form opens there in both modes.
-var DETAILS_MODES = ["click", "pinned"]
-var LAYOUT_PRESET_NAMES = ["minimal", "standard", "full"]
+var LAYOUT_PRESET_NAMES = ["minimal", "standard"]
 // Standard is the panel as it was before these settings existed, so a
 // missing key changes nothing for someone who never opened the menu.
 var LAYOUT_PRESETS = {
   minimal: {
-    agendaPlacement: "below", detailsColumn: "click", showYearProgress: false, showCalendarList: false,
+    agendaPlacement: "below", showYearProgress: false, showCalendarList: false,
     showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
   },
   standard: {
-    agendaPlacement: "beside", detailsColumn: "click", showYearProgress: false, showCalendarList: true,
-    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
-  },
-  full: {
-    agendaPlacement: "beside", detailsColumn: "pinned", showYearProgress: true, showCalendarList: true,
+    agendaPlacement: "beside", showYearProgress: false, showCalendarList: true,
     showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
   }
 }
@@ -1133,8 +1126,6 @@ function layoutFromSettings(settings) {
     var value = stored[key]
     if (key === "agendaPlacement") {
       if (AGENDA_PLACEMENTS.indexOf(value) !== -1) layout[key] = value
-    } else if (key === "detailsColumn") {
-      if (DETAILS_MODES.indexOf(value) !== -1) layout[key] = value
     } else if (typeof value === "boolean") {
       layout[key] = value
     }
@@ -1151,22 +1142,6 @@ function layoutPresetName(layout) {
     if (same) return LAYOUT_PRESET_NAMES[i]
   }
   return ""
-}
-
-// A pinned column stays open on a day with nothing to show, so the panel
-// keeps its width while you move between days.
-function detailsVisible(mode, opened, hasItem) {
-  if (mode === "pinned") return true
-  return opened && hasItem
-}
-
-// What the details column shows. Pinned with nothing selected, it shows
-// the next event, else the day's first one.
-function inspectorItem(mode, selected, nextUp, items) {
-  if (selected) return selected
-  if (mode !== "pinned") return null
-  if (nextUp) return nextUp
-  return items && items.length > 0 ? items[0] : null
 }
 
 // ---- Sync state
