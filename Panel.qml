@@ -873,14 +873,13 @@ Panel {
     focusTarget: keyFocus
     contentWidth: panel.fittedContentWidth(columns.width + panel.padding * 2
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec))
-    // As tall as the tallest column, so a quiet day leaves no empty space
-    // under the calendar. A busy day makes the panel taller, up to what the
-    // screen allows; past that the agenda and the details scroll. The open
-    // layout menu always fits.
+    // The calendar column sets the height: the agenda and the details
+    // scroll beside it, so moving between days never makes the popup jump
+    // and a quiet day leaves no empty space. Under the calendar, the agenda
+    // is part of that column, so the panel fits the day. The open layout
+    // menu always fits.
     contentHeight: panel.fittedContentHeight(Math.max(
       leftContent.implicitHeight,
-      agendaBesideSlot.visible ? agenda.naturalHeight : 0,
-      root.inspectorOpen ? inspectorContent.implicitHeight : 0,
       layoutMenu.visible ? layoutMenu.y + layoutMenu.height : 0) + root.columnPadding)
 
     PanelKeyCatcher {
