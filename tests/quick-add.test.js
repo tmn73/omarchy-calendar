@@ -318,3 +318,65 @@ test('googleTemplateUrl encodes the title so safeUrl accepts it', () => {
 test('googleTemplateUrl is empty without a parse', () => {
   assert.equal(Model.googleTemplateUrl(null), '')
 })
+
+const understood = (text, lang = 'en') =>
+  Model.quickAddUnderstood(text, NOW, lang).map((f) => `${f.kind}:${f.text}`)
+
+test('quickAddUnderstood lists the words read as something else than the title, in typed order', () => {
+  assert.deepEqual(understood('call with Ana tomorrow 2pm for 45m'),
+    ['meet:call', 'date:tomorrow', 'time:2pm', 'duration:for 45m'])
+  assert.deepEqual(understood('call com Ana amanhã 14h por 45min', 'pt'),
+    ['meet:call', 'date:amanhã', 'time:14h', 'duration:por 45min'])
+})
+
+test('quickAddUnderstood keeps a leading word with what it introduces', () => {
+  assert.deepEqual(understood('Dentist next monday at 3pm'), ['date:next monday', 'time:at 3pm'])
+})
+
+test('quickAddUnderstood reads all day', () => {
+  assert.deepEqual(understood('Offsite friday all day'), ['date:friday', 'allDay:all day'])
+})
+
+test('quickAddUnderstood is empty when only a title was typed, or nothing', () => {
+  assert.deepEqual(understood('Lunch with Bea'), [])
+  assert.deepEqual(understood('   '), [])
+})
+
+test('parseQuickAdd: "until" alone is an end time, from now to then', () => {
+  // NOW is 12:52: the event starts at the quarter hour before.
+  assert.deepEqual(when('Ikea until 3pm', 'en'), ['2026-10-06', '12:45-15:00'])
+  assert.deepEqual(when('Ikea até às 15h', 'pt'), ['2026-10-06', '12:45-15:00'])
+  assert.deepEqual(when('Ikea ate 15h', 'pt'), ['2026-10-06', '12:45-15:00'])
+  assert.equal(parse('Ikea until 3pm', 'en').title, 'Ikea')
+})
+
+test('parseQuickAdd: "until" on another day, or already past, ends an hour-long event', () => {
+  assert.deepEqual(when('Ikea tomorrow until 11am', 'en'), ['2026-10-07', '10:00-11:00'])
+  assert.deepEqual(when('Ikea until 11 a.m.', 'en'), ['2026-10-06', '10:00-11:00'])
+})
+
+test('parseQuickAdd: a start and "until" stay a range', () => {
+  assert.deepEqual(when('Ikea 10am until 11am', 'en'), ['2026-10-06', '10:00-11:00'])
+})
+
+test('parseQuickAdd: a range of bare hours is a time with from/das, or past 12', () => {
+  assert.deepEqual(when('Ikea today from 9 to 13', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.equal(parse('Ikea today from 9 to 13', 'en').title, 'Ikea')
+  assert.deepEqual(when('Ikea 9-13', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.deepEqual(when('Ikea das 9 às 13', 'pt'), ['2026-10-06', '09:00-13:00'])
+  assert.deepEqual(when('Ikea from 2 to 4', 'en'), ['2026-10-06', '14:00-16:00'])
+})
+
+test('parseQuickAdd: a bare start with a clock end is a range', () => {
+  assert.deepEqual(when('Ikea 9 to 13:00', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.equal(parse('Ikea 9 to 13:00', 'en').title, 'Ikea')
+})
+
+test('parseQuickAdd: two small bare numbers stay in the title', () => {
+  assert.deepEqual(when('Kids 2-3', 'en'), ['2026-10-06', 'all day'])
+  assert.equal(parse('Kids 2-3', 'en').title, 'Kids 2-3')
+})
+
+test('quickAddUnderstood shows a bare range as one time', () => {
+  assert.deepEqual(understood('Ikea today from 9 to 13'), ['date:today', 'time:from 9 to 13'])
+})

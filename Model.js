@@ -823,29 +823,37 @@ var IMMINENT_MINUTES = 10
 var LIVE_MINUTES = 2
 
 // The bar's escalation: "soon" inside the lead time, "imminent" in the last
-// 10 minutes (or the whole lead, when that is shorter), "live" for the first
-// 2 minutes after the start. A meeting that has just started outranks the
-// next one. `extra` counts the other events starting at the same moment.
-// A lead of 0 means the user asked for the clock alone.
-function barState(events, nowMs, leadMinutes) {
+// 10 minutes (or the whole lead, when that is shorter), "live" once an event
+// starts: for its first 2 minutes, or until its end with liveUntilEnd. When
+// both apply, the event that has just started wins its first 2 minutes;
+// after that the next one takes over, unless keepCurrent. `extra` counts
+// the other events starting at the same moment. A lead of 0 means the user
+// asked for the clock alone.
+function barState(events, nowMs, leadMinutes, options) {
   var lead = Number(leadMinutes) || 0
+  var opts = options || {}
   var idle = { phase: "idle", event: null, extra: 0, countdownMs: 0 }
   if (lead <= 0) return idle
 
   var candidates = announceableEvents(events)
-  var chosen = null
-  var phase = "idle"
+  var live = null
+  var soon = null
   for (var i = 0; i < candidates.length; i++) {
     var c = candidates[i]
-    var live = c.start <= nowMs && nowMs - c.start <= LIVE_MINUTES * MINUTE_MS && nowMs < c.end
-    if (live && (phase !== "live" || c.start > chosen.start)) {
-      chosen = c
-      phase = "live"
-    } else if (phase !== "live" && c.start > nowMs && c.start - nowMs <= lead * MINUTE_MS
-               && (!chosen || c.start < chosen.start)) {
-      chosen = c
-      phase = "soon"
+    var started = c.start <= nowMs && nowMs < c.end
+    if (started && (opts.liveUntilEnd || nowMs - c.start <= LIVE_MINUTES * MINUTE_MS)) {
+      // The latest to start is the one under way now.
+      if (!live || c.start > live.start) live = c
+    } else if (c.start > nowMs && c.start - nowMs <= lead * MINUTE_MS && (!soon || c.start < soon.start)) {
+      soon = c
     }
+  }
+
+  var chosen = soon
+  var phase = soon ? "soon" : "idle"
+  if (live && (!soon || opts.keepCurrent || nowMs - live.start <= LIVE_MINUTES * MINUTE_MS)) {
+    chosen = live
+    phase = "live"
   }
   if (!chosen) return idle
 
@@ -1088,6 +1096,60 @@ function reminderBody(event, nowMs, lang, formatTime, formatWeekday) {
 function notificationArg(value) {
   var s = text(value)
   return /^-/.test(s) ? "\u2060" + s : s
+}
+
+// ---- Layout: which blocks the panel shows
+
+// The agenda sits in its own column beside the calendar, or under it in one
+// narrow column, the way the panel looked before the redesign.
+var AGENDA_PLACEMENTS = ["beside", "below"]
+var LAYOUT_PRESET_NAMES = ["minimal", "standard"]
+// Standard is the panel as it was before these settings existed, so a
+// missing key changes nothing for someone who never opened the menu.
+var LAYOUT_PRESETS = {
+  minimal: {
+    agendaPlacement: "below", showYearProgress: false,
+    showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
+  },
+  standard: {
+    agendaPlacement: "beside", showYearProgress: false,
+    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
+  }
+}
+
+// A copy, so the caller can persist or change it without touching the preset.
+function layoutPreset(name) {
+  var preset = LAYOUT_PRESETS[name] || LAYOUT_PRESETS.standard
+  var copy = {}
+  for (var key in preset) copy[key] = preset[key]
+  return copy
+}
+
+// The stored settings as a full layout. shell.json is edited by hand too,
+// so a value of the wrong type falls back to the standard preset.
+function layoutFromSettings(settings) {
+  var stored = settings || {}
+  var layout = layoutPreset("standard")
+  for (var key in layout) {
+    var value = stored[key]
+    if (key === "agendaPlacement") {
+      if (AGENDA_PLACEMENTS.indexOf(value) !== -1) layout[key] = value
+    } else if (typeof value === "boolean") {
+      layout[key] = value
+    }
+  }
+  return layout
+}
+
+// The preset a layout matches exactly, or "" when it was set by hand.
+function layoutPresetName(layout) {
+  for (var i = 0; i < LAYOUT_PRESET_NAMES.length; i++) {
+    var preset = LAYOUT_PRESETS[LAYOUT_PRESET_NAMES[i]]
+    var same = true
+    for (var key in preset) if (layout[key] !== preset[key]) same = false
+    if (same) return LAYOUT_PRESET_NAMES[i]
+  }
+  return ""
 }
 
 // ---- Sync state
@@ -1388,9 +1450,12 @@ var QUICK_PATTERNS = {
     + "(?=\\s(?:((?:(?:at|as|a partir das|starting at|from|das|entre|@)\\s?)?(?:" + QUICK_CLOCK + ")"
     + "|(?:at|as|@)\\s?\\d{1,2})(?=[\\s\\-\u2013]))?)"),
   monthDayOnly: /\s(?:(?:on )?the (\d{1,2})(?:st|nd|rd|th)?|(?:on )?(\d{1,2})(?:st|nd|rd|th)|(?:no )?dia (\d{1,2}))(?=\s)/,
-  timeRange: new RegExp("\\s(?:(?:from|de|das|entre) )?(" + QUICK_CLOCK + "|\\d{1,2})"
-    + "\\s?(?:-|\u2013|to|until|till|ate|as|a|e)\\s?(" + QUICK_CLOCK + ")(?=\\s)"),
+  // Groups: 1 the word that opens a range, 2 its start, 3 its end.
+  timeRange: new RegExp("\\s(?:(from|de|das|entre) )?(" + QUICK_CLOCK + "|\\d{1,2})"
+    + "\\s?(?:-|\u2013|to|until|till|ate|as|a|e)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
   prefixedTime: new RegExp("\\s(?:at|as|a partir das|starting at|@)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
+  // An end with no start: "until 11am", "até às 11h".
+  untilTime: new RegExp("\\s(?:until|till|til|ate(?: as| a)?)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
   plainTime: /\s(\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.?|p\.m\.?)|\d{1,2}:\d{2}|noon|midday|midnight|meio-dia|meio dia|meia-noite|meia noite)(?=\s)/,
   hourPhrase: /\s(\d{1,2}h(?:\d{2})?)(?=\s)/,
   prefixedDuration: /\s(?:for|por|durante) (?:about |cerca de )?(\d+(?:[.,]\d+)?\s?(?:h|hr|hrs|hour|hours|hora|horas)(?:\s?\d{1,2}\s?(?:m|min|mins|minutes|minutos)?)?|\d+\s?(?:m|min|mins|minute|minutes|minuto|minutos)|(?:an|one|uma) (?:hour|hora)|half an hour|meia hora)(?=\s)/,
@@ -1551,18 +1616,33 @@ function isStartTime(phrase) {
 function readTimes(scanner) {
   var p = QUICK_PATTERNS
   var range = take(scanner, p.timeRange, function(m) {
-    var first = readClock(m[1])
-    var second = readClock(m[2])
+    var first = readClock(m[2])
+    var second = readClock(m[3])
     if (!first || !second) return null
+    if (first.bare && second.bare) {
+      // "Kids 2-3" is no time; "from 2 to 4", "das 9 às 13" and "9-13" are.
+      if (!m[1] && first.minutes < 13 * 60 && second.minutes < 13 * 60) return null
+      // Read as the hours people book: "from 2 to 4" is the afternoon, and
+      // "from 9 to 1" ends at 13:00.
+      var from = resolvedClock(first)
+      var to = second.minutes
+      if (to <= from && to + 12 * 60 > from) to += 12 * 60
+      return { start: from, end: to % (24 * 60) }
+    }
     var start = first.minutes
     // "2-3pm": the first half borrows the second's am/pm when that keeps
     // the order.
     if (!first.meridiem && second.meridiem === "p" && start < 12 * 60 && start + 12 * 60 <= second.minutes)
       start += 12 * 60
-    else if (first.bare && !second.meridiem) return null
     return { start: start, end: second.minutes }
   })
   if (range) return range
+
+  var until = take(scanner, p.untilTime, function(m) {
+    var clock = readClock(m[1])
+    return clock ? resolvedClock(clock) : null
+  })
+  if (until !== null) return { start: null, end: until }
 
   var start = take(scanner, p.prefixedTime, function(m) {
     var clock = readClock(m[1])
@@ -1601,34 +1681,91 @@ function readDuration(scanner, hasTime) {
   return minutes
 }
 
+// The stretches of `before` that are blank in `after`, as [{ at, text }]. A
+// space between two blanked words keeps them together: "for 45m".
+function blankedSince(before, after) {
+  var runs = []
+  var start = -1
+  for (var i = 0; i <= before.length; i++) {
+    var gone = i < before.length && before[i] !== " " && after[i] === " "
+    var joins = i < before.length && before[i] === " " && start >= 0
+      && i + 1 < before.length && before[i + 1] !== " " && after[i + 1] === " "
+    if (gone || joins) {
+      if (start < 0) start = i
+    } else if (start >= 0) {
+      runs.push({ at: start, text: before.substring(start, i) })
+      start = -1
+    }
+  }
+  return runs
+}
+
 // { title, dateKey, endDateKey, allDay, startTime, endTime,
 //   durationMinutes, meet }, or null when there is no title to create.
 // `now` is a Date or ms. No time means an all-day event (startTime and
 // endTime "", durationMinutes 0); a time with no length lasts an hour.
 function parseQuickAdd(input, now, lang) {
+  return scanQuickAdd(input, now, lang).parsed
+}
+
+// The words quick add read as something else than the title, in the order
+// they were typed: [{ text, kind }], kind one of "date", "time",
+// "duration", "allDay" and "meet". The panel shows them, so the user can
+// see what was understood. A meeting word stays in the title too.
+function quickAddUnderstood(input, now, lang) {
+  return scanQuickAdd(input, now, lang).found
+}
+
+function scanQuickAdd(input, now, lang) {
   var raw = text(input).trim()
-  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return null
+  if (!/[0-9A-Za-z\u00c0-\u024f]/.test(raw)) return { parsed: null, found: [] }
 
   var nowDate = typeof now === "number" ? new Date(now) : now
   var today = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate())
   var scanner = quickScanner(raw)
-  var meet = QUICK_PATTERNS.meet.test(scanner.folded)
+  var found = []
+  var meetMatch = scanner.folded.match(QUICK_PATTERNS.meet)
+  var meet = meetMatch !== null
+  if (meet) found.push({ at: meetMatch.index + 1,
+    text: scanner.original.substring(meetMatch.index + 1, meetMatch.index + meetMatch[0].length), kind: "meet" })
+
+  // Each reading blanks what it took; the difference is what it understood.
+  var before = scanner.original
+  function note(kind) {
+    var runs = blankedSince(before, scanner.original)
+    for (var r = 0; r < runs.length; r++) found.push({ at: runs[r].at, text: runs[r].text, kind: kind })
+    before = scanner.original
+  }
 
   var forcedAllDay = take(scanner, QUICK_PATTERNS.allDay, function() { return true }) === true
+  note("allDay")
   var date = readDate(scanner, today, lang) || today
+  note("date")
   var times = readTimes(scanner)
+  note("time")
   var length = readDuration(scanner, times !== null)
+  note("duration")
+  found.sort(function(a, b) { return a.at - b.at })
+  found = found.map(function(f) { return { text: f.text, kind: f.kind } })
 
   // Punctuation stranded by a blanked phrase ("Trip [7 p.m]." ) goes too.
   var title = scanner.original.replace(/(^|\s)[.,;:!?]+(?=\s|$)/g, "$1").replace(/\s+/g, " ")
     .replace(/\s+([,;:.!?])/g, "$1")
     .replace(/^[\s,;:·\-\u2013\u2014]+|[\s,;:·\-\u2013\u2014]+$/g, "")
-  if (title === "") return null
+  if (title === "") return { parsed: null, found: found }
 
   var key = keyForDate(date)
+  // "until 11am" alone: from now, at the quarter hour before, when that is
+  // still ahead today; otherwise the usual length, ending then.
+  if (times !== null && times.start === null) {
+    var nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes()
+    var fromNow = key === keyForDate(today) && nowMinutes < times.end
+    times = { start: fromNow ? Math.floor(nowMinutes / 15) * 15 : Math.max(0, times.end - DEFAULT_QUICK_DURATION),
+              end: times.end }
+  }
   if (forcedAllDay || times === null)
-    return { title: title, dateKey: key, endDateKey: key, allDay: true,
-             startTime: "", endTime: "", durationMinutes: 0, meet: meet }
+    return { found: found, parsed: { title: title, dateKey: key, endDateKey: key, allDay: true,
+             startTime: "", endTime: "", durationMinutes: 0, meet: meet } }
 
   var duration = times.end !== null
     ? ((times.end - times.start + 24 * 60 - 1) % (24 * 60)) + 1
@@ -1637,9 +1774,9 @@ function parseQuickAdd(input, now, lang) {
   // Ending exactly at midnight stays on the start date, as the event form
   // reads "00:00" as that midnight.
   var endKey = endMinutes > 24 * 60 ? addDays(key, Math.floor(endMinutes / (24 * 60))) : key
-  return { title: title, dateKey: key, endDateKey: endKey, allDay: false,
+  return { found: found, parsed: { title: title, dateKey: key, endDateKey: endKey, allDay: false,
            startTime: clockText(times.start), endTime: clockText(endMinutes % (24 * 60)),
-           durationMinutes: duration, meet: meet }
+           durationMinutes: duration, meet: meet } }
 }
 
 // The event form a quick add opens as, for "More options" or a direct save.

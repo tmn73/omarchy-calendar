@@ -43,7 +43,10 @@ BarWidget {
     hideDeclined: true
   })
 
-  readonly property var barState: Model.barState(visibleEvents, nowMs, setting("announceLeadMinutes", 15))
+  readonly property var barState: Model.barState(visibleEvents, nowMs, setting("announceLeadMinutes", 15), {
+    liveUntilEnd: setting("duringEvent", "untilEnd") !== "firstMinutes",
+    keepCurrent: setting("nextDuringEvent", "announce") === "keep"
+  })
   readonly property bool announcing: !vertical && barState.phase !== "idle"
   readonly property bool urgent: barState.phase === "live"
   readonly property bool emphasized: barState.phase === "imminent" || urgent
@@ -134,9 +137,11 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.toggleWeekStart()
   }
 
-  // The open-panel dot lines up with the painted label horizontally and
-  // takes one icon line vertically, the same mark icon widgets get.
-  readonly property real openPanelIndicatorWidth: vertical ? 0 : clockLabel.implicitWidth
+  // The open-panel dot lines up with what the widget paints, the
+  // announcement included: the bar centres it on the whole widget, so a
+  // clock-wide dot sat off to the right while an event showed. Vertically it
+  // takes one icon line, the same mark icon widgets get.
+  readonly property real openPanelIndicatorWidth: vertical ? 0 : content.implicitWidth
   readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
 
   // Forwarded so this widget can stand in for the panel as the bar's popout

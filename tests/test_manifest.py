@@ -28,7 +28,10 @@ class TestManifest(unittest.TestCase):
         self.assertEqual(schema["language"]["options"], ["auto", "en", "pt"])
         self.assertEqual(schema["reminders"]["type"], "boolean")
         self.assertEqual(schema["announceLeadMinutes"]["type"], "number")
-        for key, value in (("language", "auto"), ("reminders", True), ("announceLeadMinutes", 15)):
+        self.assertEqual(schema["duringEvent"]["options"], ["untilEnd", "firstMinutes"])
+        self.assertEqual(schema["nextDuringEvent"]["options"], ["announce", "keep"])
+        for key, value in (("language", "auto"), ("reminders", True), ("announceLeadMinutes", 15),
+                           ("duringEvent", "untilEnd"), ("nextDuringEvent", "announce")):
             self.assertEqual(schema[key]["defaultValue"], value)
             self.assertEqual(widget["defaults"][key], value)
 

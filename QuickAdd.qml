@@ -5,8 +5,10 @@ import qs.Ui
 import "Strings.js" as Strings
 
 // "call with Ana tomorrow 2pm for 45m", read as you type. The panel parses
-// the text and hands back a preview line; Enter creates, Ctrl+Enter (or
-// "More options") opens the full form with the parsed fields filled in.
+// the text and hands back a preview: the title, when it lands, and the words
+// it understood, so a word read as a date or a meeting never goes unseen.
+// The "?" lists what it reads. Enter creates, Ctrl+Enter (or "More
+// options") opens the full form with the parsed fields filled in.
 Rectangle {
   id: root
 
@@ -15,6 +17,8 @@ Rectangle {
   property string language: "en"
   property string previewTitle: ""
   property string previewWhen: ""
+  // [{ text, kind }] from Model.quickAddUnderstood
+  property var understood: []
   property alias text: field.text
   readonly property bool hasPreview: previewTitle !== ""
 
@@ -68,7 +72,7 @@ Rectangle {
       TextField {
         id: field
         anchors.left: plus.right
-        anchors.right: keyHint.left
+        anchors.right: helpButton.left
         anchors.leftMargin: Style.space(4)
         anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
@@ -91,25 +95,40 @@ Rectangle {
         }
       }
 
-      Rectangle {
+      // Drawn as a key, like the "n" beside it, so the two line up.
+      KeyCap {
+        id: helpButton
+        anchors.right: keyHint.left
+        anchors.rightMargin: Style.space(4)
+        anchors.verticalCenter: parent.verticalCenter
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        text: "?"
+        highlighted: helpHover.hovered
+        Accessible.name: root.tr("quick.helpLabel")
+
+        HoverHandler {
+          id: helpHover
+          cursorShape: Qt.WhatsThisCursor
+        }
+
+        PanelToolTip {
+          visible: helpHover.hovered
+          text: root.tr("quick.help")
+          fontFamily: root.fontFamily
+        }
+      }
+
+      KeyCap {
         id: keyHint
         visible: !field.activeFocus
         anchors.right: parent.right
         anchors.rightMargin: Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
-        width: visible ? hintLabel.implicitWidth + Style.space(5) * 2 : 0
-        height: hintLabel.implicitHeight + Style.space(1) * 2
-        radius: Style.cornerRadius
-        color: Util.alpha(root.foreground, 0.10)
-
-        Text {
-          id: hintLabel
-          anchors.centerIn: parent
-          text: "n"
-          color: Util.alpha(root.foreground, 0.6)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
+        width: visible ? implicitWidth : 0
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        text: "n"
       }
     }
 
@@ -152,19 +171,66 @@ Rectangle {
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
         }
+
+        // The words read as a date, a time, a length or a meeting, each in
+        // the accent colour. A meeting word also says what it adds.
+        Flow {
+          id: understoodRow
+          // Every item of the row is one chip tall, so the label and the
+          // chips share a centre line, also across a wrap.
+          readonly property real chipHeight: chipMetrics.height + Style.space(1) * 2
+
+          width: parent.width
+          topPadding: Style.space(2)
+          spacing: Style.space(4)
+
+          FontMetrics {
+            id: chipMetrics
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Text {
+            height: understoodRow.chipHeight
+            verticalAlignment: Text.AlignVCenter
+            text: root.tr(root.understood.length > 0 ? "quick.understood" : "quick.nothingUnderstood")
+            color: Util.alpha(root.foreground, 0.6)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
+          Repeater {
+            model: root.understood
+
+            Rectangle {
+              required property var modelData
+              width: chipLabel.implicitWidth + Style.space(5) * 2
+              height: understoodRow.chipHeight
+              radius: Style.cornerRadius
+              color: Util.alpha(Color.accent, 0.14)
+
+              Text {
+                id: chipLabel
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: modelData.kind === "meet" ? modelData.text + " → Google Meet" : modelData.text
+                color: Color.accent
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+          }
+        }
       }
 
-      Button {
+      SecondaryButton {
         id: moreButton
         anchors.right: createButton.left
         anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
         text: root.tr("quick.moreOptions")
-        bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
-        fontSize: Style.font.bodySmall
-        verticalPadding: Style.space(4)
         onClicked: root.submitted(true)
       }
 

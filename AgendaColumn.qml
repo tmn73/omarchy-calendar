@@ -21,6 +21,11 @@ Item {
   property bool canWrite: false
   property bool busy: false
 
+  // The blocks the layout can hide.
+  property bool showQuickAdd: true
+  property bool showNextUp: true
+  property bool showUpcomingDays: true
+
   property string dayHeading: ""
   property string daySummary: ""
   // Model.daySections for the selected day.
@@ -38,13 +43,13 @@ Item {
 
   property string quickPreviewTitle: ""
   property string quickPreviewWhen: ""
+  property var quickUnderstood: []
   property alias quickText: quickAdd.text
 
   property string toastText: ""
   property bool toastError: false
 
   signal itemSelected(var item)
-  signal itemActivated(var item)
   signal joinRequested(var item)
   signal snoozeRequested(var item)
   signal daySelected(string key)
@@ -55,6 +60,9 @@ Item {
   signal toastDismissed()
 
   readonly property bool empty: sections.allDay.length === 0 && sections.timed.length === 0
+  // The height that shows everything without scrolling. The panel uses it
+  // when the agenda sits under the month.
+  readonly property real naturalHeight: header.height + scroll.anchors.topMargin + scroll.contentHeight
   readonly property string nowText: Qt.formatDateTime(new Date(nowMs), timeFormat)
 
   function tr(key, args) {
@@ -87,18 +95,20 @@ Item {
     QuickAdd {
       id: quickAdd
       width: parent.width
+      visible: root.showQuickAdd
       foreground: root.foreground
       fontFamily: root.fontFamily
       language: root.language
       previewTitle: root.quickPreviewTitle
       previewWhen: root.quickPreviewWhen
+      understood: root.quickUnderstood
       onSubmitted: function(moreOptions) { root.quickSubmitted(moreOptions) }
       onEscaped: root.quickEscaped()
     }
 
     NextUpCard {
       width: parent.width
-      item: root.nextUp
+      item: root.showNextUp ? root.nextUp : null
       nowMs: root.nowMs
       timeFormat: root.timeFormat
       snoozable: root.nextUpSnoozable
@@ -118,7 +128,7 @@ Item {
     anchors.right: parent.right
     anchors.top: header.bottom
     anchors.bottom: parent.bottom
-    anchors.topMargin: Style.space(14)
+    anchors.topMargin: header.height > 0 ? Style.space(14) : 0
     contentWidth: width
     contentHeight: dayColumn.implicitHeight + (toast.visible ? toast.height + Style.space(12) : 0)
     clip: true
@@ -181,7 +191,8 @@ Item {
               return root.tr(root.setupCommandCopied ? "sync.copied" : "sync.missingPanel", [root.setupCommand])
             if (root.syncState === "version") return root.tr("sync.versionPanel")
             if (root.syncState === "stale") return root.tr("sync.stalePanel")
-            return root.tr(root.canWrite ? "agenda.empty" : "agenda.emptyReadOnly")
+            if (!root.canWrite) return root.tr("agenda.emptyReadOnly")
+            return root.tr(root.showQuickAdd ? "agenda.empty" : "agenda.emptyNoQuickAdd")
           }
         }
 
@@ -219,7 +230,6 @@ Item {
             fontFamily: root.fontFamily
             language: root.language
             onClicked: root.itemSelected(modelData)
-            onDoubleClicked: root.itemActivated(modelData)
             onSnoozeRequested: root.snoozeRequested(modelData)
           }
         }
@@ -266,7 +276,6 @@ Item {
               fontFamily: root.fontFamily
               language: root.language
               onClicked: root.itemSelected(timedEntry.modelData)
-              onDoubleClicked: root.itemActivated(timedEntry.modelData)
               onJoinRequested: root.joinRequested(timedEntry.modelData)
               onSnoozeRequested: root.snoozeRequested(timedEntry.modelData)
             }
@@ -291,17 +300,25 @@ Item {
       UpcomingDays {
         id: upcomingDays
         width: parent.width
-        days: root.upcoming
+        days: root.showUpcomingDays ? root.upcoming : []
         timeFormat: root.timeFormat
         foreground: root.foreground
         fontFamily: root.fontFamily
         language: root.language
         onDaySelected: function(key) { root.daySelected(key) }
         onItemSelected: function(item) { root.itemSelected(item) }
-        onItemActivated: function(item) { root.itemActivated(item) }
         onJoinRequested: function(item) { root.joinRequested(item) }
       }
     }
+  }
+
+  // The day can run past the column: say so, under the toast.
+  ScrollHint {
+    anchors.fill: scroll
+    // In the column's padding, so the thumb never covers a Join button.
+    anchors.rightMargin: -Style.space(9)
+    flickable: scroll
+    foreground: root.foreground
   }
 
   Toast {

@@ -5,9 +5,9 @@ import qs.Ui
 import "Strings.js" as Strings
 
 // Today, large, with "weekday · time · week N" under it and the settings
-// button at the right. Once the view has moved away from today the date is
-// also the way back: clicking what you are looking for beats hunting for a
-// reset button.
+// button at the right. Once the view has moved away from today
+// the date is also the way back: clicking what you are looking for beats
+// hunting for a reset button.
 Item {
   id: root
 
@@ -27,15 +27,15 @@ Item {
   readonly property int iconPixelSize: Math.round(datePixelSize * 0.95)
 
   // A long month in a wide monospace font ("September 30") can run under
-  // the settings button, so both glyphs shrink together until the row fits.
-  readonly property real availableWidth: width - settingsButton.width - Style.space(8)
+  // the buttons, so both glyphs shrink together until the row fits.
+  readonly property real availableWidth: width - buttons.width - Style.space(8)
   readonly property real naturalWidth: iconMetrics.advanceWidth + dateMetrics.advanceWidth + heroRow.spacing
   readonly property real fit: naturalWidth > 0 ? Math.max(0.4, Math.min(1, availableWidth / naturalWidth)) : 1
   readonly property color heroColor: homeMouse.containsMouse
     ? Style.hoverStateColor(root.foreground, Color.accent)
     : root.foreground
 
-  implicitHeight: Math.max(heroRow.height, settingsButton.height)
+  implicitHeight: Math.max(heroRow.height, buttons.height)
 
   TextMetrics {
     id: iconMetrics
@@ -108,14 +108,18 @@ Item {
     }
   }
 
-  PanelActionButton {
-    id: settingsButton
+  Row {
+    id: buttons
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
-    iconText: root.settingsOpen ? "󰅖" : "󰒓"
-    tooltipText: Strings.tr(root.language, root.settingsOpen ? "nav.backToCalendar" : "nav.settings")
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onClicked: root.settingsToggled()
+    spacing: Style.space(2)
+
+    PanelActionButton {
+      iconText: root.settingsOpen ? "󰅖" : "󰒓"
+      tooltipText: Strings.tr(root.language, root.settingsOpen ? "nav.backToCalendar" : "nav.settings")
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onClicked: root.settingsToggled()
+    }
   }
 }

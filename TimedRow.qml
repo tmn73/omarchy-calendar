@@ -26,7 +26,6 @@ Rectangle {
   property string language: "en"
 
   signal clicked()
-  signal doubleClicked()
   signal joinRequested()
   signal snoozeRequested()
 
@@ -62,7 +61,6 @@ Rectangle {
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
     onClicked: root.clicked()
-    onDoubleClicked: root.doubleClicked()
   }
 
   Item {
@@ -159,9 +157,8 @@ Rectangle {
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(4)
 
-    AccentButton {
+    SecondaryButton {
       visible: root.snoozable
-      filled: false
       iconText: "󰒲"
       tooltipText: root.snoozeText
       foreground: root.foreground

@@ -105,7 +105,11 @@ Panel {
     Qt.resolvedUrl("sync/setup"), Quickshell.env("HOME") || "")
   readonly property string writeSetupCommand: root.setupCommand + " --write"
 
-  readonly property bool showYearProgress: setting("showYearProgress", false)
+  // Which blocks the panel shows. See Model.layoutFromSettings.
+  readonly property var layout: Model.layoutFromSettings(root.settings)
+  readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
+  readonly property bool shortcutLegendExpanded: setting("shortcutLegendExpanded", false) === true
+  readonly property bool showYearProgress: root.layout.showYearProgress
   // Google's working-location markers describe no commitment, so they are
   // out by default. Declined invitations stay in: you probably still want
   // to see what you said no to.
@@ -119,8 +123,8 @@ Panel {
   // would still serve the old value when a second click arrives.
   property var hiddenCalendars: []
   readonly property var knownCalendars: Model.calendarsInDocument(eventDoc)
-  // Events per calendar, hidden ones included, for the filter chips. By id:
-  // a multi-day event is one row per day.
+  // Events per calendar, hidden ones included, for Settings. By id: a
+  // multi-day event is one row per day.
   readonly property var calendarCounts: {
     var seen = {}
     var counts = {}
@@ -188,7 +192,8 @@ Panel {
       if (String(root.dayItems[i].id) === root.selectedEventId) return root.dayItems[i]
     return null
   }
-  readonly property bool inspectorOpen: formOpen || (detailsOpen && selectedItem !== null)
+  // Settings take the whole panel, so the details step aside while it is open.
+  readonly property bool inspectorOpen: !settingsOpen && (formOpen || (detailsOpen && selectedItem !== null))
 
   // Today's first timed event not yet over, shown above today's agenda.
   readonly property var nextUp: {
@@ -220,6 +225,7 @@ Panel {
 
   // ---- Quick add.
   readonly property var quickParsed: Model.parseQuickAdd(agenda.quickText, nowTick, language)
+  readonly property var quickUnderstood: Model.quickAddUnderstood(agenda.quickText, nowTick, language)
   readonly property string quickPreviewWhen: {
     var parsed = root.quickParsed
     if (!parsed) return ""
@@ -265,6 +271,11 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property int agendaWidth: Style.space(330)
+  // Under the calendar, past this the agenda scrolls inside the panel.
+  readonly property int agendaBelowMaxHeight: Style.space(420)
+  // Settings fill the panel at the width of the standard layout, the same
+  // whatever the layout, so the page never changes shape.
+  readonly property int settingsWidth: grid.width + Style.spacing.hairline + root.agendaWidth + root.columnPadding * 2
   readonly property int inspectorWidth: Style.space(290)
   readonly property int columnPadding: Style.space(14)
 
@@ -508,7 +519,10 @@ Panel {
     else if (t === "}") root.moveYear(1)
     else if (t === "t" || t === "T") root.goToToday()
     else if (t === "w" || t === "W") root.toggleWeekStart()
-    else if (t === "n" || t === "N") agenda.focusQuickAdd()
+    else if (t === "n" || t === "N") {
+      if (root.layout.showQuickAdd) agenda.focusQuickAdd()
+      else root.newEvent()
+    }
     else if (t === "e" || t === "E") root.activateItem(root.selectedItem)
     else if (t === "m" || t === "M") root.joinMeeting()
     else if (t === "o" || t === "O") root.openEvent(root.selectedItem)
@@ -553,7 +567,7 @@ Panel {
       && !/todoist/i.test(String(item.calendarName || ""))
   }
 
-  // Double click and "e": edit what can be edited, open the rest in Google.
+  // "e": edit what can be edited, open the rest in Google.
   function activateItem(item) {
     if (!item) return
     if (root.isEditable(item)) root.editEvent(item)
@@ -857,10 +871,11 @@ Panel {
     focusTarget: keyFocus
     contentWidth: panel.fittedContentWidth(columns.width + panel.padding * 2
       + Border.left(panel.borderSpec) + Border.right(panel.borderSpec))
-    // Fixed while the panel is up, whatever the day holds: the agenda and
-    // the inspector scroll inside it, so moving between days never makes
-    // the popup jump.
-    contentHeight: panel.fittedContentHeight(Math.max(Style.space(640), leftContent.implicitHeight + root.columnPadding))
+    // The calendar column sets the height: the agenda and the details
+    // scroll beside it, so moving between days never makes the popup jump
+    // and a quiet day leaves no empty space. Under the calendar, the agenda
+    // is part of that column, so the panel fits the day.
+    contentHeight: panel.fittedContentHeight(leftContent.implicitHeight + root.columnPadding)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -920,10 +935,13 @@ Panel {
 
             Column {
               id: leftContent
-              width: grid.width
+              width: root.settingsOpen ? root.settingsWidth : grid.width
               spacing: Style.space(14)
 
+              // Settings bring their own header, with the way back.
               HeroHeader {
+                id: hero
+                visible: !root.settingsOpen
                 width: parent.width
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -977,24 +995,23 @@ Panel {
                 onMonthStepped: function(delta) { root.moveMonth(delta) }
               }
 
-              CalendarFilters {
+              // Where the agenda goes when it sits under the month. The one
+              // agenda moves here, see its parent below.
+              Item {
+                id: agendaBelowSlot
+                visible: root.agendaBelow && !root.settingsOpen
                 width: parent.width
-                visible: !root.settingsOpen && calendars.length > 0
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                calendars: root.knownCalendars
-                hiddenCalendars: root.hiddenCalendars
-                counts: root.calendarCounts
-                onToggled: function(calendarId) { root.toggleCalendar(calendarId) }
+                height: visible ? Math.min(agenda.naturalHeight, root.agendaBelowMaxHeight) : 0
               }
 
               ShortcutLegend {
                 width: parent.width
-                visible: !root.settingsOpen
+                visible: !root.settingsOpen && root.layout.showShortcutLegend
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
+                expanded: root.shortcutLegendExpanded
+                onExpandToggled: root.persistSettings({ shortcutLegendExpanded: !root.shortcutLegendExpanded })
               }
 
               // Everything settings changes is owned by this panel and
@@ -1008,11 +1025,15 @@ Panel {
                 languageSetting: String(root.setting("language", "auto"))
                 calendars: root.knownCalendars
                 hiddenCalendars: root.hiddenCalendars
-                showYearProgress: root.showYearProgress
+                calendarCounts: root.calendarCounts
+                layout: root.layout
                 showWorkingLocation: root.showWorkingLocation
                 hideDeclined: root.hideDeclined
                 weekStartsMonday: root.weekStart === 1
                 announceLeadMinutes: root.setting("announceLeadMinutes", 15)
+                duringEvent: String(root.setting("duringEvent", "untilEnd"))
+                nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
+                reminders: root.setting("reminders", true) !== false
                 syncState: root.syncState
                 setupCommand: root.setupCommand
                 setupCommandCopied: root.setupCommandCopied
@@ -1025,33 +1046,39 @@ Panel {
                   : ""
                 onSetupCommandCopyRequested: root.copySetupCommand()
                 onWriteSetupCopyRequested: root.copyWriteSetupCommand()
+                onCloseRequested: root.settingsOpen = false
+                onPicked: function(values) { root.persistSettings(values) }
                 onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
-                onYearProgressToggled: root.persistSettings({ showYearProgress: !root.showYearProgress })
                 onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
                 onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
                 onWeekStartToggled: root.toggleWeekStart()
-                onLeadMinutesPicked: function(minutes) { root.persistSettings({ announceLeadMinutes: minutes }) }
                 onLanguagePicked: function(value) { root.persistSettings({ language: value }) }
               }
             }
           }
 
           Rectangle {
+            visible: !root.agendaBelow && !root.settingsOpen
             width: Style.spacing.hairline
             height: parent.height
             color: Util.alpha(root.contentForeground, 0.1)
           }
 
-          // ---- Middle: the agenda.
+          // ---- Middle: the agenda, unless it sits under the month.
           Item {
+            id: agendaBesideSlot
+            visible: !root.agendaBelow && !root.settingsOpen
             width: root.agendaWidth + root.columnPadding * 2
             height: parent.height
 
             AgendaColumn {
               id: agenda
+              // One agenda, moved between its two places, so a half-typed
+              // quick add survives a change of layout.
+              parent: root.agendaBelow ? agendaBelowSlot : agendaBesideSlot
               anchors.fill: parent
-              anchors.leftMargin: root.columnPadding
-              anchors.rightMargin: root.columnPadding
+              anchors.leftMargin: root.agendaBelow ? 0 : root.columnPadding
+              anchors.rightMargin: root.agendaBelow ? 0 : root.columnPadding
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               language: root.language
@@ -1061,6 +1088,9 @@ Panel {
               isToday: root.selectedIsToday
               canWrite: root.canWrite
               busy: root.writeBusy && !root.formOpen
+              showQuickAdd: root.layout.showQuickAdd
+              showNextUp: root.layout.showNextUp
+              showUpcomingDays: root.layout.showUpcomingDays
               dayHeading: root.dayHeading
               daySummary: Model.daySummary(root.daySections, root.language)
               sections: root.daySections
@@ -1075,10 +1105,10 @@ Panel {
               setupCommandCopied: root.setupCommandCopied
               quickPreviewTitle: root.quickParsed ? root.quickParsed.title : ""
               quickPreviewWhen: root.quickPreviewWhen
+              quickUnderstood: root.quickUnderstood
               toastText: root.toastText
               toastError: root.toastError
               onItemSelected: function(item) { root.selectEvent(item) }
-              onItemActivated: function(item) { root.selectEvent(item); root.activateItem(item) }
               onJoinRequested: function(item) { root.joinItem(item) }
               onSnoozeRequested: function(item) { root.snooze(item) }
               onDaySelected: function(key) { root.selectDay(key) }
@@ -1097,67 +1127,102 @@ Panel {
             color: Util.alpha(root.contentForeground, 0.1)
           }
 
-          // ---- Right: the inspector.
-          Flickable {
-            id: inspector
+          // ---- Right: the inspector. While the form is open, its title and
+          //      actions stay pinned on top and only the fields scroll.
+          Item {
             visible: root.inspectorOpen
-            width: visible ? root.inspectorWidth + root.columnPadding : 0
+            // Room on the right for the scroll thumb, off the buttons.
+            width: visible ? root.inspectorWidth + root.columnPadding + Style.space(10) : 0
             height: parent.height
-            contentWidth: width
-            contentHeight: inspectorContent.implicitHeight
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
 
-            Column {
-              id: inspectorContent
+            FormHeader {
+              id: formHeader
+              visible: root.formOpen && formLoader.item !== null
               x: root.columnPadding
               width: root.inspectorWidth
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              language: root.language
+              isEditing: formLoader.item ? formLoader.item.isEditing : false
+              busy: root.writeBusy
+              errorText: root.writeError
+              onSaveRequested: if (formLoader.item) formLoader.item.submit()
+              onCancelRequested: root.closeForm()
+            }
 
-              EventDetails {
-                visible: !root.formOpen && root.selectedItem !== null
-                width: parent.width
-                item: root.selectedItem || ({})
-                whenText: root.whenText(root.selectedItem)
-                nowMs: root.nowMs
-                editable: root.isEditable(root.selectedItem) && !root.writeBusy
-                deletable: root.isEditable(root.selectedItem) && !root.writeBusy
-                snoozable: root.selectedSnoozable
-                snoozeText: root.snoozeText
+            Flickable {
+              id: inspector
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: formHeader.visible ? formHeader.bottom : parent.top
+              anchors.topMargin: formHeader.visible ? Style.space(12) : 0
+              anchors.bottom: parent.bottom
+              contentWidth: width
+              contentHeight: inspectorContent.implicitHeight
+              clip: true
+              boundsBehavior: Flickable.StopAtBounds
+              interactive: contentHeight > height
+
+              // A direct child of the Flickable, not of its content, so it
+              // stays put while the details scroll.
+              ScrollHint {
+                parent: inspector
+                anchors.fill: parent
+                z: 1
+                flickable: inspector
                 foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                onCloseRequested: root.detailsOpen = false
-                onEditRequested: root.editEvent(root.selectedItem)
-                onDeleteRequested: root.deleteEvent(root.selectedItem)
-                onJoinRequested: root.joinItem(root.selectedItem)
-                onSnoozeRequested: root.snooze(root.selectedItem)
-                onLinkOpened: function(url) { root.openExternally(url) }
-                onLinkCopied: function(url) { root.copyLink(url) }
               }
 
-              // A Loader, so every open gets a fresh form: the shell's menus
-              // drop their bindings once used, and nothing may carry over
-              // from the last event.
-              Loader {
-                active: root.formOpen && root.formInitial !== null
-                visible: active
-                width: parent.width
+              Column {
+                id: inspectorContent
+                x: root.columnPadding
+                width: root.inspectorWidth
 
-                sourceComponent: EventForm {
-                  width: inspectorContent.width
+                EventDetails {
+                  visible: !root.formOpen && root.selectedItem !== null
+                  width: parent.width
+                  item: root.selectedItem || ({})
+                  whenText: root.whenText(root.selectedItem)
+                  nowMs: root.nowMs
+                  editable: root.isEditable(root.selectedItem) && !root.writeBusy
+                  deletable: root.isEditable(root.selectedItem) && !root.writeBusy
+                  snoozable: root.selectedSnoozable
+                  snoozeText: root.snoozeText
                   foreground: root.contentForeground
                   fontFamily: root.contentFontFamily
                   language: root.language
-                  timeFormat: root.eventTimeFormat
-                  weekStart: root.weekStart
-                  calendars: root.writableCalendars
-                  guestSuggestions: (root.eventDoc && root.eventDoc.guestSuggestions) || []
-                  initialForm: root.formInitial
-                  errorText: root.writeError
-                  busy: root.writeBusy
-                  onSubmitted: function(form) { root.saveForm(form) }
-                  onCanceled: root.closeForm()
+                  onCloseRequested: root.detailsOpen = false
+                  onEditRequested: root.editEvent(root.selectedItem)
+                  onDeleteRequested: root.deleteEvent(root.selectedItem)
+                  onJoinRequested: root.joinItem(root.selectedItem)
+                  onSnoozeRequested: root.snooze(root.selectedItem)
+                  onLinkOpened: function(url) { root.openExternally(url) }
+                  onLinkCopied: function(url) { root.copyLink(url) }
+                }
+
+                // A Loader, so every open gets a fresh form: the shell's menus
+                // drop their bindings once used, and nothing may carry over
+                // from the last event.
+                Loader {
+                  id: formLoader
+                  active: root.formOpen && root.formInitial !== null
+                  visible: active
+                  width: parent.width
+
+                  sourceComponent: EventForm {
+                    width: inspectorContent.width
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    language: root.language
+                    timeFormat: root.eventTimeFormat
+                    weekStart: root.weekStart
+                    calendars: root.writableCalendars
+                    guestSuggestions: (root.eventDoc && root.eventDoc.guestSuggestions) || []
+                    initialForm: root.formInitial
+                    busy: root.writeBusy
+                    onSubmitted: function(form) { root.saveForm(form) }
+                    onCanceled: root.closeForm()
+                  }
                 }
               }
             }

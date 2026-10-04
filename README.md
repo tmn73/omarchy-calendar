@@ -25,6 +25,10 @@ time away for an event title would be a downgrade you pay for all day.
 - **Three columns.** The month grid you know on the left, the day's agenda in
   the middle, and the selected event's details on the right. The details
   column only opens when you click something
+- **Your layout.** Settings › Panel picks a preset or turns each block on
+  or off: year progress, the shortcut legend, quick add, the next up card
+  and the upcoming days. Standard shows them all. Minimal is one narrow
+  column, the agenda under the calendar
 - **Nothing cut off.** Titles wrap instead of trailing off in an ellipsis
 - **Deadlines and tasks look like what they are.** Titles starting with
   `DEADLINE:`/`PRAZO:`/`Due:` get a badge and come first. Rows from a task
@@ -40,15 +44,19 @@ time away for an event title would be a downgrade you pay for all day.
   for 45m`, `dentista sexta às 15h`. You see the parsed date before you
   press Enter. Read-only sources open Google Calendar with the event filled in
 - **Details** on click: full title, when, Join, directions, description,
-  reminder. Double click edits (writable calendars) or opens the event in
-  Google
+  reminder, and buttons to edit the event (writable calendars), open it in
+  Google or delete it
 - **Create, edit and delete** from the panel, with a form like Google's: date
   picker, times in 15-minute steps, repeat, guests with suggestions, Google
   Meet, notifications, colour. Off by default, see
   [Create and edit events](#create-and-edit-events)
 - **The bar escalates** as a meeting nears: a quiet title, then the accent
-  colour and a Join chip, then the urgent colour once it starts. A `+1`
-  shows when two things start at once. Middle click joins
+  colour and a Join chip, then "Now" in the urgent colour until it ends, or
+  for its first 2 minutes if you prefer. When the next event is due, it
+  takes over, unless you keep the current one. A `+1` shows when two things
+  start at once. Middle click joins
+- **Settings in four sections**: Panel, Bar, Calendars and General, one at
+  a time, each setting with a line that says what it does
 - **Desktop reminders** from your Google notification times (10 minutes for
   meetings without one). Clicking one joins the call, also from the
   notification history. A shell reload never repeats them. See

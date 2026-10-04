@@ -107,10 +107,12 @@ Column {
       }
     }
 
+    // Bordered, so it reads as a button and not as a stray glyph.
     PanelActionButton {
       id: closeButton
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
+      bordered: true
       iconText: "󰅖"
       tooltipText: root.tr("insp.close")
       foreground: root.foreground
@@ -196,25 +198,21 @@ Column {
         font.pixelSize: Style.font.caption
       }
 
-      Button {
+      SecondaryButton {
         id: copyButton
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         iconText: "󰆏"
-        text: root.tr("insp.copyLink")
+        tooltipText: root.tr("insp.copyLink")
         foreground: root.foreground
         fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        iconSize: Style.font.bodySmall
-        verticalPadding: Style.space(3)
         onClicked: root.linkCopied(root.meetingUrl)
       }
     }
   }
 
-  AccentButton {
+  SecondaryButton {
     visible: root.snoozable
-    filled: false
     iconText: "󰒲"
     text: root.snoozeText
     foreground: root.foreground
@@ -308,59 +306,40 @@ Column {
     width: parent.width
     spacing: Style.space(6)
 
-    Button {
+    SecondaryButton {
       visible: root.fromTodoist
       text: root.tr("insp.openInTodoist")
-      bordered: true
       foreground: root.foreground
       fontFamily: root.fontFamily
-      fontSize: Style.font.bodySmall
       onClicked: root.linkOpened(root.todoistUrl)
     }
 
-    Button {
+    SecondaryButton {
       visible: root.editable
       iconText: "󰏫"
       text: root.tr("insp.edit")
-      bordered: true
       foreground: root.foreground
       fontFamily: root.fontFamily
-      fontSize: Style.font.bodySmall
       onClicked: root.editRequested()
     }
 
     // Spelled out when it is the only way to change the event, an icon
-    // beside Edit otherwise.
-    Button {
-      visible: root.eventUrl !== "" && !root.editable && !root.fromTodoist
+    // beside Edit otherwise. Same height either way.
+    SecondaryButton {
+      visible: root.eventUrl !== ""
       iconText: "󰏌"
-      text: root.tr("insp.openInGoogle")
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.bodySmall
-      onClicked: root.linkOpened(root.eventUrl)
-    }
-
-    PanelActionButton {
-      visible: root.eventUrl !== "" && (root.editable || root.fromTodoist)
-      anchors.verticalCenter: parent.verticalCenter
-      iconText: "󰏌"
+      text: !root.editable && !root.fromTodoist ? root.tr("insp.openInGoogle") : ""
       tooltipText: root.tr("insp.openInGoogle")
-      bordered: true
       foreground: root.foreground
       fontFamily: root.fontFamily
       onClicked: root.linkOpened(root.eventUrl)
     }
 
-    PanelActionButton {
+    SecondaryButton {
       visible: root.deletable
-      anchors.verticalCenter: parent.verticalCenter
       iconText: "󰩺"
       tooltipText: root.tr("insp.delete")
-      bordered: true
       foreground: root.foreground
-      hoverColor: Color.urgent
       fontFamily: root.fontFamily
       onClicked: root.deleteRequested()
     }
