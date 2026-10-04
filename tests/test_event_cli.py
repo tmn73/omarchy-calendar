@@ -323,7 +323,7 @@ class TestMain(unittest.TestCase):
     def run_main(self, stdin_text):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
-            code = event_cli.main(stdin=io.StringIO(stdin_text))
+            code = event_cli.main(argv=[], stdin=io.StringIO(stdin_text))
         return code, json.loads(stdout.getvalue())
 
     def test_a_missing_or_broken_request_is_refused(self):
@@ -331,6 +331,19 @@ class TestMain(unittest.TestCase):
             code, reply = self.run_main(text)
             self.assertEqual(code, 1)
             self.assertFalse(reply["ok"])
+
+    def test_a_request_in_an_argument_means_an_older_panel(self):
+        # A panel loaded before an update still passes the request as an
+        # argument and keeps stdin open. Reading stdin would wait forever, and
+        # the panel would ignore every click until its timeout.
+        class NeverRead:
+            def read(self):
+                raise AssertionError("stdin must not be read")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = event_cli.main(argv=['{"action": "create"}'], stdin=NeverRead())
+        self.assertEqual((code, json.loads(stdout.getvalue())["error"]), (1, event_cli.STALE_PANEL))
 
     def test_the_request_is_read_from_stdin(self):
         # The request carries the event's description and guests. Read from

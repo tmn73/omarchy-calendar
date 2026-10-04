@@ -30,6 +30,7 @@ NO_SCOPE = "Write access not granted. Run sync/setup --write."
 EXPIRED = "Your Google sign-in expired. Run sync/setup --write."
 GONE = "This event no longer exists."
 NO_FILE = "No calendar synced yet. Wait for the first sync, then try again."
+STALE_PANEL = "The panel is older than the plugin files. Restart the shell: omarchy restart shell"
 
 
 def start_background_sync():
@@ -188,7 +189,11 @@ def _write(client, request, tz):
     return request["eventId"] if not all_events else target, resource, series
 
 
-def main(stdin=None):
+def main(argv=None, stdin=None):
+    # A panel loaded before an update passes the request as an argument and
+    # leaves stdin open: reading it would wait until the panel gives up.
+    if list(sys.argv[1:] if argv is None else argv):
+        return _emit(1, _fail(STALE_PANEL))
     stream = sys.stdin if stdin is None else stdin
     try:
         raw = json.loads(stream.read())
