@@ -1453,6 +1453,8 @@ var QUICK_PATTERNS = {
   timeRange: new RegExp("\\s(?:(?:from|de|das|entre) )?(" + QUICK_CLOCK + "|\\d{1,2})"
     + "\\s?(?:-|\u2013|to|until|till|ate|as|a|e)\\s?(" + QUICK_CLOCK + ")(?=\\s)"),
   prefixedTime: new RegExp("\\s(?:at|as|a partir das|starting at|@)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
+  // An end with no start: "until 11am", "até às 11h".
+  untilTime: new RegExp("\\s(?:until|till|til|ate(?: as| a)?)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
   plainTime: /\s(\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.?|p\.m\.?)|\d{1,2}:\d{2}|noon|midday|midnight|meio-dia|meio dia|meia-noite|meia noite)(?=\s)/,
   hourPhrase: /\s(\d{1,2}h(?:\d{2})?)(?=\s)/,
   prefixedDuration: /\s(?:for|por|durante) (?:about |cerca de )?(\d+(?:[.,]\d+)?\s?(?:h|hr|hrs|hour|hours|hora|horas)(?:\s?\d{1,2}\s?(?:m|min|mins|minutes|minutos)?)?|\d+\s?(?:m|min|mins|minute|minutes|minuto|minutos)|(?:an|one|uma) (?:hour|hora)|half an hour|meia hora)(?=\s)/,
@@ -1626,6 +1628,12 @@ function readTimes(scanner) {
   })
   if (range) return range
 
+  var until = take(scanner, p.untilTime, function(m) {
+    var clock = readClock(m[1])
+    return clock ? resolvedClock(clock) : null
+  })
+  if (until !== null) return { start: null, end: until }
+
   var start = take(scanner, p.prefixedTime, function(m) {
     var clock = readClock(m[1])
     return clock ? resolvedClock(clock) : null
@@ -1737,6 +1745,14 @@ function scanQuickAdd(input, now, lang) {
   if (title === "") return { parsed: null, found: found }
 
   var key = keyForDate(date)
+  // "until 11am" alone: from now, at the quarter hour before, when that is
+  // still ahead today; otherwise the usual length, ending then.
+  if (times !== null && times.start === null) {
+    var nowMinutes = nowDate.getHours() * 60 + nowDate.getMinutes()
+    var fromNow = key === keyForDate(today) && nowMinutes < times.end
+    times = { start: fromNow ? Math.floor(nowMinutes / 15) * 15 : Math.max(0, times.end - DEFAULT_QUICK_DURATION),
+              end: times.end }
+  }
   if (forcedAllDay || times === null)
     return { found: found, parsed: { title: title, dateKey: key, endDateKey: key, allDay: true,
              startTime: "", endTime: "", durationMinutes: 0, meet: meet } }

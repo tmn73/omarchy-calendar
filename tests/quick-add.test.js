@@ -341,3 +341,20 @@ test('quickAddUnderstood is empty when only a title was typed, or nothing', () =
   assert.deepEqual(understood('Lunch with Bea'), [])
   assert.deepEqual(understood('   '), [])
 })
+
+test('parseQuickAdd: "until" alone is an end time, from now to then', () => {
+  // NOW is 12:52: the event starts at the quarter hour before.
+  assert.deepEqual(when('Ikea until 3pm', 'en'), ['2026-10-06', '12:45-15:00'])
+  assert.deepEqual(when('Ikea até às 15h', 'pt'), ['2026-10-06', '12:45-15:00'])
+  assert.deepEqual(when('Ikea ate 15h', 'pt'), ['2026-10-06', '12:45-15:00'])
+  assert.equal(parse('Ikea until 3pm', 'en').title, 'Ikea')
+})
+
+test('parseQuickAdd: "until" on another day, or already past, ends an hour-long event', () => {
+  assert.deepEqual(when('Ikea tomorrow until 11am', 'en'), ['2026-10-07', '10:00-11:00'])
+  assert.deepEqual(when('Ikea until 11 a.m.', 'en'), ['2026-10-06', '10:00-11:00'])
+})
+
+test('parseQuickAdd: a start and "until" stay a range', () => {
+  assert.deepEqual(when('Ikea 10am until 11am', 'en'), ['2026-10-06', '10:00-11:00'])
+})
