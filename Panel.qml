@@ -108,6 +108,7 @@ Panel {
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
   readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
+  readonly property bool shortcutLegendExpanded: setting("shortcutLegendExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
   property bool layoutMenuOpen: false
   // Google's working-location markers describe no commitment, so they are
@@ -1002,6 +1003,8 @@ Panel {
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
+                expanded: root.shortcutLegendExpanded
+                onExpandToggled: root.persistSettings({ shortcutLegendExpanded: !root.shortcutLegendExpanded })
               }
 
               // Everything settings changes is owned by this panel and
@@ -1123,6 +1126,16 @@ Panel {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight > height
+
+            // A direct child of the Flickable, not of its content, so it
+            // stays put while the details scroll.
+            ScrollHint {
+              parent: inspector
+              anchors.fill: parent
+              z: 1
+              flickable: inspector
+              foreground: root.contentForeground
+            }
 
             Column {
               id: inspectorContent

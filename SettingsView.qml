@@ -169,29 +169,16 @@ Row {
 
     // ---- Calendars, folded under a one-line summary.
 
-    Rectangle {
-      width: parent.width
-      height: calendarsTitle.implicitHeight + Style.space(4) * 2
-      radius: Style.cornerRadius
-      color: calendarsMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
-
-      SectionTitle {
-        id: calendarsTitle
-        anchors.verticalCenter: parent.verticalCenter
-        text: {
-          var parts = [root.tr("settings.calendars"), String(root.calendars.length)]
-          if (root.hiddenCount > 0) parts.push(Strings.trn(root.language, "settings.hiddenCalendars", root.hiddenCount))
-          return (root.calendarsExpanded ? "▾ " : "▸ ") + parts.join(" · ")
-        }
+    FoldHeader {
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      expanded: root.calendarsExpanded
+      text: {
+        var parts = [root.tr("settings.calendars"), String(root.calendars.length)]
+        if (root.hiddenCount > 0) parts.push(Strings.trn(root.language, "settings.hiddenCalendars", root.hiddenCount))
+        return parts.join(" · ")
       }
-
-      MouseArea {
-        id: calendarsMouse
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.calendarsExpanded = !root.calendarsExpanded
-      }
+      onToggled: root.calendarsExpanded = !root.calendarsExpanded
     }
 
     Note {

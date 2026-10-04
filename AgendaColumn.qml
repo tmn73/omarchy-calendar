@@ -310,6 +310,13 @@ Item {
     }
   }
 
+  // The day can run past the column: say so, under the toast.
+  ScrollHint {
+    anchors.fill: scroll
+    flickable: scroll
+    foreground: root.foreground
+  }
+
   Toast {
     id: toast
     anchors.left: parent.left
