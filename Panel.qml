@@ -1127,78 +1127,102 @@ Panel {
             color: Util.alpha(root.contentForeground, 0.1)
           }
 
-          // ---- Right: the inspector.
-          Flickable {
-            id: inspector
+          // ---- Right: the inspector. While the form is open, its title and
+          //      actions stay pinned on top and only the fields scroll.
+          Item {
             visible: root.inspectorOpen
             // Room on the right for the scroll thumb, off the buttons.
             width: visible ? root.inspectorWidth + root.columnPadding + Style.space(10) : 0
             height: parent.height
-            contentWidth: width
-            contentHeight: inspectorContent.implicitHeight
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
 
-            // A direct child of the Flickable, not of its content, so it
-            // stays put while the details scroll.
-            ScrollHint {
-              parent: inspector
-              anchors.fill: parent
-              z: 1
-              flickable: inspector
-              foreground: root.contentForeground
-            }
-
-            Column {
-              id: inspectorContent
+            FormHeader {
+              id: formHeader
+              visible: root.formOpen && formLoader.item !== null
               x: root.columnPadding
               width: root.inspectorWidth
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              language: root.language
+              isEditing: formLoader.item ? formLoader.item.isEditing : false
+              busy: root.writeBusy
+              errorText: root.writeError
+              onSaveRequested: if (formLoader.item) formLoader.item.submit()
+              onCancelRequested: root.closeForm()
+            }
 
-              EventDetails {
-                visible: !root.formOpen && root.selectedItem !== null
-                width: parent.width
-                item: root.selectedItem || ({})
-                whenText: root.whenText(root.selectedItem)
-                nowMs: root.nowMs
-                editable: root.isEditable(root.selectedItem) && !root.writeBusy
-                deletable: root.isEditable(root.selectedItem) && !root.writeBusy
-                snoozable: root.selectedSnoozable
-                snoozeText: root.snoozeText
+            Flickable {
+              id: inspector
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: formHeader.visible ? formHeader.bottom : parent.top
+              anchors.topMargin: formHeader.visible ? Style.space(12) : 0
+              anchors.bottom: parent.bottom
+              contentWidth: width
+              contentHeight: inspectorContent.implicitHeight
+              clip: true
+              boundsBehavior: Flickable.StopAtBounds
+              interactive: contentHeight > height
+
+              // A direct child of the Flickable, not of its content, so it
+              // stays put while the details scroll.
+              ScrollHint {
+                parent: inspector
+                anchors.fill: parent
+                z: 1
+                flickable: inspector
                 foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                onCloseRequested: root.detailsOpen = false
-                onEditRequested: root.editEvent(root.selectedItem)
-                onDeleteRequested: root.deleteEvent(root.selectedItem)
-                onJoinRequested: root.joinItem(root.selectedItem)
-                onSnoozeRequested: root.snooze(root.selectedItem)
-                onLinkOpened: function(url) { root.openExternally(url) }
-                onLinkCopied: function(url) { root.copyLink(url) }
               }
 
-              // A Loader, so every open gets a fresh form: the shell's menus
-              // drop their bindings once used, and nothing may carry over
-              // from the last event.
-              Loader {
-                active: root.formOpen && root.formInitial !== null
-                visible: active
-                width: parent.width
+              Column {
+                id: inspectorContent
+                x: root.columnPadding
+                width: root.inspectorWidth
 
-                sourceComponent: EventForm {
-                  width: inspectorContent.width
+                EventDetails {
+                  visible: !root.formOpen && root.selectedItem !== null
+                  width: parent.width
+                  item: root.selectedItem || ({})
+                  whenText: root.whenText(root.selectedItem)
+                  nowMs: root.nowMs
+                  editable: root.isEditable(root.selectedItem) && !root.writeBusy
+                  deletable: root.isEditable(root.selectedItem) && !root.writeBusy
+                  snoozable: root.selectedSnoozable
+                  snoozeText: root.snoozeText
                   foreground: root.contentForeground
                   fontFamily: root.contentFontFamily
                   language: root.language
-                  timeFormat: root.eventTimeFormat
-                  weekStart: root.weekStart
-                  calendars: root.writableCalendars
-                  guestSuggestions: (root.eventDoc && root.eventDoc.guestSuggestions) || []
-                  initialForm: root.formInitial
-                  errorText: root.writeError
-                  busy: root.writeBusy
-                  onSubmitted: function(form) { root.saveForm(form) }
-                  onCanceled: root.closeForm()
+                  onCloseRequested: root.detailsOpen = false
+                  onEditRequested: root.editEvent(root.selectedItem)
+                  onDeleteRequested: root.deleteEvent(root.selectedItem)
+                  onJoinRequested: root.joinItem(root.selectedItem)
+                  onSnoozeRequested: root.snooze(root.selectedItem)
+                  onLinkOpened: function(url) { root.openExternally(url) }
+                  onLinkCopied: function(url) { root.copyLink(url) }
+                }
+
+                // A Loader, so every open gets a fresh form: the shell's menus
+                // drop their bindings once used, and nothing may carry over
+                // from the last event.
+                Loader {
+                  id: formLoader
+                  active: root.formOpen && root.formInitial !== null
+                  visible: active
+                  width: parent.width
+
+                  sourceComponent: EventForm {
+                    width: inspectorContent.width
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    language: root.language
+                    timeFormat: root.eventTimeFormat
+                    weekStart: root.weekStart
+                    calendars: root.writableCalendars
+                    guestSuggestions: (root.eventDoc && root.eventDoc.guestSuggestions) || []
+                    initialForm: root.formInitial
+                    busy: root.writeBusy
+                    onSubmitted: function(form) { root.saveForm(form) }
+                    onCanceled: root.closeForm()
+                  }
                 }
               }
             }
