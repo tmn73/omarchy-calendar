@@ -1450,8 +1450,9 @@ var QUICK_PATTERNS = {
     + "(?=\\s(?:((?:(?:at|as|a partir das|starting at|from|das|entre|@)\\s?)?(?:" + QUICK_CLOCK + ")"
     + "|(?:at|as|@)\\s?\\d{1,2})(?=[\\s\\-\u2013]))?)"),
   monthDayOnly: /\s(?:(?:on )?the (\d{1,2})(?:st|nd|rd|th)?|(?:on )?(\d{1,2})(?:st|nd|rd|th)|(?:no )?dia (\d{1,2}))(?=\s)/,
-  timeRange: new RegExp("\\s(?:(?:from|de|das|entre) )?(" + QUICK_CLOCK + "|\\d{1,2})"
-    + "\\s?(?:-|\u2013|to|until|till|ate|as|a|e)\\s?(" + QUICK_CLOCK + ")(?=\\s)"),
+  // Groups: 1 the word that opens a range, 2 its start, 3 its end.
+  timeRange: new RegExp("\\s(?:(from|de|das|entre) )?(" + QUICK_CLOCK + "|\\d{1,2})"
+    + "\\s?(?:-|\u2013|to|until|till|ate|as|a|e)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
   prefixedTime: new RegExp("\\s(?:at|as|a partir das|starting at|@)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
   // An end with no start: "until 11am", "até às 11h".
   untilTime: new RegExp("\\s(?:until|till|til|ate(?: as| a)?)\\s?(" + QUICK_CLOCK + "|\\d{1,2})(?=\\s)"),
@@ -1615,15 +1616,24 @@ function isStartTime(phrase) {
 function readTimes(scanner) {
   var p = QUICK_PATTERNS
   var range = take(scanner, p.timeRange, function(m) {
-    var first = readClock(m[1])
-    var second = readClock(m[2])
+    var first = readClock(m[2])
+    var second = readClock(m[3])
     if (!first || !second) return null
+    if (first.bare && second.bare) {
+      // "Kids 2-3" is no time; "from 2 to 4", "das 9 às 13" and "9-13" are.
+      if (!m[1] && first.minutes < 13 * 60 && second.minutes < 13 * 60) return null
+      // Read as the hours people book: "from 2 to 4" is the afternoon, and
+      // "from 9 to 1" ends at 13:00.
+      var from = resolvedClock(first)
+      var to = second.minutes
+      if (to <= from && to + 12 * 60 > from) to += 12 * 60
+      return { start: from, end: to % (24 * 60) }
+    }
     var start = first.minutes
     // "2-3pm": the first half borrows the second's am/pm when that keeps
     // the order.
     if (!first.meridiem && second.meridiem === "p" && start < 12 * 60 && start + 12 * 60 <= second.minutes)
       start += 12 * 60
-    else if (first.bare && !second.meridiem) return null
     return { start: start, end: second.minutes }
   })
   if (range) return range

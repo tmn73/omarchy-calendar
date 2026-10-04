@@ -358,3 +358,25 @@ test('parseQuickAdd: "until" on another day, or already past, ends an hour-long 
 test('parseQuickAdd: a start and "until" stay a range', () => {
   assert.deepEqual(when('Ikea 10am until 11am', 'en'), ['2026-10-06', '10:00-11:00'])
 })
+
+test('parseQuickAdd: a range of bare hours is a time with from/das, or past 12', () => {
+  assert.deepEqual(when('Ikea today from 9 to 13', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.equal(parse('Ikea today from 9 to 13', 'en').title, 'Ikea')
+  assert.deepEqual(when('Ikea 9-13', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.deepEqual(when('Ikea das 9 às 13', 'pt'), ['2026-10-06', '09:00-13:00'])
+  assert.deepEqual(when('Ikea from 2 to 4', 'en'), ['2026-10-06', '14:00-16:00'])
+})
+
+test('parseQuickAdd: a bare start with a clock end is a range', () => {
+  assert.deepEqual(when('Ikea 9 to 13:00', 'en'), ['2026-10-06', '09:00-13:00'])
+  assert.equal(parse('Ikea 9 to 13:00', 'en').title, 'Ikea')
+})
+
+test('parseQuickAdd: two small bare numbers stay in the title', () => {
+  assert.deepEqual(when('Kids 2-3', 'en'), ['2026-10-06', 'all day'])
+  assert.equal(parse('Kids 2-3', 'en').title, 'Kids 2-3')
+})
+
+test('quickAddUnderstood shows a bare range as one time', () => {
+  assert.deepEqual(understood('Ikea today from 9 to 13'), ['date:today', 'time:from 9 to 13'])
+})
