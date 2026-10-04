@@ -1,7 +1,9 @@
 """The one command the panel runs to read or change an event.
 
-In: one JSON argument (see writes.parse_request and the event form in
-event_form). Out: one JSON line on stdout, and exit 0 or 1:
+In: one JSON object on stdin (see writes.parse_request and the event form
+in event_form). Never an argument: arguments show to every user on the
+machine through ps, and a request carries the event's description and
+guests. Out: one JSON line on stdout, and exit 0 or 1:
 {"ok": true, "event": {...}} for get, {"ok": true, "eventId": ...} for a
 write, {"ok": false, "error": ...} on failure. The panel shows the error
 as it is, so every message is written for a person.
@@ -184,14 +186,14 @@ def _write(client, request, tz):
     return request["eventId"] if not all_events else target, resource, series
 
 
-def main(argv=None):
-    args = list(sys.argv[1:] if argv is None else argv)
+def main(stdin=None):
+    stream = sys.stdin if stdin is None else stdin
     try:
-        raw = json.loads(args[0]) if args else None
+        raw = json.loads(stream.read())
     except json.JSONDecodeError:
         raw = None
     if not isinstance(raw, dict):
-        return _emit(1, _fail("Expected one JSON object as the argument."))
+        return _emit(1, _fail("Expected one JSON object on stdin."))
 
     tz = resolve_local_timezone()
     try:

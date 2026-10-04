@@ -314,12 +314,26 @@ class TestBackgroundSync(unittest.TestCase):
 
 
 class TestMain(unittest.TestCase):
-    def test_a_missing_or_broken_argument_is_refused(self):
-        for argv in ([], ["{not json"]):
-            stdout = io.StringIO()
-            with contextlib.redirect_stdout(stdout):
-                self.assertEqual(event_cli.main(argv), 1)
-            self.assertFalse(json.loads(stdout.getvalue())["ok"])
+    def run_main(self, stdin_text):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = event_cli.main(stdin=io.StringIO(stdin_text))
+        return code, json.loads(stdout.getvalue())
+
+    def test_a_missing_or_broken_request_is_refused(self):
+        for text in ("", "{not json", "[1, 2]"):
+            code, reply = self.run_main(text)
+            self.assertEqual(code, 1)
+            self.assertFalse(reply["ok"])
+
+    def test_the_request_is_read_from_stdin(self):
+        # The request carries the event's description and guests. Read from
+        # an argument, it would show to every user on the machine via ps.
+        failing = mock.patch.object(event_cli.config_module, "load",
+                                    side_effect=event_cli.config_module.ConfigError("no config"))
+        with failing:
+            code, reply = self.run_main(json.dumps({"action": "get"}))
+        self.assertEqual((code, reply["error"]), (1, "Config error: no config"))
 
 
 if __name__ == "__main__":

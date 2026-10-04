@@ -726,9 +726,13 @@ Panel {
     root.writeBusy = true
     root.writeError = ""
     root.pendingPurpose = purpose
-    // Argv, not a shell string: the title is typed by the user and can hold
+    // On stdin, sent once the command starts: an argument would show the
+    // event, its description and its guests to every user on the machine
+    // through ps. And no shell: the title is typed by the user and can hold
     // anything.
-    writeProcess.command = [root.eventCommand, JSON.stringify(request)]
+    writeProcess.request = JSON.stringify(request)
+    writeProcess.stdinEnabled = true
+    writeProcess.command = [root.eventCommand]
     writeProcess.running = true
     writeTimeout.restart()
   }
@@ -815,6 +819,13 @@ Panel {
 
   Process {
     id: writeProcess
+    property string request: ""
+    // Closing stdin right after the request is the end of input the
+    // command reads up to.
+    onStarted: {
+      write(writeProcess.request)
+      writeProcess.stdinEnabled = false
+    }
     stdout: StdioCollector {
       id: writeOutput
       waitForEnd: true
