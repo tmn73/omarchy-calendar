@@ -5,10 +5,9 @@ import qs.Ui
 import "Model.js" as Model
 import "Strings.js" as Strings
 
-// What the panel shows: a preset, where the agenda sits, and one switch per
-// block. The layout menu and the Panel section of Settings both host it; the
-// menu leaves the hints out to stay short. It reads the layout and emits the
-// settings to store; the panel owns every value.
+// The Panel section of Settings: a preset, where the agenda sits, and one
+// switch per block. It reads the layout and emits the settings to store;
+// the panel owns every value.
 Column {
   id: root
 
@@ -17,7 +16,6 @@ Column {
   property string language: "en"
   // Model.layoutFromSettings
   property var layout: Model.layoutPreset("standard")
-  property bool showHints: false
 
   // The settings to store, for example { showQuickAdd: false }.
   signal layoutPicked(var values)
@@ -26,10 +24,6 @@ Column {
 
   function tr(key, args) {
     return Strings.tr(root.language, key, args)
-  }
-
-  function hint(key) {
-    return root.showHints ? root.tr(key) : ""
   }
 
   function pick(key, value) {
@@ -64,7 +58,7 @@ Column {
   ChoiceGroup {
     foreground: root.foreground
     fontFamily: root.fontFamily
-    hint: root.hint("layout.presetHint")
+    hint: root.tr("layout.presetHint")
     options: Model.LAYOUT_PRESET_NAMES.map(function(name) { return { value: name, label: root.tr("layout." + name) } })
     // Empty for a layout set by hand, so no preset reads as chosen.
     value: root.presetName
@@ -74,8 +68,8 @@ Column {
   Gap {}
 
   Caption { text: root.tr("layout.calendarSection") }
-  BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress"); hint: root.hint("layout.progressHint") }
-  BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend"); hint: root.hint("layout.shortcutLegendHint") }
+  BlockSwitch { key: "showYearProgress"; label: root.tr("settings.progress"); hint: root.tr("layout.progressHint") }
+  BlockSwitch { key: "showShortcutLegend"; label: root.tr("layout.shortcutLegend"); hint: root.tr("layout.shortcutLegendHint") }
 
   Gap {}
 
@@ -92,7 +86,7 @@ Column {
     onChosen: function(value) { root.pick("agendaPlacement", value) }
   }
 
-  BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label"); hint: root.hint("layout.quickAddHint") }
-  BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp"); hint: root.hint("layout.nextUpHint") }
-  BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming"); hint: root.hint("layout.upcomingHint") }
+  BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label"); hint: root.tr("layout.quickAddHint") }
+  BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp"); hint: root.tr("layout.nextUpHint") }
+  BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming"); hint: root.tr("layout.upcomingHint") }
 }

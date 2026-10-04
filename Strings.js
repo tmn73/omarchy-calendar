@@ -162,8 +162,6 @@ var STRINGS = {
     "toast.undo": "Undo",
     "toast.dismiss": "Dismiss",
 
-    "nav.layout": "Layout",
-    "layout.title": "Layout",
     "layout.saved": "Saved automatically",
     "layout.custom": "Custom",
     "layout.minimal": "Minimal",
@@ -503,8 +501,6 @@ var STRINGS = {
     "toast.undo": "Desfazer",
     "toast.dismiss": "Dispensar",
 
-    "nav.layout": "Layout",
-    "layout.title": "Layout",
     "layout.saved": "Salvo automaticamente",
     "layout.custom": "Personalizado",
     "layout.minimal": "Mínimo",

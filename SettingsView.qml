@@ -217,7 +217,6 @@ Item {
         fontFamily: root.fontFamily
         language: root.language
         layout: root.layout
-        showHints: true
         onLayoutPicked: function(values) { root.picked(values) }
       }
 

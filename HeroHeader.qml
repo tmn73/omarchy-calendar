@@ -4,8 +4,8 @@ import qs.Ui
 
 import "Strings.js" as Strings
 
-// Today, large, with "weekday · time · week N" under it and the layout and
-// settings buttons at the right. Once the view has moved away from today
+// Today, large, with "weekday · time · week N" under it and the settings
+// button at the right. Once the view has moved away from today
 // the date is also the way back: clicking what you are looking for beats
 // hunting for a reset button.
 Item {
@@ -17,12 +17,10 @@ Item {
   property string dateText: ""
   property string sublineText: ""
   property bool settingsOpen: false
-  property bool layoutOpen: false
   property bool canGoHome: false
 
   signal homeRequested()
   signal settingsToggled()
-  signal layoutToggled()
 
   // Decorative, so sized off the spacing scale rather than the font scale.
   readonly property int datePixelSize: Style.space(30)
@@ -115,16 +113,6 @@ Item {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
-
-    // Settings holds the same choices, so the menu button steps aside there.
-    PanelActionButton {
-      visible: !root.settingsOpen
-      iconText: "󰕭"
-      tooltipText: Strings.tr(root.language, "nav.layout")
-      foreground: root.layoutOpen ? Color.accent : root.foreground
-      fontFamily: root.fontFamily
-      onClicked: root.layoutToggled()
-    }
 
     PanelActionButton {
       iconText: root.settingsOpen ? "󰅖" : "󰒓"

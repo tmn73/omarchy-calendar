@@ -110,7 +110,6 @@ Panel {
   readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
   readonly property bool shortcutLegendExpanded: setting("shortcutLegendExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
-  property bool layoutMenuOpen: false
   // Google's working-location markers describe no commitment, so they are
   // out by default. Declined invitations stay in: you probably still want
   // to see what you said no to.
@@ -402,7 +401,6 @@ Panel {
     // Dismissing mid-edit would otherwise leave the inputs up, waiting
     // behind a closed popup for the next time it opens.
     progress.cancelEditing()
-    root.layoutMenuOpen = false
     if (root.formOpen) root.closeForm()
   }
 
@@ -507,7 +505,6 @@ Panel {
     // ConfirmDialog takes no keys, so Escape is how a pending delete is
     // dropped from the keyboard.
     else if (root.pendingDelete !== null) root.pendingDelete = null
-    else if (root.layoutMenuOpen) root.layoutMenuOpen = false
     else if (root.formOpen) root.closeForm()
     else if (root.detailsOpen && root.selectedItem) root.detailsOpen = false
     else if (root.selectedEventId !== "") root.selectedEventId = ""
@@ -877,11 +874,8 @@ Panel {
     // The calendar column sets the height: the agenda and the details
     // scroll beside it, so moving between days never makes the popup jump
     // and a quiet day leaves no empty space. Under the calendar, the agenda
-    // is part of that column, so the panel fits the day. The open layout
-    // menu always fits.
-    contentHeight: panel.fittedContentHeight(Math.max(
-      leftContent.implicitHeight,
-      layoutMenu.visible ? layoutMenu.y + layoutMenu.height : 0) + root.columnPadding)
+    // is part of that column, so the panel fits the day.
+    contentHeight: panel.fittedContentHeight(leftContent.implicitHeight + root.columnPadding)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -959,15 +953,10 @@ Panel {
                   Model.isoWeek(root.today.getFullYear(), root.today.getMonth(), root.today.getDate())
                 ])
                 settingsOpen: root.settingsOpen
-                layoutOpen: root.layoutMenuOpen
                 canGoHome: root.selectedDayKey !== root.todayKey
                   || root.viewYear !== root.today.getFullYear() || root.viewMonth !== root.today.getMonth()
                 onHomeRequested: root.goToToday()
-                onSettingsToggled: {
-                  root.layoutMenuOpen = false
-                  root.settingsOpen = !root.settingsOpen
-                }
-                onLayoutToggled: root.layoutMenuOpen = !root.layoutMenuOpen
+                onSettingsToggled: root.settingsOpen = !root.settingsOpen
               }
 
               ProgressRails {
@@ -1213,72 +1202,6 @@ Panel {
               }
             }
           }
-        }
-      }
-    }
-
-    // The layout menu, under its button. A click outside it closes it.
-    MouseArea {
-      anchors.fill: parent
-      visible: root.layoutMenuOpen
-      onClicked: root.layoutMenuOpen = false
-    }
-
-    Rectangle {
-      id: layoutMenu
-      visible: root.layoutMenuOpen
-      // The hero sits at the top left of the columns, so the menu follows
-      // them when they scroll.
-      x: Math.max(0, hero.width - width - columnsScroll.contentX)
-      y: hero.height + Style.space(6) - leftScroll.contentY
-      width: Style.space(320)
-      height: layoutMenuContent.implicitHeight + Style.space(12) * 2
-      radius: Style.cornerRadius
-      color: Color.popups.background
-      border.width: Style.spacing.hairline
-      border.color: Util.alpha(root.contentForeground, 0.25)
-
-      // Takes the clicks between the rows, so they do not reach the area
-      // behind and close the menu.
-      MouseArea { anchors.fill: parent }
-
-      Column {
-        id: layoutMenuContent
-        x: Style.space(12)
-        y: Style.space(12)
-        width: parent.width - Style.space(24)
-        spacing: Style.space(10)
-
-        Item {
-          width: parent.width
-          height: layoutTitle.height
-
-          Text {
-            id: layoutTitle
-            text: root.tr("layout.title")
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.title
-            font.bold: true
-          }
-
-          Text {
-            anchors.right: parent.right
-            anchors.baseline: layoutTitle.baseline
-            text: root.tr("layout.saved")
-            color: Util.alpha(root.contentForeground, 0.5)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        LayoutOptions {
-          width: parent.width
-          foreground: root.contentForeground
-          fontFamily: root.contentFontFamily
-          language: root.language
-          layout: root.layout
-          onLayoutPicked: function(values) { root.persistSettings(values) }
         }
       }
     }
