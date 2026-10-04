@@ -92,12 +92,13 @@ Column {
       }
 
       // The typed words in the accent, as the field marks them; a default
-      // in grey.
+      // in grey. They take what the value leaves, and at least 40%.
       Text {
         id: wordsText
         anchors.right: parent.right
         anchors.baseline: valueText.baseline
-        width: Math.min(implicitWidth, root.width * 0.4)
+        width: Math.min(implicitWidth, Math.max(root.width * 0.4,
+          root.width - root.nameWidth - valueText.implicitWidth - Style.space(12)))
         textFormat: Text.PlainText
         text: root.wordsOf(line.modelData)
         elide: Text.ElideRight

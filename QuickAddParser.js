@@ -706,11 +706,12 @@ function scanQuickAdd(input, now, lang) {
   var dayGiven = !!dates || !!(relative && relative.date) || !!(repeat && (repeat.weekday >= 0 || repeat.monthDay > 0))
   var lastDay = dates && dates.end ? dates.end : null
 
-  // "in 20 min": that start, on whatever day it falls; "until 3pm" can
-  // still end it.
+  // "in 20 min": that start, on whatever day it falls, unless a day is
+  // written too: "in 2 hours tomorrow" is tomorrow at that hour. "until
+  // 3pm" can still end it.
   if (relative && relative.at) {
     var at = relative.at
-    day = new Date(at.getFullYear(), at.getMonth(), at.getDate())
+    if (!dayGiven) day = new Date(at.getFullYear(), at.getMonth(), at.getDate())
     times = { start: at.getHours() * 60 + at.getMinutes(), end: times && times.start === null ? times.end : null }
   }
   if (dayPart !== null)

@@ -417,6 +417,11 @@ test('parseQuickAdd: a relative start can cross midnight, take a length or an en
   assert.deepEqual(when('x in 10 min until 5pm', 'en'), ['2026-10-06', '13:02-17:00'])
 })
 
+test('parseQuickAdd: a day written with a relative start keeps the day, the start gives the hour', () => {
+  assert.deepEqual(when('test in 2 minutes for 2 hours tomorrow', 'en'), ['2026-10-07', '12:54-14:54'])
+  assert.deepEqual(when('x amanhã daqui a 1 hora'), ['2026-10-07', '13:52-14:52'])
+})
+
 test('parseQuickAdd: now / agora start this minute', () => {
   assert.deepEqual(when('x now', 'en'), ['2026-10-06', '12:52-13:52'])
   assert.deepEqual(when('x agora por 30min'), ['2026-10-06', '12:52-13:22'])
