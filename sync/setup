@@ -96,9 +96,11 @@ EOF
     [ -n "$line" ] || break
     # The public address and the embed link sit right next to the secret one
     # in Google's settings, and neither works for a private calendar.
+    # The address goes in on stdin, never as an argument: arguments show to
+    # every user on the machine through ps, and the address is a password.
     local problem
-    problem=$(PYTHONPATH="$SCRIPT_DIR" python3 -c \
-      'import sys; from omarchy_calendar_sync.ics import url_problem; print(url_problem(sys.argv[1]))' "$line")
+    problem=$(printf '%s' "$line" | PYTHONPATH="$SCRIPT_DIR" python3 -c \
+      'import sys; from omarchy_calendar_sync.ics import url_problem; print(url_problem(sys.stdin.read()))')
     if [ -n "$problem" ]; then
       printf '  Not this one: %s\n' "$problem"
       continue
@@ -116,11 +118,15 @@ EOF
   local candidate
   candidate=$(mktemp "$CONFIG.XXXXXX")
   trap 'rm -f "$candidate"' EXIT
-  python3 - "$CONFIG" "$candidate" "$identity" "${urls[@]}" <<'PYEOF'
+  # The addresses go in on file descriptor 3 and the program on stdin. As
+  # arguments, they would show to every user on the machine through ps.
+  python3 - "$CONFIG" "$candidate" "$identity" 3< <(printf '%s\n' "${urls[@]}") <<'PYEOF'
 import json, os, pathlib, sys
 
 path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
-identity, urls = sys.argv[3].strip(), sys.argv[4:]
+identity = sys.argv[3].strip()
+with os.fdopen(3) as stream:
+    urls = [line.strip() for line in stream if line.strip()]
 config = {}
 if path.exists():
     try:
