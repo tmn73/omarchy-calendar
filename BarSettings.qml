@@ -94,12 +94,20 @@ Column {
         showsColor: root.leadMinutes > 0 ? Color.accent : root.faint
       }
 
+      // How long "Now" lasts goes in the left column: the right one is
+      // only ever what the bar itself shows.
       PreviewLine {
         visible: root.leadMinutes > 0
-        when: root.tr("settings.previewDuring")
-        shows: root.tr("bar.live", [root.tr("settings.previewTitle")]) + " · "
-          + root.tr(root.duringEvent === "firstMinutes" ? "settings.previewFirstMinutes" : "settings.previewUntilEnd")
+        when: root.tr(root.duringEvent === "firstMinutes" ? "settings.previewFirstMinutes" : "settings.previewDuring")
+        shows: root.tr("bar.live", [root.tr("settings.previewTitle")])
         showsColor: Color.urgent
+      }
+
+      PreviewLine {
+        visible: root.leadMinutes > 0 && root.duringEvent === "firstMinutes"
+        when: root.tr("settings.previewAfter")
+        shows: root.tr("settings.previewClockOnly")
+        showsColor: root.faint
       }
     }
   }
