@@ -132,3 +132,33 @@ test('meetingToJoin skips all-day rows, tomorrow and linkless events', () => {
   assert.equal(Model.meetingToJoin([tomorrow, allDay, meeting('x', 15, 0, { meetingUrl: '' })], START, null), null)
   assert.equal(Model.meetingToJoin(null, START, null), null)
 })
+
+test('barState until the end: live for the whole event, idle once it is over', () => {
+  const options = { liveUntilEnd: true }
+  assert.equal(Model.barState(EVENTS, START + 30 * MIN, 30, options).phase, 'live')
+  assert.equal(Model.barState(EVENTS, START + 45 * MIN - 1, 30, options).phase, 'live')
+  assert.equal(Model.barState(EVENTS, START + 45 * MIN, 30, options).phase, 'idle')
+})
+
+test('barState until the end: the next event takes over once it is announced', () => {
+  const events = [meeting('now', 13, 0), meeting('next', 13, 30)]
+  const options = { liveUntilEnd: true }
+  assert.equal(Model.barState(events, START + 10 * MIN, 15, options).event.id, 'now')
+  const state = Model.barState(events, START + 20 * MIN, 15, options)
+  assert.equal(state.phase, 'imminent')
+  assert.equal(state.event.id, 'next')
+})
+
+test('barState until the end: the first 2 minutes stay with the event that just started', () => {
+  const events = [meeting('now', 13, 0), meeting('next', 13, 5)]
+  const state = Model.barState(events, START + MIN, 30, { liveUntilEnd: true })
+  assert.equal(state.phase, 'live')
+  assert.equal(state.event.id, 'now')
+})
+
+test('barState keeping the current event: live until its end, next one or not', () => {
+  const events = [meeting('now', 13, 0), meeting('next', 13, 30)]
+  const state = Model.barState(events, START + 20 * MIN, 15, { liveUntilEnd: true, keepCurrent: true })
+  assert.equal(state.phase, 'live')
+  assert.equal(state.event.id, 'now')
+})

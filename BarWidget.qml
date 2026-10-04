@@ -43,7 +43,10 @@ BarWidget {
     hideDeclined: true
   })
 
-  readonly property var barState: Model.barState(visibleEvents, nowMs, setting("announceLeadMinutes", 15))
+  readonly property var barState: Model.barState(visibleEvents, nowMs, setting("announceLeadMinutes", 15), {
+    liveUntilEnd: setting("duringEvent", "untilEnd") !== "firstMinutes",
+    keepCurrent: setting("nextDuringEvent", "announce") === "keep"
+  })
   readonly property bool announcing: !vertical && barState.phase !== "idle"
   readonly property bool urgent: barState.phase === "live"
   readonly property bool emphasized: barState.phase === "imminent" || urgent

@@ -823,29 +823,37 @@ var IMMINENT_MINUTES = 10
 var LIVE_MINUTES = 2
 
 // The bar's escalation: "soon" inside the lead time, "imminent" in the last
-// 10 minutes (or the whole lead, when that is shorter), "live" for the first
-// 2 minutes after the start. A meeting that has just started outranks the
-// next one. `extra` counts the other events starting at the same moment.
-// A lead of 0 means the user asked for the clock alone.
-function barState(events, nowMs, leadMinutes) {
+// 10 minutes (or the whole lead, when that is shorter), "live" once an event
+// starts: for its first 2 minutes, or until its end with liveUntilEnd. When
+// both apply, the event that has just started wins its first 2 minutes;
+// after that the next one takes over, unless keepCurrent. `extra` counts
+// the other events starting at the same moment. A lead of 0 means the user
+// asked for the clock alone.
+function barState(events, nowMs, leadMinutes, options) {
   var lead = Number(leadMinutes) || 0
+  var opts = options || {}
   var idle = { phase: "idle", event: null, extra: 0, countdownMs: 0 }
   if (lead <= 0) return idle
 
   var candidates = announceableEvents(events)
-  var chosen = null
-  var phase = "idle"
+  var live = null
+  var soon = null
   for (var i = 0; i < candidates.length; i++) {
     var c = candidates[i]
-    var live = c.start <= nowMs && nowMs - c.start <= LIVE_MINUTES * MINUTE_MS && nowMs < c.end
-    if (live && (phase !== "live" || c.start > chosen.start)) {
-      chosen = c
-      phase = "live"
-    } else if (phase !== "live" && c.start > nowMs && c.start - nowMs <= lead * MINUTE_MS
-               && (!chosen || c.start < chosen.start)) {
-      chosen = c
-      phase = "soon"
+    var started = c.start <= nowMs && nowMs < c.end
+    if (started && (opts.liveUntilEnd || nowMs - c.start <= LIVE_MINUTES * MINUTE_MS)) {
+      // The latest to start is the one under way now.
+      if (!live || c.start > live.start) live = c
+    } else if (c.start > nowMs && c.start - nowMs <= lead * MINUTE_MS && (!soon || c.start < soon.start)) {
+      soon = c
     }
+  }
+
+  var chosen = soon
+  var phase = soon ? "soon" : "idle"
+  if (live && (!soon || opts.keepCurrent || nowMs - live.start <= LIVE_MINUTES * MINUTE_MS)) {
+    chosen = live
+    phase = "live"
   }
   if (!chosen) return idle
 

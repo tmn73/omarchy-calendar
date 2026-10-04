@@ -24,7 +24,9 @@
       "eventTimeFormat": "HH:mm",
       "language": "auto",
       "reminders": true,
-      "announceLeadMinutes": 15
+      "announceLeadMinutes": 15,
+      "duringEvent": "untilEnd",
+      "nextDuringEvent": "announce"
     },
     "schema": [
       {
@@ -79,6 +81,28 @@
         "step": 5,
         "defaultValue": 15,
         "description": "Show the next event beside the clock this long before it starts. 0 keeps the clock alone."
+      },
+      {
+        "key": "duringEvent",
+        "type": "enum",
+        "label": "During an event",
+        "options": [
+          "untilEnd",
+          "firstMinutes"
+        ],
+        "defaultValue": "untilEnd",
+        "description": "untilEnd keeps \"Now\" on until the event ends. firstMinutes shows it for the first 2 minutes."
+      },
+      {
+        "key": "nextDuringEvent",
+        "type": "enum",
+        "label": "Next event during one",
+        "options": [
+          "announce",
+          "keep"
+        ],
+        "defaultValue": "announce",
+        "description": "announce shows the next event once it is due. keep stays on the current event until it ends."
       },
       {
         "key": "birthYear",
