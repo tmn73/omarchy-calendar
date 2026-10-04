@@ -52,21 +52,11 @@ Column {
         required property var modelData
         spacing: Style.space(4)
 
-        Rectangle {
+        KeyCap {
           anchors.verticalCenter: parent.verticalCenter
-          width: keyLabel.implicitWidth + Style.space(5) * 2
-          height: keyLabel.implicitHeight + Style.space(1) * 2
-          radius: Style.cornerRadius
-          color: Util.alpha(root.foreground, 0.10)
-
-          Text {
-            id: keyLabel
-            anchors.centerIn: parent
-            text: shortcut.modelData.keys
-            color: Util.alpha(root.foreground, 0.85)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          text: shortcut.modelData.keys
         }
 
         Text {

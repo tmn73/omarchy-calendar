@@ -95,27 +95,17 @@ Rectangle {
         }
       }
 
-      Rectangle {
+      // Drawn as a key, like the "n" beside it, so the two line up.
+      KeyCap {
         id: helpButton
         anchors.right: keyHint.left
-        anchors.rightMargin: keyHint.visible ? Style.space(6) : Style.space(4)
+        anchors.rightMargin: Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(16)
-        height: width
-        radius: width / 2
-        color: "transparent"
-        border.width: Style.spacing.hairline
-        border.color: Util.alpha(root.foreground, helpHover.hovered ? 0.8 : 0.4)
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        text: "?"
+        highlighted: helpHover.hovered
         Accessible.name: root.tr("quick.helpLabel")
-
-        Text {
-          anchors.centerIn: parent
-          text: "?"
-          color: Util.alpha(root.foreground, helpHover.hovered ? 0.9 : 0.6)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
 
         HoverHandler {
           id: helpHover
@@ -129,25 +119,16 @@ Rectangle {
         }
       }
 
-      Rectangle {
+      KeyCap {
         id: keyHint
         visible: !field.activeFocus
         anchors.right: parent.right
         anchors.rightMargin: Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
-        width: visible ? hintLabel.implicitWidth + Style.space(5) * 2 : 0
-        height: hintLabel.implicitHeight + Style.space(1) * 2
-        radius: Style.cornerRadius
-        color: Util.alpha(root.foreground, 0.10)
-
-        Text {
-          id: hintLabel
-          anchors.centerIn: parent
-          text: "n"
-          color: Util.alpha(root.foreground, 0.6)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
+        width: visible ? implicitWidth : 0
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        text: "n"
       }
     }
 
@@ -194,11 +175,24 @@ Rectangle {
         // The words read as a date, a time, a length or a meeting, each in
         // the accent colour. A meeting word also says what it adds.
         Flow {
+          id: understoodRow
+          // Every item of the row is one chip tall, so the label and the
+          // chips share a centre line, also across a wrap.
+          readonly property real chipHeight: chipMetrics.height + Style.space(1) * 2
+
           width: parent.width
           topPadding: Style.space(2)
           spacing: Style.space(4)
 
+          FontMetrics {
+            id: chipMetrics
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+
           Text {
+            height: understoodRow.chipHeight
+            verticalAlignment: Text.AlignVCenter
             text: root.tr(root.understood.length > 0 ? "quick.understood" : "quick.nothingUnderstood")
             color: Util.alpha(root.foreground, 0.6)
             font.family: root.fontFamily
@@ -211,7 +205,7 @@ Rectangle {
             Rectangle {
               required property var modelData
               width: chipLabel.implicitWidth + Style.space(5) * 2
-              height: chipLabel.implicitHeight + Style.space(1) * 2
+              height: understoodRow.chipHeight
               radius: Style.cornerRadius
               color: Util.alpha(Color.accent, 0.14)
 
