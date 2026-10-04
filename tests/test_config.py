@@ -118,10 +118,6 @@ class TestWindowBounds(unittest.TestCase):
         self.assertTrue(time_max.startswith("2026-08-12"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestGwsPath(unittest.TestCase):
     def test_defaults_to_the_bare_name(self):
         self.assertEqual(config.DEFAULTS["gwsPath"], "gws")
@@ -131,3 +127,7 @@ class TestGwsPath(unittest.TestCase):
             path = Path(tmp) / "c.json"
             path.write_text(json.dumps({"gwsPath": "/opt/bin/gws"}))
             self.assertEqual(config.load(path)["gwsPath"], "/opt/bin/gws")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -11,15 +11,12 @@ Dropdown {
 
   property string dateKey: ""
   property bool hasCustom: false
+  property string language: "en"
 
   signal chosen(string value)
 
   showLabel: false
-  options: {
-    var list = Model.repeatOptions(root.dateKey)
-    if (root.hasCustom) list = list.concat([{ value: "custom", label: qsTr("Custom rule (kept as it is)") }])
-    return list
-  }
+  options: Model.repeatOptions(root.dateKey, root.language, root.hasCustom)
 
   onChanged: function(value) { root.chosen(value) }
 }

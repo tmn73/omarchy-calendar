@@ -8,10 +8,8 @@ EDS sidesteps all of it by reusing GNOME's already-verified OAuth client, so
 signing in is a browser click and there is no project, consent screen or
 client secret to look after.
 
-This emits Google Calendar event resources rather than contract rows, so the
-normalization, deduplication and contract validation are shared with gws
-instead of reimplemented. Only the fields CalDAV actually carries are filled
-in; the rest are simply absent, which normalize already treats as blank.
+Like ics, this emits Google event resources (see resources.py) rather than
+contract rows.
 
 The gi imports are deliberately lazy. The module must be importable, and its
 pure conversion functions testable, on a machine with no EDS installed.
@@ -21,6 +19,7 @@ import time
 from datetime import datetime, timezone
 
 from .errors import SyncError
+from .resources import build_event
 
 # EDS returns from refresh as soon as the CalDAV fetch is *initiated*, not when
 # it finishes, so reading straight afterwards serves the pre-refresh cache and
@@ -29,26 +28,7 @@ from .errors import SyncError
 SETTLE_SECONDS = 8
 
 CONNECT_TIMEOUT = 10
-
-# iCalendar spells the invitation answer differently to Google, and the widget
-# reads Google's spelling (Model.js hides declined events by it).
-PARTSTAT_TO_GOOGLE = {
-    "ACCEPTED": "accepted",
-    "DECLINED": "declined",
-    "TENTATIVE": "tentative",
-    "NEEDS-ACTION": "needsAction",
-}
-
-# The wire spelling is NEEDS-ACTION but the introspected enum calls it
-# NEEDSACTION, and both reach this module, so the hyphen is ignored on lookup.
-_PARTSTAT_LOOKUP = {
-    key.replace("-", ""): value for key, value in PARTSTAT_TO_GOOGLE.items()
-}
-
-
-def google_partstat(value):
-    """A Google responseStatus for an iCalendar PARTSTAT, blank if unknown."""
-    return _PARTSTAT_LOOKUP.get(str(value or "").upper().replace("-", ""), "")
+FALLBACK_COLOR = "#4285f4"
 
 
 class EdsError(SyncError):
@@ -98,37 +78,6 @@ def time_to_node(ical_time, utc_zone=None):
     return {
         "dateTime": datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
     }
-
-
-def build_event(uid, start_node, end_node, summary="", location="",
-                status="", conference_url="", partstat="", recurrence_key=""):
-    """Assemble a Google-shaped event resource from CalDAV-derived parts.
-
-    Pure, so the mapping can be tested without EDS present. `recurrence_key`
-    distinguishes occurrences of a series, which share a UID; `iCalUID` stays
-    the bare UID so the CLI still deduplicates the same meeting seen from two
-    calendars.
-    """
-    event = {
-        "id": "%s:%s" % (uid, recurrence_key) if recurrence_key else uid,
-        "iCalUID": uid,
-        "summary": summary or "",
-        "location": location or "",
-        "start": start_node,
-        "end": end_node or start_node,
-    }
-
-    if status:
-        event["status"] = status.lower()
-    if conference_url:
-        event["hangoutLink"] = conference_url
-
-    answer = google_partstat(partstat)
-    if answer:
-        # normalize reads the user's own answer off the attendee marked self.
-        event["attendees"] = [{"self": True, "responseStatus": answer}]
-
-    return event
 
 
 class Eds:
@@ -217,7 +166,7 @@ class Eds:
                     "id": uid,
                     "name": source.get_display_name(),
                     "color": (extension.get_color() if extension else "")
-                    or "#4285f4",
+                    or FALLBACK_COLOR,
                 }
             )
 
@@ -257,28 +206,18 @@ class Eds:
 
     def _to_event(self, component, instance_start, instance_end, ical,
                   utc_zone):
-        start_node = time_to_node(instance_start, utc_zone)
-        end_node = time_to_node(instance_end, utc_zone)
-
-        status = component.get_status()
-        status_name = ""
-        if status == ical.PropertyStatus.CANCELLED:
-            status_name = "cancelled"
-
+        cancelled = component.get_status() == ical.PropertyStatus.CANCELLED
         return build_event(
             uid=component.get_uid() or "",
-            start_node=start_node,
-            end_node=end_node,
+            start_node=time_to_node(instance_start, utc_zone),
+            end_node=time_to_node(instance_end, utc_zone),
             summary=component.get_summary() or "",
             location=component.get_location() or "",
-            status=status_name,
+            description=component.get_description() or "",
+            status="cancelled" if cancelled else "",
             conference_url=_x_property(component, ical,
                                        "X-GOOGLE-CONFERENCE"),
             partstat=_own_partstat(component, ical, self._identity),
-            # Occurrences of a series share a UID, so the start separates them.
-            recurrence_key=(start_node or {}).get("dateTime")
-            or (start_node or {}).get("date")
-            or "",
         )
 
     def auth_hint(self, _cfg):

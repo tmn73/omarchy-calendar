@@ -1,6 +1,12 @@
 {
   "items": [
-    { "id": "a@example.com", "summary": "Personal", "backgroundColor": "#f83a22", "primary": true },
+    {
+      "id": "a@example.com",
+      "summary": "Personal",
+      "backgroundColor": "#f83a22",
+      "primary": true,
+      "defaultReminders": [{ "method": "popup", "minutes": 10 }, { "method": "email", "minutes": 1440 }]
+    },
     { "id": "b@example.com", "summary": "Phases of the Moon", "backgroundColor": "#fad165" }
   ]
 }

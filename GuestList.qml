@@ -3,6 +3,7 @@ import qs.Commons
 import qs.Ui
 
 import "Model.js" as Model
+import "Strings.js" as Strings
 
 // The guests of an event: an email field (Enter adds), then one row per
 // guest with the answer and a remove button. It never talks to Google; it
@@ -15,12 +16,17 @@ Column {
   property var suggestions: []
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
+  property string language: "en"
 
   signal edited(var guests)
   // The form owns Escape, so the field passes it up.
   signal escaped()
 
+  // What is typed and not added yet, so a save can still take it.
+  readonly property string pendingText: guestField.text
+
   readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
+  readonly property color hoverFill: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.08)
   readonly property var matches: guestField.activeFocus
     ? Model.matchGuests(root.suggestions, guestField.text, root.guests, 5)
     : []
@@ -29,28 +35,28 @@ Column {
 
   spacing: Style.space(4)
 
-  // What is typed and not added yet, so a save can still take it.
-  readonly property string pendingText: guestField.text
+  function tr(key, args) {
+    return Strings.tr(root.language, key, args)
+  }
 
   function clearPending() {
     guestField.text = ""
     root.highlighted = -1
   }
 
-  function add(text) {
+  function addGuest(text) {
     var next = Model.addGuest(root.guests, text)
     // The same array back means the address was invalid or already in.
     if (next === root.guests) return
     root.edited(next)
-    guestField.text = ""
-    root.highlighted = -1
+    root.clearPending()
   }
 
   function answerLabel(status) {
-    if (status === "accepted") return qsTr("Going")
-    if (status === "tentative") return qsTr("Maybe")
-    if (status === "declined") return qsTr("Declined")
-    return qsTr("Awaiting")
+    if (status === "accepted") return root.tr("guests.going")
+    if (status === "tentative") return root.tr("guests.maybe")
+    if (status === "declined") return root.tr("guests.declined")
+    return root.tr("guests.awaiting")
   }
 
   function remove(index) {
@@ -62,7 +68,7 @@ Column {
   TextField {
     id: guestField
     width: parent.width
-    placeholderText: qsTr("Add guests")
+    placeholderText: root.tr("guests.placeholder")
     foreground: root.foreground
     font.family: root.fontFamily
     inputMethodHints: Qt.ImhEmailCharactersOnly
@@ -82,7 +88,7 @@ Column {
         var chosen = root.highlighted >= 0 && root.highlighted < root.matches.length
           ? root.matches[root.highlighted].email
           : guestField.text
-        root.add(chosen)
+        root.addGuest(chosen)
         event.accepted = true
       }
     }
@@ -99,9 +105,7 @@ Column {
       width: root.width
       height: suggestionText.implicitHeight + Style.space(6)
       radius: Style.cornerRadius
-      color: index === root.highlighted || suggestionHover.hovered
-        ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-        : "transparent"
+      color: index === root.highlighted || suggestionHover.hovered ? root.hoverFill : "transparent"
 
       Text {
         id: suggestionText
@@ -119,7 +123,7 @@ Column {
       }
 
       HoverHandler { id: suggestionHover; cursorShape: Qt.PointingHandCursor }
-      TapHandler { onTapped: root.add(modelData.email) }
+      TapHandler { onTapped: root.addGuest(modelData.email) }
     }
   }
 
@@ -141,7 +145,7 @@ Column {
         anchors.verticalCenter: parent.verticalCenter
         // Typed by the user or sent by an organizer: never rich text.
         textFormat: Text.PlainText
-        text: modelData.email + (modelData.organizer ? "  " + qsTr("(organizer)") : "")
+        text: modelData.email + (modelData.organizer ? "  " + root.tr("guests.organizer") : "")
         elide: Text.ElideRight
         color: root.foreground
         font.family: root.fontFamily
@@ -164,7 +168,7 @@ Column {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         iconText: "󰅖"
-        tooltipText: qsTr("Remove")
+        tooltipText: root.tr("guests.remove")
         foreground: root.foreground
         fontFamily: root.fontFamily
         onClicked: root.remove(index)

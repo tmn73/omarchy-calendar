@@ -21,7 +21,10 @@
       "format": "dddd HH:mm",
       "formatAlt": "d MMMM 'W'ww yyyy",
       "verticalFormat": "HH\n-\nmm",
-      "eventTimeFormat": "HH:mm"
+      "eventTimeFormat": "HH:mm",
+      "language": "auto",
+      "reminders": true,
+      "announceLeadMinutes": 15
     },
     "schema": [
       {
@@ -47,6 +50,35 @@
         "type": "string",
         "label": "Event time format",
         "defaultValue": "HH:mm"
+      },
+      {
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "options": [
+          "auto",
+          "en",
+          "pt"
+        ],
+        "defaultValue": "auto",
+        "description": "auto follows the system locale (Portuguese for pt_*, otherwise English)."
+      },
+      {
+        "key": "reminders",
+        "type": "boolean",
+        "label": "Desktop reminders",
+        "defaultValue": true,
+        "description": "Notify at each event's reminder times; meetings with a link get one 10 minutes before."
+      },
+      {
+        "key": "announceLeadMinutes",
+        "type": "number",
+        "label": "Announce events (minutes before)",
+        "min": 0,
+        "max": 120,
+        "step": 5,
+        "defaultValue": 15,
+        "description": "Show the next event beside the clock this long before it starts. 0 keeps the clock alone."
       },
       {
         "key": "birthYear",

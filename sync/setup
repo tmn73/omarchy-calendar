@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Interactive onboarding for the Google Calendar sync.
+# Interactive onboarding for the calendar sync.
 #
-# Automates: GCP project creation, Calendar API enablement, gws profile
+# With --ics it only asks for secret iCal addresses. Otherwise it sets up the
+# gws backend. Automates: GCP project creation, Calendar API enablement, gws profile
 # layout, the scoped login, and the systemd timer.
 # Cannot automate: the OAuth consent screen, declaring the calendar scope,
 # publishing to production, and creating the Desktop OAuth client. Google
@@ -34,6 +35,7 @@ PROFILE="${PROFILE:-$HOME/.config/gws-omarchy-calendar}"
 GCLOUD_CONFIG="${GCLOUD_CONFIG:-omarchy-calendar}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_BIN="$SCRIPT_DIR/omarchy-calendar-sync"
+CONFIG="$HOME/.config/omarchy/calendar-sync.json"
 SCOPE="https://www.googleapis.com/auth/calendar.readonly"
 # Lets the widget create, edit and delete events. It cannot change sharing
 # or delete a calendar, which the full calendar scope could.
@@ -108,14 +110,13 @@ EOF
   local identity=""
   read -r -p "  Your email address (marks declined invitations, optional): " identity || true
 
-  local config="$HOME/.config/omarchy/calendar-sync.json"
-  mkdir -p "$(dirname "$config")"
+  mkdir -p "$(dirname "$CONFIG")"
   # The new config replaces the current one only after a test sync passes.
   # A wrong address must not break a setup that works today.
   local candidate
-  candidate=$(mktemp "$config.XXXXXX")
+  candidate=$(mktemp "$CONFIG.XXXXXX")
   trap 'rm -f "$candidate"' EXIT
-  python3 - "$config" "$candidate" "$identity" "${urls[@]}" <<'PYEOF'
+  python3 - "$CONFIG" "$candidate" "$identity" "${urls[@]}" <<'PYEOF'
 import json, os, pathlib, sys
 
 path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
@@ -140,20 +141,18 @@ PYEOF
 
   step "Testing the feeds"
   "$SYNC_BIN" --config "$candidate" || {
-    echo "  The sync failed, see above. $config is unchanged."
+    echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
-  mv -f "$candidate" "$config"
-  echo "  backend set to ics with ${#urls[@]} feed(s) in $config"
+  mv -f "$candidate" "$CONFIG"
+  echo "  backend set to ics with ${#urls[@]} feed(s) in $CONFIG"
 
   install_timer_and_sync
   exit 0
 }
 
-# `read` returns non-zero at EOF, and under `set -e` that killed the whole
-# script at the very first prompt with no message at all. Anyone running this
-# through a pipe, a wrapper, or any non-interactive shell got as far as the
-# first Google Console instruction and no further, silently.
+# `read` returns non-zero at EOF, which under `set -e` would end the script
+# silently at the first prompt whenever stdin is not a terminal.
 pause() {
   if [ ! -t 0 ]; then
     printf '\n  Not a terminal, so not pausing. Do the step above before the login opens.\n'
@@ -181,12 +180,11 @@ fi
 # terminal the config's value stands.
 CURRENT_WRITE=$(python3 -c '
 import json, pathlib, sys
-path = pathlib.Path.home() / ".config" / "omarchy" / "calendar-sync.json"
 try:
-    print("1" if json.loads(path.read_text()).get("write") is True else "0")
+    print("1" if json.loads(pathlib.Path(sys.argv[1]).read_text()).get("write") is True else "0")
 except (OSError, ValueError, AttributeError):
     print("0")
-' 2>/dev/null || echo 0)
+' "$CONFIG" 2>/dev/null || echo 0)
 if [ "$WRITE" = 0 ]; then
   if [ -t 0 ]; then
     if [ "$CURRENT_WRITE" = 1 ]; then
@@ -463,15 +461,14 @@ if ! timer_output=$(runs_under_timer "$gws_path"); then
 
     ${timer_output:-nothing}
 
-  Set gwsPath in $HOME/.config/omarchy/calendar-sync.json to a gws that
+  Set gwsPath in $CONFIG to a gws that
   runs without your shell PATH.
 
 EOF
   fi
 fi
-config="$HOME/.config/omarchy/calendar-sync.json"
-mkdir -p "$(dirname "$config")"
-python3 - "$config" "$gws_path" "$PROFILE" "$WRITE" <<'PYEOF'
+mkdir -p "$(dirname "$CONFIG")"
+python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" <<'PYEOF'
 import json, pathlib, sys
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]

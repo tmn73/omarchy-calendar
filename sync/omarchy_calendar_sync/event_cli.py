@@ -18,6 +18,7 @@ from . import config as config_module
 from . import cli, contract, event_form, writes
 from .errors import SyncError
 from .gws import GwsAuthError, GwsNotFound
+from .localzone import resolve_local_timezone
 
 SYNC_UNIT = "omarchy-calendar-sync.service"
 
@@ -149,7 +150,7 @@ def _write(client, request, tz):
         # the user clicked: a monthly "4th Saturday" rebuilt from a late
         # occurrence would become "last Saturday". An unchanged repeat sends
         # the series' own rule back; a new preset is built from that date.
-        rule_start = event_form.start_day(current, tz)
+        rule_start = event_form.starts_on(current, tz)
         if form.get("repeat") == event_form.repeat_preset(current.get("recurrence"), rule_start):
             form = {**form, "repeat": "custom", "rrule": list(current.get("recurrence") or [])}
 
@@ -192,13 +193,13 @@ def main(argv=None):
     if not isinstance(raw, dict):
         return _emit(1, _fail("Expected one JSON object as the argument."))
 
+    tz = resolve_local_timezone()
     try:
         cfg = config_module.load()
-        client = cli.build_client(cfg)
+        client = cli.build_client(cfg, tz)
     except config_module.ConfigError as error:
         return _emit(1, _fail(f"Config error: {error}"))
 
-    tz = cli.resolve_local_timezone()
     code, reply = perform(
         raw, cfg, client, contract.CONTRACT_PATH, tz,
         sync_now=lambda: _sync_inline(client, cfg, tz),

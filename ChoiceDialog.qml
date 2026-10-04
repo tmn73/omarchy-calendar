@@ -2,6 +2,8 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
+import "Strings.js" as Strings
+
 // A question with two answers and Cancel, for "Send invitation emails?" and
 // "This event or all events?". Built like the shell's ConfirmDialog, which
 // has one answer only.
@@ -13,6 +15,7 @@ Item {
   property string firstText: ""
   property string secondText: ""
   property string fontFamily: Style.font.family
+  property string language: "en"
 
   signal first()
   signal second()
@@ -52,14 +55,18 @@ Item {
         font.pixelSize: Style.font.bodySmall
       }
 
-      Row {
-        anchors.right: parent.right
+      // Right to left, so the first answer stays rightmost and the buttons
+      // wrap instead of overflowing when translations run long.
+      Flow {
+        width: parent.width
         spacing: Style.space(8)
+        layoutDirection: Qt.RightToLeft
 
         Button {
-          text: qsTr("Cancel")
+          text: root.firstText
+          bordered: true
           fontFamily: root.fontFamily
-          onClicked: root.canceled()
+          onClicked: root.first()
         }
 
         Button {
@@ -70,10 +77,9 @@ Item {
         }
 
         Button {
-          text: root.firstText
-          bordered: true
+          text: Strings.tr(root.language, "common.cancel")
           fontFamily: root.fontFamily
-          onClicked: root.first()
+          onClicked: root.canceled()
         }
       }
     }

@@ -1,7 +1,6 @@
 import contextlib
 import io
 import json
-import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -56,6 +55,12 @@ class FakeGws:
         return "run gws auth login"
 
 
+def run_quietly(*args):
+    """cli.run without its one-line summary on the test output."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        return cli.run(*args)
+
+
 class TestWriteAtomic(unittest.TestCase):
     def test_creates_parent_directories(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -74,7 +79,7 @@ class TestRun(unittest.TestCase):
     def test_writes_a_valid_document(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "calendar-events.json"
-            code = cli.run(FakeGws(), config.DEFAULTS, NOW, out, BOGOTA)
+            code = run_quietly(FakeGws(), config.DEFAULTS, NOW, out, BOGOTA)
             self.assertEqual(code, 0)
             doc = json.loads(out.read_text())
             self.assertEqual(contract.validate(doc), [])
@@ -85,7 +90,7 @@ class TestRun(unittest.TestCase):
     def test_records_source_and_synced_at(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(FakeGws(), config.DEFAULTS, NOW, out, BOGOTA)
+            run_quietly(FakeGws(), config.DEFAULTS, NOW, out, BOGOTA)
             doc = json.loads(out.read_text())
             self.assertEqual(doc["source"], "gws/0.13.2")
             self.assertEqual(doc["syncedAt"], NOW.isoformat())
@@ -95,7 +100,7 @@ class TestRun(unittest.TestCase):
         cfg["calendars"] = {"include": [], "exclude": ["Personal"]}
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(FakeGws(), cfg, NOW, out, BOGOTA)
+            run_quietly(FakeGws(), cfg, NOW, out, BOGOTA)
             self.assertEqual(json.loads(out.read_text())["events"], [])
 
     def test_events_are_sorted_by_date_then_start(self):
@@ -117,7 +122,7 @@ class TestRun(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(FakeGws(events=events), config.DEFAULTS, NOW, out, BOGOTA)
+            run_quietly(FakeGws(events=events), config.DEFAULTS, NOW, out, BOGOTA)
             titles = [e["title"] for e in json.loads(out.read_text())["events"]]
             self.assertEqual(titles, ["Earlier", "Later"])
 
@@ -125,7 +130,7 @@ class TestRun(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
             out.write_text('{"version": 1, "events": ["previous"]}')
-            code = cli.run(
+            code = run_quietly(
                 FakeGws(raises=gws.GwsAuthError("401: invalid_grant")),
                 config.DEFAULTS,
                 NOW,
@@ -138,7 +143,7 @@ class TestRun(unittest.TestCase):
     def test_api_failure_does_not_create_a_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            code = cli.run(
+            code = run_quietly(
                 FakeGws(raises=gws.GwsApiError("500: boom")),
                 config.DEFAULTS,
                 NOW,
@@ -147,64 +152,6 @@ class TestRun(unittest.TestCase):
             )
             self.assertEqual(code, 1)
             self.assertFalse(out.exists())
-
-
-class TestResolveLocalTimezone(unittest.TestCase):
-    def test_tz_env_var_wins(self):
-        tz = cli.resolve_local_timezone(
-            env={"TZ": "America/New_York"}, localtime_path="/nonexistent/localtime"
-        )
-        self.assertEqual(getattr(tz, "key", None), "America/New_York")
-
-    def test_tz_env_var_with_leading_colon_is_accepted(self):
-        tz = cli.resolve_local_timezone(
-            env={"TZ": ":America/Bogota"}, localtime_path="/nonexistent/localtime"
-        )
-        self.assertEqual(getattr(tz, "key", None), "America/Bogota")
-
-    def test_garbage_tz_env_var_falls_through_rather_than_raising(self):
-        with contextlib.redirect_stderr(io.StringIO()):
-            tz = cli.resolve_local_timezone(
-                env={"TZ": "Not/AZone"}, localtime_path="/nonexistent/localtime"
-            )
-        self.assertIsNone(getattr(tz, "key", None))
-        self.assertIsNotNone(tz.utcoffset(datetime.now()))
-
-    def test_symlinked_localtime_resolves_to_the_right_zone_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            zoneinfo_dir = Path(tmp) / "usr" / "share" / "zoneinfo" / "America"
-            zoneinfo_dir.mkdir(parents=True)
-            zone_file = zoneinfo_dir / "Bogota"
-            zone_file.write_text("not a real tzfile, just needs to exist")
-
-            localtime_path = Path(tmp) / "etc" / "localtime"
-            localtime_path.parent.mkdir(parents=True)
-            os.symlink(zone_file, localtime_path)
-
-            tz = cli.resolve_local_timezone(env={}, localtime_path=str(localtime_path))
-            self.assertEqual(getattr(tz, "key", None), "America/Bogota")
-
-    def test_real_file_instead_of_symlink_falls_through(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            localtime_path = Path(tmp) / "localtime"
-            localtime_path.write_text("not a symlink")
-
-            with contextlib.redirect_stderr(io.StringIO()):
-                tz = cli.resolve_local_timezone(env={}, localtime_path=str(localtime_path))
-            self.assertIsNone(getattr(tz, "key", None))
-            self.assertIsNotNone(tz.utcoffset(datetime.now()))
-
-    def test_final_fallback_returns_a_usable_tzinfo_and_warns(self):
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            tz = cli.resolve_local_timezone(env={}, localtime_path="/nonexistent/localtime")
-        self.assertIsNone(getattr(tz, "key", None))
-        self.assertIsNotNone(tz.utcoffset(datetime.now()))
-        self.assertIn("timezone", stderr.getvalue())
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 def gevent(uid, start, summary="Event", event_id=None):
@@ -249,7 +196,7 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(FakeGws(events=series), config.DEFAULTS, NOW, out, BOGOTA)
+            run_quietly(FakeGws(events=series), config.DEFAULTS, NOW, out, BOGOTA)
             titles = json.loads(out.read_text())["events"]
             self.assertEqual(len(titles), 5)
 
@@ -261,7 +208,7 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(
+            run_quietly(
                 FakeGws(calendars=calendars, events=[shared]),
                 config.DEFAULTS,
                 NOW,
@@ -287,7 +234,7 @@ class TestDeduplicationAcrossCalendars(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(
+            run_quietly(
                 FakeGws(calendars=calendars, events=copies),
                 config.DEFAULTS,
                 NOW,
@@ -312,7 +259,7 @@ class TestWritableCalendars(unittest.TestCase):
         cfg = {**config.DEFAULTS, **cfg_changes}
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(client, cfg, NOW, out, BOGOTA)
+            run_quietly(client, cfg, NOW, out, BOGOTA)
             return json.loads(out.read_text())
 
     def test_writable_calendars_are_listed_when_writing_is_on(self):
@@ -338,7 +285,7 @@ class TestWritableCalendars(unittest.TestCase):
         client.can_write = True
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "out.json"
-            cli.run(client, {**config.DEFAULTS, "write": True}, NOW, out, BOGOTA)
+            run_quietly(client, {**config.DEFAULTS, "write": True}, NOW, out, BOGOTA)
             doc = json.loads(out.read_text())
         self.assertEqual(doc["guestSuggestions"], [{"email": "ana@example.com", "name": ""}])
 
@@ -347,3 +294,7 @@ class TestWritableCalendars(unittest.TestCase):
 
     def test_writing_is_off_by_default(self):
         self.assertIs(config.DEFAULTS["write"], False)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -22,18 +22,39 @@ time away for an event title would be a downgrade you pay for all day.
 
 ## Features
 
-- Month grid with ISO week numbers, coloured dots per calendar
-- The selected day's agenda under the grid, click any day to see it
-- Today's agenda reads as a timeline: a line at the current time, past events
-  faded, the event in progress highlighted, and a countdown on the next one
-- Create, edit and delete events from the panel (press `n`), with a form like
-  Google's: date picker, times in 15-minute steps, repeat, guests with
-  suggestions, Google Meet, notifications, colour. Off by default, see
+- **Three columns.** The month grid you know on the left, the day's agenda in
+  the middle, and the selected event's details on the right. The details
+  column only opens when you click something
+- **Nothing cut off.** Titles wrap instead of trailing off in an ellipsis
+- **Deadlines and tasks look like what they are.** Titles starting with
+  `DEADLINE:`/`PRAZO:`/`Due:` get a badge and come first. Rows from a task
+  calendar (Todoist, Google Tasks) get a circle, and done ones (`✓ …`) are
+  struck through
+- **A meeting button on every meeting**, whatever the time. It turns into a
+  filled **Join** from 15 minutes before the start. Links are found in
+  Google's conference data, and also in the location or description of an
+  invitation forwarded by email (Meet, Zoom, Teams, Webex, Jitsi, Whereby)
+- **Next up card**: what is next today, with a countdown and Join
+- **Upcoming days** under the selected day, so the week is one glance away
+- **Quick add** in plain English or Portuguese: `call with Ana tomorrow 2pm
+  for 45m`, `dentista sexta às 15h`. You see the parsed date before you
+  press Enter. Read-only sources open Google Calendar with the event filled in
+- **Details** on click: full title, when, Join, directions, description,
+  reminder. Double click edits (writable calendars) or opens the event in
+  Google
+- **Create, edit and delete** from the panel, with a form like Google's: date
+  picker, times in 15-minute steps, repeat, guests with suggestions, Google
+  Meet, notifications, colour. Off by default, see
   [Create and edit events](#create-and-edit-events)
-- The bar label announces what is next, minutes before it starts
-- A **Join** button on meetings that have a video link, shown only from 15
-  minutes before the start until 15 minutes after the end
-- Clicking any event opens it in your calendar
+- **The bar escalates** as a meeting nears: a quiet title, then the accent
+  colour and a Join chip, then the urgent colour once it starts. A `+1`
+  shows when two things start at once. Middle click joins
+- **Desktop reminders** from your Google notification times (10 minutes for
+  meetings without one). Clicking one joins the call, also from the
+  notification history. A shell reload never repeats them. See
+  [Reminders](#reminders)
+- **Keyboard first**, see [Keyboard](#keyboard)
+- **English and Portuguese**, following your locale or set by hand
 - Per-calendar visibility, week start, countdown lead time and a 24 h or 12 h
   time format
 - Google's working-location markers hidden by default, declined invitations
@@ -204,10 +225,13 @@ hand:
 Needs `python-icalendar` and `python-recurring-ical-events` (the setup installs
 them). Any https or webcal iCal feed works, not only Google's.
 
-The trade: no creating or editing events, Google refreshes the feed on its own
-schedule so a change can take a while to show up, and clicking an event opens
-nothing because the feed carries no link to it. Treat the address as a
-password; reset it in Google Calendar if it leaks.
+The trade: no creating or editing events, and Google refreshes the feed on its
+own schedule so a change can take a while to show up. The feed carries no link
+to an event, so for a Google feed the sync builds one from the event's UID and
+the calendar id in the address; an occurrence of a repeating event opens the
+series, and an event from any other feed opens nothing. Descriptions and
+pop-up reminders (`VALARM`) come through. Treat the address as a password;
+reset it in Google Calendar if it leaks.
 
 To go back to the Google Cloud sync, run `setup` again without `--ics`.
 
@@ -328,9 +352,11 @@ These extra fields are optional. Omit them and everything still works:
 | Field | Effect |
 |---|---|
 | `meetingUrl` | Shows the **Join** button around the event's time. Must be `https`, anything else is dropped |
-| `eventUrl` | Clicking the row opens this. Must be `https` |
+| `eventUrl` | Opens the event in its calendar. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
+| `description` | Shown in the event details. Plain text only, never rendered as markup; the bundled sync strips HTML, decodes entities and caps it at 1500 characters |
+| `reminders` | List of whole minutes before the start, e.g. `[10, 60]`, at which to raise a desktop notification. `[]` or absent means none given. The bundled sync takes Google's pop-up reminders (the calendar's defaults when the event uses them) or an iCal feed's `DISPLAY`/`AUDIO` alarms counted from the start; e-mail reminders are left out |
 
 A top-level `writableCalendars` list (`id`, `name`, `color`) turns on the
 panel's edit buttons for those calendars. Only the bundled sync should write
@@ -355,6 +381,44 @@ Writers other people have built:
   by @marijn070. A Nushell script that reads Thunderbird's local calendar, so
   every source you already aggregate in Thunderbird shows up in the widget.
 
+## Keyboard
+
+With the panel open:
+
+| Key | Does |
+|---|---|
+| `←` `→` / `↑` `↓` | Previous / next day, previous / next week |
+| `[` `]` | Previous / next month (`{` `}` for years) |
+| `t` | Today |
+| `j` `k` | Next / previous item of the selected day |
+| `Enter` | Show or hide the selected item's details |
+| `n` | Quick add |
+| `e` | Edit the selected event |
+| `m` | Join the selected meeting, else the next one |
+| `o` | Open the selected event in Google |
+| `w` | Toggle the week start |
+| `Esc` | Back out one step: dialog, form, details, selection, then the panel |
+
+`omarchy-shell tmn73.calendar join` joins the next meeting from anywhere, for
+a Hyprland binding.
+
+## Reminders
+
+The bar widget sends them, so they work with the panel closed.
+
+- **When:** at the times set in Google (popup reminders). A meeting with a
+  link but no reminder gets one 10 minutes before. All-day events only remind
+  when they have their own reminder, counted back from midnight like Google
+  does
+- **Clicking one:** joins the call, or opens the event when there is no link
+- **Late or repeated:** if the laptop slept through a reminder, it still
+  fires on wake, as long as the event has not started. Reminders already sent
+  are remembered for the session, so restarting the shell never repeats one
+- **Snooze:** for 15 minutes after a reminder, the next-up card and the
+  event's details offer "Snooze 5 min"
+- **Turning them off:** set `"reminders": false` in the widget's entry in
+  `shell.json`
+
 ## Settings
 
 Click the clock, then the gear icon in the panel header.
@@ -369,6 +433,7 @@ Click the clock, then the gear icon in the panel header.
 | Declined invitations | On lists them struck through, off hides them entirely |
 | Year and life progress | Brings back the built-in clock's bars, off by default |
 | Bar label | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes |
+| Language | Automatic (follows your locale), English or Português |
 | Event times | Set `eventTimeFormat` in `shell.json` to a Qt date-time format such as `HH:mm` or `h:mm AP` |
 | Sync | Event count, source and last sync time, for diagnosing a quiet calendar |
 
@@ -433,7 +498,7 @@ from your Google Cloud console to revoke properly.
 
 ```bash
 cd sync && PYTHONPATH=. python3 -m unittest discover -s ../tests -t .. -v
-node --test tests/model.test.js
+node --test tests/*.test.js
 ```
 
 No dependencies, no dev dependencies. The Python sync is standard library only

@@ -1,4 +1,4 @@
-"""Entry point. Orchestrates config, gws, normalization, and the write."""
+"""Entry point. Orchestrates config, a backend, normalization, and the write."""
 
 import argparse
 import json
@@ -7,13 +7,14 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import config as config_module
-from . import suggestions as suggestions_module
-from . import contract, normalize
+from . import contract, normalize, suggestions
+from .eds import Eds
 from .errors import SyncError
 from .gws import Gws
+from .ics import Ics
+from .localzone import resolve_local_timezone
 
 EXIT_OK = 0
 EXIT_SYNC_FAILED = 1
@@ -36,55 +37,6 @@ def write_atomic(path, doc):
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
-
-
-def resolve_local_timezone(env=None, localtime_path="/etc/localtime"):
-    """Resolve the local IANA timezone as a real ZoneInfo, not a fixed offset.
-
-    A fixed offset captured at process start would be applied to every event
-    across the whole sync window (7 days past, 60 days future), which drifts
-    by a day for any event on the far side of a daylight saving transition.
-
-    Resolution order:
-    1. The TZ environment variable, if set and ZoneInfo accepts it. A
-       leading colon (TZ=:America/Bogota is a legal form) is stripped first.
-    2. /etc/localtime (or localtime_path), if it is a symlink into a
-       zoneinfo tree; the path segments after "zoneinfo" become the name.
-    3. A fixed-offset fallback (the current process offset), with a warning
-       printed to stderr. Degraded but usable beats failing the sync.
-    """
-    env = os.environ if env is None else env
-
-    tz_value = env.get("TZ")
-    if tz_value:
-        name = tz_value.lstrip(":")
-        try:
-            return ZoneInfo(name)
-        except (ZoneInfoNotFoundError, ValueError):
-            pass
-
-    if os.path.islink(localtime_path):
-        try:
-            target = os.readlink(localtime_path)
-        except OSError:
-            target = None
-        if target:
-            parts = Path(target).parts
-            if "zoneinfo" in parts:
-                name = "/".join(parts[parts.index("zoneinfo") + 1 :])
-                if name:
-                    try:
-                        return ZoneInfo(name)
-                    except (ZoneInfoNotFoundError, ValueError):
-                        pass
-
-    print(
-        "warning: could not determine the named timezone; using a fixed "
-        "offset instead. Events spanning a daylight saving transition may "
-        "be off by a day.",
-        file=sys.stderr,
-    )
-    return datetime.now().astimezone().tzinfo
 
 
 def occurrence_key(gevent):
@@ -161,7 +113,7 @@ def run(client, cfg, now, out_path, local_tz):
             print(hint, file=sys.stderr)
         return EXIT_SYNC_FAILED
 
-    rows.sort(key=lambda row: (row["dateKey"], row["start"], row["title"]))
+    rows.sort(key=normalize.row_order)
     # The panel offers edits only for these. Only when the user turned
     # writing on and the backend can write; otherwise the key is absent.
     writable = []
@@ -174,7 +126,7 @@ def run(client, cfg, now, out_path, local_tz):
     # Only for the event form, so only when writing is on.
     guests = []
     if writable:
-        guests = suggestions_module.guest_suggestions(fetched, [c["id"] for c in calendars])
+        guests = suggestions.guest_suggestions(fetched, [c["id"] for c in calendars])
     doc = contract.build_document(rows, now.isoformat(), source, writable, guests)
 
     problems = contract.validate(doc)
@@ -188,19 +140,15 @@ def run(client, cfg, now, out_path, local_tz):
     return EXIT_OK
 
 
-def build_client(cfg):
+def build_client(cfg, local_tz=None):
     """The calendar source named by the config."""
     backend = str(cfg.get("backend") or "gws").strip().lower()
     if backend == "gws":
         return Gws(cfg["profile"], binary=cfg["gwsPath"])
     if backend == "eds":
-        from .eds import Eds
-
         return Eds(identity=cfg.get("identity", ""))
     if backend == "ics":
-        from .ics import Ics
-
-        return Ics(cfg.get("ics"), identity=cfg.get("identity", ""))
+        return Ics(cfg.get("ics"), identity=cfg.get("identity", ""), local_tz=local_tz)
     raise config_module.ConfigError(
         "unknown backend %r; expected \"gws\", \"eds\" or \"ics\"" % backend
     )
@@ -209,7 +157,7 @@ def build_client(cfg):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="omarchy-calendar-sync",
-        description="Sync Google Calendar into the Omarchy calendar widget file.",
+        description="Sync your calendars into the Omarchy calendar widget file.",
     )
     parser.add_argument("--config", default=None, help="path to calendar-sync.json")
     parser.add_argument("--out", default=None, help="path to the contract file")
@@ -226,7 +174,7 @@ def main(argv=None):
     local_tz = resolve_local_timezone()
 
     try:
-        client = build_client(cfg)
+        client = build_client(cfg, local_tz)
     except config_module.ConfigError as error:
         print(f"config error: {error}", file=sys.stderr)
         return EXIT_BAD_CONFIG

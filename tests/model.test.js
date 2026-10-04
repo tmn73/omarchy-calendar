@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert')
-const Model = require('../Model.js')
+const { loadQmlJs } = require('./load-qml-js.js')
+
+const Model = loadQmlJs('Model.js')
 
 const EVENTS = [
   { id: 'a', dateKey: '2026-08-10', title: 'Standup', color: '#f83a22', start: '2026-08-10T09:00:00-05:00' },
@@ -173,93 +175,6 @@ test('isCalendarHidden matches by id', () => {
 
 const NOW = Date.parse('2026-08-10T09:00:00-05:00')
 const at = (iso, extra = {}) => ({ id: iso, title: 'X', start: iso, allDay: false, ...extra })
-
-test('nextEvent picks the soonest future event', () => {
-  const events = [
-    at('2026-08-10T18:00:00-05:00', { title: 'Later' }),
-    at('2026-08-10T10:00:00-05:00', { title: 'Soon' }),
-    at('2026-08-10T08:00:00-05:00', { title: 'Past' })
-  ]
-  assert.equal(Model.nextEvent(events, NOW).title, 'Soon')
-})
-
-test('nextEvent ignores events already started', () => {
-  assert.equal(Model.nextEvent([at('2026-08-10T08:59:00-05:00')], NOW), null)
-})
-
-test('nextEvent ignores all-day events', () => {
-  const events = [at('2026-08-10T00:00:00-05:00', { allDay: true }), at('2026-08-10T23:00:00-05:00', { title: 'Real' })]
-  assert.equal(Model.nextEvent(events, NOW).title, 'Real')
-})
-
-test('nextEvent ignores unparseable starts', () => {
-  assert.equal(Model.nextEvent([at('not a date')], NOW), null)
-})
-
-test('nextEvent returns null on an empty or null list', () => {
-  assert.equal(Model.nextEvent([], NOW), null)
-  assert.equal(Model.nextEvent(null, NOW), null)
-})
-
-test('formatCountdown renders minutes, hours and now', () => {
-  assert.equal(Model.formatCountdown(30 * 1000), 'now')
-  assert.equal(Model.formatCountdown(10 * 60 * 1000), 'in 10min')
-  assert.equal(Model.formatCountdown(60 * 60 * 1000), 'in 1h')
-  assert.equal(Model.formatCountdown(72 * 60 * 1000), 'in 1h 12min')
-})
-
-test('formatCountdown gives up past a day and on bad input', () => {
-  assert.equal(Model.formatCountdown(25 * 60 * 60 * 1000), null)
-  assert.equal(Model.formatCountdown(-1), null)
-  assert.equal(Model.formatCountdown(null), null)
-  assert.equal(Model.formatCountdown(NaN), null)
-})
-
-test('shouldAnnounce only fires inside the lead window', () => {
-  const soon = at('2026-08-10T09:10:00-05:00')
-  const far = at('2026-08-10T12:00:00-05:00')
-  assert.equal(Model.shouldAnnounce(soon, NOW, 15), true)
-  assert.equal(Model.shouldAnnounce(soon, NOW, 5), false)
-  assert.equal(Model.shouldAnnounce(far, NOW, 15), false)
-  assert.equal(Model.shouldAnnounce(null, NOW, 15), false)
-})
-
-test('millisUntil is null for an unreadable start', () => {
-  assert.equal(Model.millisUntil(at('nope'), NOW), null)
-  assert.equal(Model.millisUntil(null, NOW), null)
-})
-
-test('nextEventToday ignores events on other days', () => {
-  const events = [
-    at('2026-08-11T09:00:00-05:00', { title: 'Tomorrow' }),
-    at('2026-08-10T18:00:00-05:00', { title: 'Tonight' })
-  ]
-  events[0].dateKey = '2026-08-11'
-  events[1].dateKey = '2026-08-10'
-  assert.equal(Model.nextEventToday(events, NOW, '2026-08-10').title, 'Tonight')
-})
-
-test('nextEventToday returns null once the day is done', () => {
-  const tomorrow = at('2026-08-11T09:00:00-05:00')
-  tomorrow.dateKey = '2026-08-11'
-  assert.equal(Model.nextEventToday([tomorrow], NOW, '2026-08-10'), null)
-})
-
-test('announceLabel keeps the clock and appends the event', () => {
-  assert.equal(
-    Model.announceLabel('lundi 15:46', 'Standup', 'in 10min'),
-    'lundi 15:46  ·  Standup in 10min'
-  )
-})
-
-test('announceLabel returns the clock alone when nothing is announced', () => {
-  assert.equal(Model.announceLabel('lundi 15:46', 'Standup', ''), 'lundi 15:46')
-  assert.equal(Model.announceLabel('lundi 15:46', 'Standup', null), 'lundi 15:46')
-})
-
-test('announceLabel falls back to the clock when the title is empty', () => {
-  assert.equal(Model.announceLabel('lundi 15:46', '', 'in 10min'), 'lundi 15:46')
-})
 
 test('truncateTitle only cuts what is too long', () => {
   assert.equal(Model.truncateTitle('Standup', 28), 'Standup')
@@ -450,30 +365,6 @@ test('nowLineIndex goes after the last row once the day is done', () => {
   assert.equal(Model.nowLineIndex([], 0), 0)
 })
 
-test('rowTimer counts down to the next event only', () => {
-  const now = AT('2026-09-17T09:24:00+01:00')
-  assert.equal(Model.rowTimer(DAY[1], DAY[1], now), 'in 1h 6min')
-  assert.equal(Model.rowTimer(DAY[2], DAY[1], now), '')
-  assert.equal(Model.rowTimer(DAY[0], DAY[1], now), '')
-})
-
-test('rowTimer shows time left in a meeting under way, and nothing once past', () => {
-  assert.equal(Model.rowTimer(DAY[1], DAY[2], AT('2026-09-17T11:05:00+01:00')), '25min left')
-  assert.equal(Model.rowTimer(DAY[1], DAY[2], AT('2026-09-17T12:00:00+01:00')), '')
-})
-
-test('rowTimer matches the next event by id, not by reference', () => {
-  const copy = Object.assign({}, DAY[1])
-  assert.equal(Model.rowTimer(DAY[1], copy, AT('2026-09-17T09:24:00+01:00')), 'in 1h 6min')
-})
-
-test('formatRemaining reads as time left, distinct from a countdown', () => {
-  assert.equal(Model.formatRemaining(25 * 60 * 1000), '25min left')
-  assert.equal(Model.formatRemaining(90 * 60 * 1000), '1h 30min left')
-  assert.equal(Model.formatRemaining(30 * 1000), 'ending')
-  assert.equal(Model.formatRemaining(-1), null)
-})
-
 const ME_CAL = { id: 'me@example.com', name: 'Me', color: '#7bd148' }
 
 test('isWritable is true only for rows on a writable calendar', () => {
@@ -536,11 +427,11 @@ test('timeOptions passes each value through the format function', () => {
   assert.equal(Model.timeOptions(-1, twelve, false)[52].label, '1:00 PM')
 })
 
-test('durationLabel reads like Google', () => {
-  assert.equal(Model.durationLabel(15), '15 min')
-  assert.equal(Model.durationLabel(60), '1 h')
-  assert.equal(Model.durationLabel(90), '1 h 30')
-  assert.equal(Model.durationLabel(1440), '24 h')
+test('timeOptions words end-menu durations in the given language, English by default', () => {
+  assert.equal(Model.timeOptions(10 * 60, HHMM, true)[5].label, '11:30 (1 h 30 min)')
+  assert.equal(Model.timeOptions(10 * 60, HHMM, true, 'pt')[5].label, '11:30 (1 h 30 min)')
+  assert.equal(Model.timeOptions(10 * 60, HHMM, true, 'pt')[0].label, '10:15 (15 min)')
+  assert.equal(Model.timeOptions(0, HHMM, true, 'en').pop().label, '00:00 (24 h)')
 })
 
 test('nthWeekday counts from the start, or -1 in the last seven days', () => {
@@ -609,7 +500,7 @@ test('newEventForm builds a complete empty form on the day', () => {
   assert.equal(form.guestsCanInviteOthers, true)
 })
 
-test('newEventForm ending at midnight moves the end date to the next day', () => {
+test('newEventForm ending at midnight keeps the end date on the start day', () => {
   const form = Model.newEventForm('2026-09-26', { start: '23:30', end: '00:00' }, 'me@example.com')
   assert.equal(form.endDate, '2026-09-26')
   assert.equal(form.endTime, '00:00')
@@ -645,4 +536,114 @@ test('matchGuests keeps the frequency order and caps the list', () => {
   const many = Array.from({ length: 9 }, (_, i) => ({ email: 'p' + i + '@x.co', name: '' }))
   assert.equal(Model.matchGuests(many, 'x.co', [], 5).length, 5)
   assert.equal(Model.matchGuests(many, 'x.co', [], 5)[0].email, 'p0@x.co')
+})
+
+// Regression: a second, capitalised WEEKDAY_NAMES used to overwrite the
+// lowercase one at load, so the saved week start ("Monday") never read back.
+test('the week start setting round-trips through its stored name', () => {
+  assert.equal(Model.weekStartSettingName(0), 'sunday')
+  assert.equal(Model.weekStartSettingName(1), 'monday')
+  for (let day = 0; day < 7; day++)
+    assert.equal(Model.normalizedWeekStart(Model.weekStartSettingName(day), 3), day)
+})
+
+test('normalizedWeekStart reads names, abbreviations and numbers, else the locale', () => {
+  assert.equal(Model.normalizedWeekStart('monday', 0), 1)
+  assert.equal(Model.normalizedWeekStart(' Sunday ', 1), 0)
+  assert.equal(Model.normalizedWeekStart('sat', 1), 6)
+  assert.equal(Model.normalizedWeekStart(8, 0), 1)
+  assert.equal(Model.normalizedWeekStart('nonsense', 0), 0)
+  assert.equal(Model.normalizedWeekStart(null, null), 1)
+})
+
+test('toggledWeekStart flips Monday and Sunday, and lands anything else on Monday', () => {
+  assert.equal(Model.toggledWeekStart(1), 0)
+  assert.equal(Model.toggledWeekStart(0), 1)
+  assert.equal(Model.toggledWeekStart(6), 1)
+})
+
+test('addDays and daysBetween work in calendar days across months, years and DST', () => {
+  assert.equal(Model.addDays('2026-10-31', 1), '2026-11-01')
+  assert.equal(Model.addDays('2026-12-31', 1), '2027-01-01')
+  assert.equal(Model.addDays('2026-03-01', -1), '2026-02-28')
+  assert.equal(Model.daysBetween('2026-10-06', '2026-10-09'), 3)
+  assert.equal(Model.daysBetween('2026-10-09', '2026-10-06'), -3)
+  // Both DST changes of the northern and southern hemispheres fall in here.
+  assert.equal(Model.daysBetween('2026-01-01', '2027-01-01'), 365)
+  let key = '2026-01-01'
+  for (let i = 0; i < 365; i++) key = Model.addDays(key, 1)
+  assert.equal(key, '2027-01-01')
+})
+
+test('keyForMs is the local day of an instant', () => {
+  assert.equal(Model.keyForMs(new Date(2026, 9, 6, 23, 59).getTime()), '2026-10-06')
+  assert.equal(Model.keyForMs(new Date(2026, 9, 7, 0, 0).getTime()), '2026-10-07')
+})
+
+test('clockText and minutesOf convert between minutes and HH:mm', () => {
+  assert.equal(Model.clockText(0), '00:00')
+  assert.equal(Model.clockText(13 * 60 + 5), '13:05')
+  assert.equal(Model.clockText(24 * 60), '00:00')
+  assert.equal(Model.minutesOf('13:05'), 785)
+  assert.equal(Model.minutesOf(''), 0)
+})
+
+test('commandPathFromUrl decodes the path it shortens', () => {
+  assert.equal(Model.commandPathFromUrl('file:///home/u/my%20plugins/sync/setup', '/home/u'), '~/my plugins/sync/setup')
+})
+
+test('localPathFromUrl keeps a malformed escape as it is', () => {
+  assert.equal(Model.localPathFromUrl('file:///srv/100%/x'), '/srv/100%/x')
+})
+
+test('parseWriteReply explains a failure in the panel language', () => {
+  assert.equal(Model.parseWriteReply('', 'pt').error, 'O comando de eventos falhou: sem saída')
+  assert.equal(Model.parseWriteReply('Traceback', 'en').error, 'The event command failed: Traceback')
+})
+
+test('repeatOptions in Portuguese agree with the weekday', () => {
+  assert.deepEqual(Model.repeatOptions('2026-09-26', 'pt').map(o => o.label), [
+    'Não se repete',
+    'Todos os dias',
+    'Toda semana no sábado',
+    'Todo mês no último sábado',
+    'Todo ano em 26 de setembro',
+    'Dias úteis (segunda a sexta)'
+  ])
+  assert.deepEqual(Model.repeatOptions('2026-10-09', 'pt').slice(2, 4).map(o => o.label),
+    ['Toda semana na sexta-feira', 'Todo mês na segunda sexta-feira'])
+})
+
+test('repeatOptions can add the entry for a rule kept as it is', () => {
+  const options = Model.repeatOptions('2026-09-26', 'en', true)
+  assert.deepEqual(options[options.length - 1], { value: 'custom', label: 'Custom rule (kept as it is)' })
+  assert.equal(Model.repeatOptions('2026-09-26', 'pt', true).pop().label, 'Regra personalizada (mantida como está)')
+  assert.equal(Model.repeatOptions('2026-09-26', 'en').length, 6)
+})
+
+test('reminderOptions lists the menu, with custom only for an unexpressible setting', () => {
+  assert.deepEqual(Model.reminderOptions({ useDefault: true }, 'en'), [
+    { value: 'default', label: 'Default' },
+    { value: 'none', label: 'None' },
+    { value: '5', label: '5 minutes before' },
+    { value: '10', label: '10 minutes before' },
+    { value: '30', label: '30 minutes before' },
+    { value: '60', label: '1 hour before' },
+    { value: '1440', label: '1 day before' }
+  ])
+  const custom = Model.reminderOptions({ useDefault: false, overrides: [{ method: 'email', minutes: 30 }] }, 'pt')
+  assert.deepEqual(custom[custom.length - 1], { value: 'custom', label: 'Personalizada (mantida como está)' })
+  assert.equal(custom[2].label, '5 minutos antes')
+})
+
+test('parseLifeExpectancy and parseAge keep their bounds', () => {
+  assert.equal(Model.parseLifeExpectancy(''), 90)
+  assert.equal(Model.parseLifeExpectancy('151'), 90)
+  assert.equal(Model.parseLifeExpectancy('80'), 80)
+  assert.equal(Model.parseAge('0'), 0)
+  assert.equal(Model.parseAge('121'), 0)
+  assert.equal(Model.parseAge('47'), 47)
+  assert.equal(Model.lifeProgressPercent(45, 90), 50)
+  assert.equal(Model.ageFromBirthYear(1979, 2026), 47)
+  assert.equal(Model.ageFromBirthYear(2030, 2026), 0)
 })

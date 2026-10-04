@@ -33,15 +33,24 @@ OPTIONAL_EVENT_FIELDS = (
     "eventUrl",
     "eventType",
     "responseStatus",
+    "description",
+    "reminders",
 )
+_OPTIONAL_STRING_FIELDS = tuple(f for f in OPTIONAL_EVENT_FIELDS if f != "reminders")
 
 _DATE_KEY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 # https only. Meeting links arrive from whoever sent the invitation, so the
-# widget must never be handed a scheme it would be unwise to launch.
-# Kept in step with normalize._https_only and Model.safeUrl.
+# widget must never be handed a scheme it would be unwise to launch. Must
+# match Model.safeUrl exactly: when the widget is stricter than the sync, a
+# URL is written, then silently refused, and there is no button and no error.
 _HTTPS_URL = re.compile(r"^https://[^\s\"'<>]+$")
+
+
+def is_https_url(text):
+    """True when `text` is a URL the widget will agree to launch."""
+    return isinstance(text, str) and bool(_HTTPS_URL.match(text))
 
 
 def build_document(events, synced_at, source, writable_calendars=None, guest_suggestions=None):
@@ -152,13 +161,23 @@ def _validate_event(index, event):
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string")
 
-    for field in OPTIONAL_EVENT_FIELDS:
+    for field in _OPTIONAL_STRING_FIELDS:
         if field in event and not isinstance(event[field], str):
             problems.append(f"{where}.{field} must be a string when present")
 
     for field in ("meetingUrl", "eventUrl"):
         value = event.get(field)
-        if isinstance(value, str) and value and not _HTTPS_URL.match(value):
+        if isinstance(value, str) and value and not is_https_url(value):
             problems.append(f"{where}.{field} must be an https URL")
 
+    if "reminders" in event and not _is_minutes_list(event["reminders"]):
+        problems.append(f"{where}.reminders must be a list of non-negative integers when present")
+
     return problems
+
+
+def _is_minutes_list(value):
+    # bool is an int subclass, and true is not a number of minutes.
+    return isinstance(value, list) and all(
+        isinstance(m, int) and not isinstance(m, bool) and m >= 0 for m in value
+    )

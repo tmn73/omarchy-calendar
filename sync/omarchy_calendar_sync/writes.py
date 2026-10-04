@@ -72,5 +72,5 @@ def splice(doc, calendar, event_id, resource, tz):
     ]
     if resource is not None:
         kept.extend(normalize.normalize_event(resource, calendar, tz))
-    kept.sort(key=lambda row: (row["dateKey"], row["start"], row["title"]))
+    kept.sort(key=normalize.row_order)
     return {**doc, "events": kept}

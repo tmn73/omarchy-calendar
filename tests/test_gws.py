@@ -1,8 +1,11 @@
 import json
 import unittest
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from omarchy_calendar_sync import gws
+from omarchy_calendar_sync import gws, normalize
+
+BOGOTA = ZoneInfo("America/Bogota")
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -85,10 +88,25 @@ class TestCalendars(unittest.TestCase):
         self.assertEqual(
             calendars,
             [
-                {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True, "writable": False},
-                {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False, "writable": False},
+                {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True, "writable": False,
+                 "defaultReminders": [{"method": "popup", "minutes": 10}, {"method": "email", "minutes": 1440}]},
+                {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False, "writable": False,
+                 "defaultReminders": []},
             ],
         )
+
+    def test_events_following_the_defaults_get_the_calendars_popup_minutes(self):
+        client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, fixture("google-calendars.json"), "")}))
+        personal, moon = client.calendars()
+        event = json.loads(fixture("google-events.json"))["items"][0]
+        event["reminders"] = {"useDefault": True}
+        self.assertEqual(normalize.normalize_event(event, personal, BOGOTA)[0]["reminders"], [10])
+        self.assertEqual(normalize.normalize_event(event, moon, BOGOTA)[0]["reminders"], [])
+
+        event["reminders"] = {"useDefault": False, "overrides": [
+            {"method": "popup", "minutes": 30}, {"method": "email", "minutes": 60}, {"method": "popup", "minutes": 5},
+        ]}
+        self.assertEqual(normalize.normalize_event(event, personal, BOGOTA)[0]["reminders"], [5, 30])
 
     def test_missing_color_falls_back(self):
         body = json.dumps({"items": [{"id": "x", "summary": "No Color"}]})
@@ -213,10 +231,6 @@ class TestErrors(unittest.TestCase):
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"events": (0, body, "")}))
         with self.assertRaises(gws.GwsApiError):
             client.events("a", "MIN", "MAX")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestConfigurableBinary(unittest.TestCase):
@@ -378,3 +392,7 @@ class TestForbiddenReasons(unittest.TestCase):
         with self.assertRaises(gws.GwsApiError) as caught:
             client.create("me@example.com", {})
         self.assertNotIsInstance(caught.exception, gws.GwsAuthError)
+
+
+if __name__ == "__main__":
+    unittest.main()

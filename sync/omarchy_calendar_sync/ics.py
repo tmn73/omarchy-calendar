@@ -10,23 +10,29 @@ change can take a while to show up.
 Any other https iCal feed (Nextcloud, Outlook, Fastmail, a webcal:// link)
 works the same way.
 
-Like eds, this emits Google Calendar event resources rather than contract
-rows, so normalization, deduplication and validation are shared.
+Like eds, this emits Google event resources (see resources.py) rather than
+contract rows.
 
 The icalendar imports are deliberately lazy, so the module stays importable
 on a machine without python-icalendar and python-recurring-ical-events.
 """
 
+import base64
 import hashlib
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 
-from .eds import build_event
 from .errors import SyncError
+from .localzone import resolve_local_timezone
+from .resources import build_event
 
 FETCH_TIMEOUT = 30
-FALLBACK_COLOR = "#4285f4"
+# A feed carries no colour of its own, so each one takes the next of
+# Google's calendar colours, keeping two feeds apart on the grid.
+FEED_COLORS = ("#4285f4", "#f6bf26", "#33b679", "#e67c73", "#8e24aa", "#f4511e", "#039be5", "#7986cb")
 USER_AGENT = "omarchy-calendar-sync"
 
 
@@ -94,6 +100,36 @@ def url_problem(value):
             return ("that is the public address, which only works for a "
                     "calendar shared publicly; " + SECRET_HINT)
     return ""
+
+
+_GOOGLE_HOSTS = ("calendar.google.com", "www.google.com")
+_GOOGLE_FEED_PATH = re.compile(r"^/calendar/ical/([^/]+)/(?:private-[^/]+|public)/basic\.ics$")
+_GOOGLE_UID_SUFFIX = "@google.com"
+
+
+def google_calendar_id(url):
+    """The Google calendar id a feed URL belongs to, or blank for other feeds."""
+    parts = urllib.parse.urlsplit(feed_url(url))
+    match = _GOOGLE_FEED_PATH.match(parts.path)
+    if parts.hostname not in _GOOGLE_HOSTS or not match:
+        return ""
+    return urllib.parse.unquote(match.group(1))
+
+
+def google_event_url(uid, calendar_id):
+    """Google Calendar's page for an event, or blank when it cannot be built.
+
+    The feed carries no link, but Google's own link is the event id and the
+    calendar id, space separated, in unpadded base64url. The id is the UID
+    minus "@google.com"; an event imported from elsewhere keeps a foreign UID
+    and an id the feed never reveals. A recurring event's UID names the
+    series, so every occurrence opens the series.
+    """
+    if not calendar_id or not uid.endswith(_GOOGLE_UID_SUFFIX):
+        return ""
+    event_id = uid[: -len(_GOOGLE_UID_SUFFIX)]
+    eid = base64.urlsafe_b64encode(("%s %s" % (event_id, calendar_id)).encode())
+    return "https://calendar.google.com/calendar/event?eid=" + eid.decode().rstrip("=")
 
 
 def parse_feeds(raw):
@@ -165,8 +201,33 @@ def _own_partstat(component, identity):
     return ""
 
 
-def occurrence_to_event(component, local_tz, identity=""):
-    """One expanded VEVENT occurrence as a Google event resource."""
+def _popup_reminders(component):
+    """Minutes before the start of the VALARMs that show or sound something.
+
+    Alarms tied to the end or to an absolute time are left out: the contract
+    counts back from the start. EMAIL alarms are not the widget's to raise.
+    """
+    minutes = set()
+    for alarm in component.walk("VALARM"):
+        if str(alarm.get("ACTION") or "").upper() not in ("DISPLAY", "AUDIO"):
+            continue
+        # getattr: a malformed TRIGGER must cost one alarm, not the whole sync.
+        trigger = alarm.get("TRIGGER")
+        related = getattr(trigger, "params", {}).get("RELATED", "START")
+        if str(related).upper() != "START":
+            continue
+        offset = getattr(trigger, "dt", None)
+        if isinstance(offset, timedelta) and offset <= timedelta(0):
+            minutes.add(int(-offset.total_seconds()) // 60)
+    return sorted(minutes)
+
+
+def occurrence_to_event(component, local_tz, identity="", calendar_id=""):
+    """One expanded VEVENT occurrence as a Google event resource.
+
+    `calendar_id` is the Google calendar the feed belongs to, blank for a
+    feed from anywhere else.
+    """
     start = component.get("DTSTART")
     if start is None:
         return None
@@ -188,18 +249,20 @@ def occurrence_to_event(component, local_tz, identity=""):
     if start_node is None:
         return None
 
-    status = _text(component, "STATUS").upper()
-
+    uid = _text(component, "UID")
+    cancelled = _text(component, "STATUS").upper() == "CANCELLED"
     return build_event(
-        uid=_text(component, "UID"),
+        uid=uid,
         start_node=start_node,
         end_node=end_node,
         summary=_text(component, "SUMMARY"),
         location=_text(component, "LOCATION"),
-        status="cancelled" if status == "CANCELLED" else "",
+        description=_text(component, "DESCRIPTION"),
+        status="cancelled" if cancelled else "",
         conference_url=_text(component, "X-GOOGLE-CONFERENCE"),
         partstat=_own_partstat(component, identity),
-        recurrence_key=start_node.get("dateTime") or start_node.get("date"),
+        reminders=_popup_reminders(component),
+        html_link=google_event_url(uid, calendar_id),
     )
 
 
@@ -219,15 +282,9 @@ class Ics:
         self._feeds = parse_feeds(feeds)
         self._identity = identity
         self._fetch = fetch or _http_get
-        self._local_tz = local_tz
+        self._local_tz = local_tz if local_tz is not None else resolve_local_timezone()
+        # Feed id -> (parsed calendar, Google calendar id or blank).
         self._parsed = {}
-
-    def _tz(self):
-        if self._local_tz is None:
-            from .cli import resolve_local_timezone
-
-            self._local_tz = resolve_local_timezone()
-        return self._local_tz
 
     def version(self):
         icalendar, _rie = _load_libs()
@@ -249,7 +306,7 @@ class Ics:
         icalendar, _rie = _load_libs()
         found = []
         failures = []
-        for feed in self._feeds:
+        for position, feed in enumerate(self._feeds):
             url = feed["url"]
             try:
                 body = self._fetch(url)
@@ -263,7 +320,7 @@ class Ics:
                 continue
 
             ident = feed_id(url)
-            self._parsed[ident] = calendar
+            self._parsed[ident] = (calendar, google_calendar_id(url))
             found.append(
                 {
                     "id": ident,
@@ -272,7 +329,7 @@ class Ics:
                     or redact(url),
                     "color": feed["color"]
                     or _text(calendar, "X-APPLE-CALENDAR-COLOR")
-                    or FALLBACK_COLOR,
+                    or FEED_COLORS[position % len(FEED_COLORS)],
                 }
             )
 
@@ -283,9 +340,9 @@ class Ics:
 
     def events(self, calendar_id, time_min, time_max):
         _icalendar, rie = _load_libs()
-        calendar = self._parsed.get(calendar_id)
-        if calendar is None:
+        if calendar_id not in self._parsed:
             raise IcsError("calendar %s was never fetched" % calendar_id)
+        calendar, google_id = self._parsed[calendar_id]
 
         start = datetime.fromisoformat(time_min)
         end = datetime.fromisoformat(time_max)
@@ -294,10 +351,9 @@ class Ics:
         except Exception as error:
             raise IcsError("cannot expand %s: %s" % (calendar_id, error))
 
-        tz = self._tz()
         events = []
         for component in occurrences:
-            event = occurrence_to_event(component, tz, self._identity)
+            event = occurrence_to_event(component, self._local_tz, self._identity, google_id)
             if event is not None:
                 events.append(event)
         return events

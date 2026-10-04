@@ -2,17 +2,17 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// The calendar's settings page, shown in place of the month grid.
-//
-// Kept in its own file rather than folded into Panel.qml: the panel is
-// already long, and everything here is presentation over values the panel
-// owns. This component reads state and emits intent, it never writes
-// shell.json itself.
+import "Strings.js" as Strings
+
+// The calendar's settings page. It reads state and emits intent; the panel
+// owns every value and is the only writer of shell.json.
 Column {
   id: root
 
   property color foreground: "white"
   property string fontFamily: ""
+  // The resolved display language ("en" | "pt").
+  property string language: "en"
 
   property var calendars: []
   property var hiddenCalendars: []
@@ -21,6 +21,8 @@ Column {
   property bool showWorkingLocation: false
   property bool hideDeclined: false
   property int announceLeadMinutes: 15
+  // The stored setting ("auto" | "en" | "pt"), not the resolved language.
+  property string languageSetting: "auto"
 
   property string syncedAt: ""
   property string sourceLabel: ""
@@ -38,6 +40,7 @@ Column {
   signal workingLocationToggled()
   signal hideDeclinedToggled()
   signal leadMinutesPicked(int minutes)
+  signal languagePicked(string value)
   signal setupCommandCopyRequested()
   signal writeSetupCopyRequested()
 
@@ -47,17 +50,31 @@ Column {
     return Qt.rgba(foreground.r, foreground.g, foreground.b, amount)
   }
 
+  function tr(key, args) {
+    return Strings.tr(root.language, key, args)
+  }
+
   readonly property color muted: quiet(0.68)
   readonly property color faint: quiet(0.50)
 
   spacing: Style.space(10)
 
   component SectionTitle: Text {
+    width: parent ? parent.width : 0
     color: root.faint
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     font.letterSpacing: 1
     font.bold: true
+    font.capitalization: Font.AllUppercase
+  }
+
+  component Note: Text {
+    width: parent ? parent.width : 0
+    color: root.faint
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
   }
 
   // A row that reads as a switch without pulling in a control library the
@@ -75,9 +92,7 @@ Column {
     width: parent ? parent.width : 0
     height: toggleBody.height + Style.space(6)
     radius: Style.cornerRadius
-    color: hovered.hovered
-      ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
-      : "transparent"
+    color: hovered.hovered ? root.quiet(0.06) : "transparent"
 
     HoverHandler { id: hovered }
     TapHandler { onTapped: toggle.activated() }
@@ -102,7 +117,7 @@ Column {
 
       Rectangle {
         anchors.verticalCenter: parent.verticalCenter
-        visible: toggle.swatch != "transparent"
+        visible: toggle.swatch.a > 0
         width: Style.space(4)
         height: width
         radius: width / 2
@@ -135,24 +150,48 @@ Column {
           color: root.faint
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
+          wrapMode: Text.WordWrap
         }
       }
     }
   }
 
+  // One choice of several, as a pill.
+  component Pill: Rectangle {
+    id: pill
+
+    property string label: ""
+    property bool active: false
+
+    signal activated()
+
+    width: pillLabel.width + Style.space(8)
+    height: pillLabel.height + Style.space(4)
+    radius: height / 2
+    color: active ? root.quiet(0.14) : "transparent"
+    border.width: Style.spacing.hairline
+    border.color: active ? root.muted : root.quiet(0.36)
+
+    Text {
+      id: pillLabel
+      anchors.centerIn: parent
+      text: pill.label
+      color: pill.active ? root.foreground : root.faint
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+
+    HoverHandler { cursorShape: Qt.PointingHandCursor }
+    TapHandler { onTapped: pill.activated() }
+  }
+
   // ---- Calendars
 
-  SectionTitle { text: qsTr("CALENDARS") }
+  SectionTitle { text: root.tr("settings.calendars") }
 
-  Text {
-    width: parent.width
+  Note {
     visible: root.calendars.length === 0
-    text: qsTr("Nothing synced yet, so there is nothing to choose from.")
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
+    text: root.tr("settings.noCalendars")
   }
 
   Repeater {
@@ -170,18 +209,18 @@ Column {
 
   // ---- Display
 
-  SectionTitle { text: qsTr("DISPLAY") }
+  SectionTitle { text: root.tr("settings.display") }
 
   ToggleRow {
-    label: qsTr("Week starts on Monday")
-    hint: qsTr("Off starts the week on Sunday")
+    label: root.tr("settings.weekMonday")
+    hint: root.tr("settings.weekMondayHint")
     checked: root.weekStartsMonday
     onActivated: root.weekStartToggled()
   }
 
   ToggleRow {
-    label: qsTr("Working location events")
-    hint: qsTr("Google's work-from-home markers, hidden by default")
+    label: root.tr("settings.workingLocation")
+    hint: root.tr("settings.workingLocationHint")
     checked: root.showWorkingLocation
     onActivated: root.workingLocationToggled()
   }
@@ -189,8 +228,8 @@ Column {
   ToggleRow {
     // Every row on this page reads "checked means shown". Phrasing this one as
     // "Hide ..." inverted that and made the page contradict itself.
-    label: qsTr("Declined invitations")
-    hint: qsTr("Shown struck through when on")
+    label: root.tr("settings.declined")
+    hint: root.tr("settings.declinedHint")
     checked: !root.hideDeclined
     onActivated: root.hideDeclinedToggled()
   }
@@ -198,66 +237,61 @@ Column {
   // The panel cannot turn writing on by itself: it needs a Google sign-in
   // in a terminal. So the row shows the state and hands over the command.
   ToggleRow {
-    label: qsTr("Create and edit events")
-    hint: root.canWrite
-      ? qsTr("On")
-      : root.writeSetupCopied
-        ? qsTr("Copied. Paste it in a terminal")
-        : qsTr("Off. Click to copy the command that turns it on")
+    label: root.tr("settings.write")
+    hint: root.tr(root.canWrite
+      ? "settings.writeOn"
+      : root.writeSetupCopied ? "settings.writeCopied" : "settings.writeOff")
     checked: root.canWrite
     onActivated: if (!root.canWrite) root.writeSetupCopyRequested()
   }
 
   ToggleRow {
-    label: qsTr("Year and life progress")
-    hint: qsTr("The upstream clock's bars, off by default")
+    label: root.tr("settings.progress")
+    hint: root.tr("settings.progressHint")
     checked: root.showYearProgress
     onActivated: root.yearProgressToggled()
   }
 
-  // ---- Bar
+  // ---- Language
 
-  SectionTitle { text: qsTr("BAR LABEL") }
+  SectionTitle { text: root.tr("settings.language") }
 
-  Text {
+  Note { text: root.tr("settings.languageHint") }
+
+  Flow {
     width: parent.width
-    text: qsTr("How early the bar gives up the clock to announce what is next.")
-    color: root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
+    spacing: Style.space(3)
+
+    Repeater {
+      model: Strings.languageOptions(root.language)
+
+      Pill {
+        required property var modelData
+        label: modelData.label
+        active: modelData.value === root.languageSetting
+        onActivated: root.languagePicked(modelData.value)
+      }
+    }
   }
 
-  Row {
+  // ---- Bar
+
+  SectionTitle { text: root.tr("settings.barLabel") }
+
+  Note { text: root.tr("settings.barLabelHint") }
+
+  Flow {
+    width: parent.width
     spacing: Style.space(3)
 
     Repeater {
       model: [0, 5, 15, 30, 60]
 
-      Rectangle {
-        required property var modelData
-
-        readonly property bool active: modelData === root.announceLeadMinutes
-
-        width: leadLabel.width + Style.space(8)
-        height: leadLabel.height + Style.space(4)
-        radius: height / 2
-        color: active
-          ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14)
-          : "transparent"
-        border.width: Style.spacing.hairline
-        border.color: active ? root.muted : root.quiet(0.36)
-
-        Text {
-          id: leadLabel
-          anchors.centerIn: parent
-          text: modelData === 0 ? qsTr("Never") : modelData + qsTr("min")
-          color: active ? root.foreground : root.faint
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-
-        TapHandler { onTapped: root.leadMinutesPicked(modelData) }
+      Pill {
+        required property int modelData
+        label: modelData === 0 ? root.tr("settings.never") : root.tr("settings.minutes", [modelData])
+        active: modelData === root.announceLeadMinutes
+        onActivated: root.leadMinutesPicked(modelData)
       }
     }
   }
@@ -266,41 +300,35 @@ Column {
   //      OAuth browser flow, which belongs to sync/setup and not to a popup
   //      in a status bar. What belongs here is knowing whether it is working.
 
-  SectionTitle { text: qsTr("SYNC") }
+  SectionTitle { text: root.tr("settings.sync") }
 
-  Text {
-    width: parent.width
+  Note {
+    readonly property bool missing: root.syncState === "missing"
+
     // Concatenates sourceLabel, which is whatever wrote the events file.
     textFormat: Text.PlainText
-    color: root.syncState === "missing" && syncHover.hovered ? root.foreground : root.faint
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
-    wrapMode: Text.WordWrap
+    color: missing && syncHover.hovered ? root.foreground : root.faint
+    text: {
+      if (missing)
+        return root.tr(root.setupCommandCopied ? "sync.copied" : "settings.syncMissing", [root.setupCommand])
+      if (root.syncState === "version") return root.tr("settings.syncVersion")
+
+      var lines = [Strings.trn(root.language, "settings.syncEvents", root.eventCount, [root.eventCount, root.sourceLabel])]
+      lines.push(root.syncState === "stale"
+        ? root.tr("settings.syncStale")
+        : root.tr("settings.syncLast", [root.syncedAt]))
+      return lines.join("\n")
+    }
 
     HoverHandler {
       id: syncHover
-      enabled: root.syncState === "missing"
+      enabled: parent.missing
       cursorShape: Qt.PointingHandCursor
     }
 
     TapHandler {
-      enabled: root.syncState === "missing"
+      enabled: parent.missing
       onTapped: root.setupCommandCopyRequested()
-    }
-
-    text: {
-      if (root.syncState === "missing") {
-        return root.setupCommandCopied
-          ? qsTr("Copied. Paste it in a terminal:\n%1\n\nTo skip Google Cloud (read only), add --ics").arg(root.setupCommand)
-          : qsTr("No calendar connected yet. Click to copy, then run:\n%1\n\nTo skip Google Cloud (read only), add --ics").arg(root.setupCommand)
-      }
-      if (root.syncState === "version") return qsTr("The events file was written by a newer version of this plugin.")
-
-      var line = root.eventCount + qsTr(" events from ") + root.sourceLabel
-      if (root.syncState === "stale") {
-        return line + qsTr("\nLast sync looks old. Check: journalctl --user -u omarchy-calendar-sync")
-      }
-      return line + qsTr("\nLast sync ") + root.syncedAt
     }
   }
 }

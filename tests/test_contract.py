@@ -55,10 +55,6 @@ class TestBuildDocument(unittest.TestCase):
         self.assertEqual(doc["version"], contract.CONTRACT_VERSION)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestOptionalFields(unittest.TestCase):
     def load(self):
         return json.loads((FIXTURES / "calendar-events.json").read_text())
@@ -117,3 +113,38 @@ class TestOptionalFields(unittest.TestCase):
         self.assertTrue(any("guestSuggestions[0].email" in p for p in contract.validate(doc)))
         doc["guestSuggestions"] = "ana@example.com"
         self.assertIn("guestSuggestions must be a list", contract.validate(doc))
+
+
+class TestDescriptionAndReminders(unittest.TestCase):
+    def load(self):
+        return json.loads((FIXTURES / "calendar-events.json").read_text())
+
+    def test_valid_values_pass(self):
+        doc = self.load()
+        doc["events"][0]["description"] = "Agenda\n1. Plan"
+        doc["events"][0]["reminders"] = [0, 10, 1440]
+        doc["events"][1]["reminders"] = []
+        self.assertEqual(contract.validate(doc), [])
+
+    def test_description_must_be_a_string(self):
+        doc = self.load()
+        doc["events"][0]["description"] = ["no"]
+        self.assertTrue(any("description" in p for p in contract.validate(doc)))
+
+    def test_reminders_must_be_non_negative_integers(self):
+        for bad in ("10", [10, -1], [1.5], [True], [None], {"minutes": 10}):
+            doc = self.load()
+            doc["events"][0]["reminders"] = bad
+            self.assertTrue(any("reminders" in p for p in contract.validate(doc)), bad)
+
+
+class TestHttpsUrl(unittest.TestCase):
+    def test_matches_the_widgets_rule(self):
+        self.assertTrue(contract.is_https_url("https://meet.google.com/abc-defg-hij"))
+        for bad in ("http://x.example", "https://x.example/a b", "https://x.example/\u00a0",
+                    "https://x.example/\"", "https://x.example/<", "", None, 5):
+            self.assertFalse(contract.is_https_url(bad), bad)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -200,7 +200,7 @@ def resource_to_form(resource, calendar_id, tz, master=None):
         ],
         "meet": solution.get("type") == "hangoutsMeet" or bool(resource.get("hangoutLink")),
         "meetUrl": meet_url,
-        "repeat": repeat_preset(rrule, _start_day(rule_source, tz)),
+        "repeat": repeat_preset(rrule, starts_on(rule_source, tz)),
         "rrule": rrule,
         "reminders": {
             "useDefault": bool(reminders.get("useDefault", True)),
@@ -221,7 +221,7 @@ def onto_series(body, master, tz):
     "All events" edits the series, and the series starts on the master's
     date, not on the occurrence the user clicked.
     """
-    first_day = _start_day(master, tz)
+    first_day = starts_on(master, tz)
     if "date" in body["start"]:
         start = date.fromisoformat(body["start"]["date"])
         end = date.fromisoformat(body["end"]["date"])
@@ -267,6 +267,16 @@ def changed_only(body, current, tz):
     return {key: value for key, value in body.items() if not _same(key, value, current, tz)}
 
 
+def starts_on(resource, tz):
+    """The local date an event (or a series' master) starts on."""
+    node = resource.get("start") or {}
+    if "date" in node:
+        return date.fromisoformat(node["date"])
+    if "dateTime" in node:
+        return _local(node["dateTime"], tz).date()
+    return date.today()
+
+
 def _attendee(guest):
     attendee = {
         "email": str(guest.get("email") or "").strip().lower(),
@@ -276,11 +286,6 @@ def _attendee(guest):
         # Sent back so an edit does not reset the guest's answer.
         attendee["responseStatus"] = guest["responseStatus"]
     return attendee
-
-
-def start_day(resource, tz):
-    """The local date an event (or a series' master) starts on."""
-    return _start_day(resource, tz)
 
 
 def _timed_node(moment, tz):
@@ -336,15 +341,6 @@ def _reminders_key(reminders):
         return (True, ())
     return (False, tuple(sorted((o.get("method"), int(o.get("minutes") or 0))
                                 for o in reminders.get("overrides") or [])))
-
-
-def _start_day(resource, tz):
-    node = resource.get("start") or {}
-    if "date" in node:
-        return date.fromisoformat(node["date"])
-    if "dateTime" in node:
-        return _local(node["dateTime"], tz).date()
-    return date.today()
 
 
 def _local(text, tz):

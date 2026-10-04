@@ -178,10 +178,6 @@ class TestNormalizeAll(unittest.TestCase):
         self.assertEqual(len(rows), 3)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestMeetingUrl(unittest.TestCase):
     def test_hangout_link_is_used(self):
         event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
@@ -213,6 +209,34 @@ class TestMeetingUrl(unittest.TestCase):
             event["hangoutLink"] = hostile
             rows = normalize.normalize_event(event, CAL, BOGOTA)
             self.assertEqual(rows[0]["meetingUrl"], "", hostile)
+
+    def test_link_pasted_into_location_or_description_is_found(self):
+        # An invitation forwarded by email carries the link only as text.
+        cases = (
+            ({"location": "Google Meet: https://meet.google.com/abc-defg-hij"},
+             "https://meet.google.com/abc-defg-hij"),
+            ({"description": "Entrar: https://us02web.zoom.us/j/8812345?pwd=Xy1.\nOutro texto"},
+             "https://us02web.zoom.us/j/8812345?pwd=Xy1"),
+            ({"description": "<a href=\"https://teams.microsoft.com/l/meetup-join/19%3a1\">Join</a>"},
+             "https://teams.microsoft.com/l/meetup-join/19%3a1"),
+        )
+        for fields, expected in cases:
+            event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+            event.update(fields)
+            rows = normalize.normalize_event(event, CAL, BOGOTA)
+            self.assertEqual(rows[0]["meetingUrl"], expected, fields)
+
+    def test_location_wins_over_description_and_unknown_hosts_are_ignored(self):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["location"] = "https://meet.google.com/aaa-bbbb-ccc"
+        event["description"] = "Previous call: https://meet.google.com/xxx-yyyy-zzz"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["meetingUrl"], "https://meet.google.com/aaa-bbbb-ccc")
+
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        event["description"] = "Slides: https://evil.example.com/meet.google.com/abc-defg-hij"
+        rows = normalize.normalize_event(event, CAL, BOGOTA)
+        self.assertEqual(rows[0]["meetingUrl"], "")
 
     def test_missing_link_is_an_empty_string_not_none(self):
         rows = normalize.normalize_event(
@@ -277,3 +301,89 @@ class TestUrlGuardMatchesTheWidget(unittest.TestCase):
         event["hangoutLink"] = "https://meet.google.com/abc-defg-hij?authuser=1"
         rows = normalize.normalize_event(event, CAL, BOGOTA)
         self.assertEqual(rows[0]["meetingUrl"], "https://meet.google.com/abc-defg-hij?authuser=1")
+
+
+class TestDescription(unittest.TestCase):
+    def row(self, description):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00", description=description)
+        return normalize.normalize_event(event, CAL, BOGOTA)[0]
+
+    def test_google_html_becomes_plain_text(self):
+        row = self.row('Agenda:<br><b>1.</b> Budget &amp; plan<br><a href="https://ex.com/doc">doc</a>')
+        self.assertEqual(row["description"], "Agenda:\n1. Budget & plan\ndoc (https://ex.com/doc)")
+
+    def test_missing_description_is_an_empty_string(self):
+        rows = normalize.normalize_event(
+            timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00"), CAL, BOGOTA
+        )
+        self.assertEqual(rows[0]["description"], "")
+
+    def test_the_meeting_link_is_still_found_in_the_raw_html(self):
+        row = self.row('<a href="https://meet.google.com/abc-defg-hij">Join</a>')
+        self.assertEqual(row["meetingUrl"], "https://meet.google.com/abc-defg-hij")
+        self.assertEqual(row["description"], "Join (https://meet.google.com/abc-defg-hij)")
+
+    def test_long_descriptions_are_capped(self):
+        self.assertEqual(len(self.row("x" * 5000)["description"]), 1500)
+
+
+class TestReminders(unittest.TestCase):
+    CAL_WITH_DEFAULTS = {**CAL, "defaultReminders": [
+        {"method": "popup", "minutes": 30}, {"method": "email", "minutes": 10},
+    ]}
+
+    def reminders(self, settings, calendar=CAL_WITH_DEFAULTS):
+        event = timed("2026-08-10T09:00:00-05:00", "2026-08-10T09:15:00-05:00")
+        if settings is not None:
+            event["reminders"] = settings
+        return normalize.normalize_event(event, calendar, BOGOTA)[0]["reminders"]
+
+    def test_absent_settings_mean_no_reminders(self):
+        self.assertEqual(self.reminders(None), [])
+
+    def test_use_default_takes_the_calendars_popup_defaults(self):
+        self.assertEqual(self.reminders({"useDefault": True}), [30])
+
+    def test_use_default_on_a_calendar_without_defaults_is_empty(self):
+        self.assertEqual(self.reminders({"useDefault": True}, CAL), [])
+
+    def test_overrides_are_popup_only_sorted_and_unique(self):
+        settings = {"useDefault": False, "overrides": [
+            {"method": "popup", "minutes": 60},
+            {"method": "email", "minutes": 5},
+            {"method": "popup", "minutes": 0},
+            {"method": "popup", "minutes": 60},
+        ]}
+        self.assertEqual(self.reminders(settings), [0, 60])
+
+    def test_nonsense_minutes_are_dropped(self):
+        settings = {"useDefault": False, "overrides": [
+            {"method": "popup", "minutes": -5},
+            {"method": "popup", "minutes": True},
+            {"method": "popup", "minutes": "10"},
+            {"method": "popup"},
+            {"method": "popup", "minutes": 15},
+        ]}
+        self.assertEqual(self.reminders(settings), [15])
+
+    def test_no_overrides_means_none(self):
+        self.assertEqual(self.reminders({"useDefault": False}), [])
+
+
+class TestRowOrder(unittest.TestCase):
+    def test_orders_by_day_then_start_then_title(self):
+        rows = [
+            {"dateKey": "2026-08-11", "start": "a", "title": "x"},
+            {"dateKey": "2026-08-10", "start": "b", "title": "x"},
+            {"dateKey": "2026-08-10", "start": "a", "title": "y"},
+            {"dateKey": "2026-08-10", "start": "a", "title": "x"},
+        ]
+        ordered = sorted(rows, key=normalize.row_order)
+        self.assertEqual([(r["dateKey"], r["start"], r["title"]) for r in ordered], [
+            ("2026-08-10", "a", "x"), ("2026-08-10", "a", "y"),
+            ("2026-08-10", "b", "x"), ("2026-08-11", "a", "x"),
+        ])
+
+
+if __name__ == "__main__":
+    unittest.main()

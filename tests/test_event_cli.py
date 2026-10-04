@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -313,8 +315,11 @@ class TestBackgroundSync(unittest.TestCase):
 
 class TestMain(unittest.TestCase):
     def test_a_missing_or_broken_argument_is_refused(self):
-        self.assertEqual(event_cli.main([]), 1)
-        self.assertEqual(event_cli.main(["{not json"]), 1)
+        for argv in ([], ["{not json"]):
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(event_cli.main(argv), 1)
+            self.assertFalse(json.loads(stdout.getvalue())["ok"])
 
 
 if __name__ == "__main__":
