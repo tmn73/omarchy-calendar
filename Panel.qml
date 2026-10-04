@@ -1195,8 +1195,9 @@ Panel {
                   item: root.selectedItem || ({})
                   whenText: root.whenText(root.selectedItem)
                   nowMs: root.nowMs
-                  editable: root.isEditable(root.selectedItem) && !root.writeBusy
-                  deletable: root.isEditable(root.selectedItem) && !root.writeBusy
+                  editable: root.isEditable(root.selectedItem)
+                  deletable: root.isEditable(root.selectedItem)
+                  busy: root.writeBusy
                   snoozable: root.selectedSnoozable
                   snoozeText: root.snoozeText
                   foreground: root.contentForeground

@@ -98,8 +98,9 @@ EOF
     # in Google's settings, and neither works for a private calendar.
     # The address goes in on stdin, never as an argument: arguments show to
     # every user on the machine through ps, and the address is a password.
+    # No .pyc either: the shell reloads the plugin when its folder changes.
     local problem
-    problem=$(printf '%s' "$line" | PYTHONPATH="$SCRIPT_DIR" python3 -c \
+    problem=$(printf '%s' "$line" | PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" python3 -c \
       'import sys; from omarchy_calendar_sync.ics import url_problem; print(url_problem(sys.stdin.read()))')
     if [ -n "$problem" ]; then
       printf '  Not this one: %s\n' "$problem"

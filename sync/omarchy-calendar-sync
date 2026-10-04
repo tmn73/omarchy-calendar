@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """Executable wrapper so the sync runs without being pip installed."""
 
+import os
 import sys
 from pathlib import Path
+
+# The shell reloads the plugin when any file in its folder changes. A .pyc
+# written next to the sources would close the panel in the middle of a save,
+# so the compiled modules go to the user cache instead.
+sys.pycache_prefix = os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+    "omarchy-calendar",
+    "pycache",
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

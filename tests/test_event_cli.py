@@ -8,7 +8,7 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 from omarchy_calendar_sync import event_cli
-from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound
+from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound, GwsSignInError
 
 BOGOTA = ZoneInfo("America/Bogota")
 ME = {"id": "me@example.com", "name": "Me", "color": "#7bd148"}
@@ -281,6 +281,12 @@ class TestPerform(unittest.TestCase):
         _, reply = self.run_event({"action": "create", "event": form()}, client)
         self.assertEqual(reply["error"], event_cli.EXPIRED)
 
+    def test_a_sign_in_problem_shows_its_own_message(self):
+        message = "gws did not hand over the sign-in. Update gws, then try again."
+        client = FakeClient(raises=GwsSignInError(message))
+        _, reply = self.run_event({"action": "create", "event": form()}, client)
+        self.assertEqual(reply["error"], message)
+
     def test_an_event_that_is_gone_still_starts_the_sync(self):
         client = FakeClient(raises=GwsNotFound("410: Resource has been deleted"))
         code, reply = self.run_event({"action": "delete", "calendarId": ME["id"], "eventId": "ev1"}, client)
@@ -317,7 +323,7 @@ class TestMain(unittest.TestCase):
     def run_main(self, stdin_text):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
-            code = event_cli.main(stdin=io.StringIO(stdin_text))
+            code = event_cli.main(argv=[], stdin=io.StringIO(stdin_text))
         return code, json.loads(stdout.getvalue())
 
     def test_a_missing_or_broken_request_is_refused(self):
@@ -325,6 +331,19 @@ class TestMain(unittest.TestCase):
             code, reply = self.run_main(text)
             self.assertEqual(code, 1)
             self.assertFalse(reply["ok"])
+
+    def test_a_request_in_an_argument_means_an_older_panel(self):
+        # A panel loaded before an update still passes the request as an
+        # argument and keeps stdin open. Reading stdin would wait forever, and
+        # the panel would ignore every click until its timeout.
+        class NeverRead:
+            def read(self):
+                raise AssertionError("stdin must not be read")
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = event_cli.main(argv=['{"action": "create"}'], stdin=NeverRead())
+        self.assertEqual((code, json.loads(stdout.getvalue())["error"]), (1, event_cli.STALE_PANEL))
 
     def test_the_request_is_read_from_stdin(self):
         # The request carries the event's description and guests. Read from
