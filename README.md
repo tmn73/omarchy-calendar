@@ -94,23 +94,14 @@ or [Sync without a Google Cloud project](#sync-without-a-google-cloud-project).
 omarchy plugin add https://github.com/tmn73/omarchy-calendar.git --enable
 ```
 
-This widget **replaces** the built-in clock. In `~/.config/omarchy/shell.json`,
-remove the `omarchy.clock` entry from `bar.layout.center` and point
-`bar.centerAnchor` at `tmn73.calendar`:
+This widget **replaces** the built-in clock in-place (`clonedFrom: "omarchy.clock"`). Installing with `--enable` automatically swaps `omarchy.clock` with this widget in your bar layout, preserving your existing formats and position.
+
+In `~/.config/omarchy/shell.json`, point `bar.centerAnchor` at `tmn73.calendar`:
 
 ```json
 {
   "bar": {
-    "centerAnchor": "tmn73.calendar",
-    "layout": {
-      "center": [
-        {
-          "id": "tmn73.calendar",
-          "format": "dddd HH:mm",
-          "eventTimeFormat": "HH:mm"
-        }
-      ]
-    }
+    "centerAnchor": "tmn73.calendar"
   }
 }
 ```

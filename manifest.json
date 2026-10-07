@@ -9,6 +9,9 @@
   "kinds": [
     "bar-widget"
   ],
+  "omarchy": {
+    "clonedFrom": "omarchy.clock"
+  },
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
