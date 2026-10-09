@@ -368,14 +368,23 @@ Panel {
     if (root.birthYear > 0) persistSettings({ birthYear: 0 })
   }
 
+  // wl-copy reads the text on stdin, sent once it starts. As an argument it
+  // would show to every user on the machine through ps, and a meeting link can
+  // carry the meeting's passcode.
+  function copyText(text) {
+    textCopier.text = String(text || "")
+    textCopier.stdinEnabled = true
+    textCopier.running = true
+  }
+
   function copySetupCommand() {
-    setupCommandCopier.running = true
+    copyText(root.setupCommand)
     root.setupCommandCopied = true
     copiedReset.restart()
   }
 
   function copyWriteSetupCommand() {
-    writeSetupCopier.running = true
+    copyText(root.writeSetupCommand)
     root.writeSetupCommandCopied = true
     copiedReset.restart()
   }
@@ -383,8 +392,7 @@ Panel {
   function copyLink(url) {
     var safe = Model.safeUrl(url)
     if (!safe) return
-    linkCopier.command = ["wl-copy", "--", safe]
-    linkCopier.running = true
+    copyText(safe)
     root.showToast(root.tr("toast.linkCopied"))
   }
 
@@ -808,19 +816,15 @@ Panel {
     onFileChanged: reload()
   }
 
-  // Argv arrays rather than shell strings, so there is nothing to quote.
+  // Closing stdin right after the text is the end of input wl-copy reads up to.
   Process {
-    id: setupCommandCopier
-    command: ["wl-copy", "--", root.setupCommand]
-  }
-
-  Process {
-    id: writeSetupCopier
-    command: ["wl-copy", "--", root.writeSetupCommand]
-  }
-
-  Process {
-    id: linkCopier
+    id: textCopier
+    property string text: ""
+    command: ["wl-copy"]
+    onStarted: {
+      write(textCopier.text)
+      textCopier.stdinEnabled = false
+    }
   }
 
   Timer {
