@@ -39,6 +39,12 @@ class TestManifest(unittest.TestCase):
         keys = {item["key"] for item in self.manifest["barWidget"]["schema"]}
         self.assertNotIn("hiddenCalendars", keys)
 
+    def test_manifest_declares_clock_replacement(self):
+        self.assertEqual(
+            self.manifest.get("omarchy", {}).get("clonedFrom"),
+            "omarchy.clock",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
