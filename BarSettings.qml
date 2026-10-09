@@ -19,6 +19,7 @@ Column {
   // "announce" | "keep"
   property string nextDuringEvent: "announce"
   property bool reminders: true
+  property bool reminderDetails: false
 
   // The settings to store, for example { duringEvent: "firstMinutes" }.
   signal picked(var values)
@@ -169,5 +170,15 @@ Column {
     hint: root.tr("settings.remindersHint")
     checked: root.reminders
     onActivated: root.pick("reminders", !root.reminders)
+  }
+
+  ToggleRow {
+    visible: root.reminders
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    label: root.tr("settings.reminderDetails")
+    hint: root.tr("settings.reminderDetailsHint")
+    checked: root.reminderDetails
+    onActivated: root.pick("reminderDetails", !root.reminderDetails)
   }
 }

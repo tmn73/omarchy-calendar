@@ -1066,6 +1066,7 @@ Panel {
                 duringEvent: String(root.setting("duringEvent", "untilEnd"))
                 nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
                 reminders: root.setting("reminders", true) !== false
+                reminderDetails: root.setting("reminderDetails", false) === true
                 syncState: root.syncState
                 setupCommand: root.setupCommand
                 setupCommandCopied: root.setupCommandCopied

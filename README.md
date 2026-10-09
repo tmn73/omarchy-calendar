@@ -65,7 +65,7 @@ time away for an event title would be a downgrade you pay for all day.
 - **Settings in four sections**: Panel, Bar, Calendars and General, one at
   a time, each setting with a line that says what it does
 - **Desktop reminders** from your Google notification times (10 minutes for
-  meetings without one). Clicking one joins the call, also from the
+  meetings without one). Clicking one opens the panel, also from the
   notification history. A shell reload never repeats them. See
   [Reminders](#reminders)
 - **Keyboard first**, see [Keyboard](#keyboard)
@@ -431,7 +431,15 @@ The bar widget sends them, so they work with the panel closed.
   link but no reminder gets one 10 minutes before. All-day events only remind
   when they have their own reminder, counted back from midnight like Google
   does
-- **Clicking one:** joins the call, or opens the event when there is no link
+- **What they say:** "Event in 10 min", the time, and the video service
+  when there is one. Omarchy passes the text of every notification through
+  process arguments, which other users of the computer can read, so by
+  default a reminder names no event and no place
+- **Event names:** the Bar settings can turn them on ("Name the event in
+  reminders"). The reminder then shows the title and the place, and clicking
+  it joins the call or opens the event. Only turn it on when nobody else uses
+  the computer
+- **Clicking one:** opens the panel
 - **Late or repeated:** if the laptop slept through a reminder, it still
   fires on wake, as long as the event has not started. Reminders already sent
   are remembered for the session, so restarting the shell never repeats one
@@ -452,7 +460,7 @@ under it that says what it does.
 | Section | What it holds |
 |---|---|
 | Panel | A preset: Minimal or Standard. Where the agenda sits: beside or under the calendar. A switch for each block: year and life progress, shortcut legend, quick add, next event card, upcoming days |
-| Bar | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How long "Now" stays on during an event, and whether the next event takes over. Desktop reminders. A preview puts your choices in words |
+| Bar | How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How long "Now" stays on during an event, and whether the next event takes over. Desktop reminders, and whether they name the event. A preview puts your choices in words |
 | Calendars | Show or hide each calendar, with its event count. The list comes from your own events, so it needs no configuration. Then working location events (Google's work-from-home markers, hidden by default) and declined invitations (struck through when shown) |
 | General | Language: Automatic follows your locale, or English, or Português. The first day of the week. Whether the panel can create and edit events. The sync state: event count, source and last sync time |
 

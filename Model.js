@@ -1054,25 +1054,31 @@ function capitalized(value) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-function reminderTitle(event, lang) {
+// A reminder names the event only when `details` is true. Omarchy copies
+// the text of every notification into process arguments, which other users
+// of the computer can read, so by default it says "Event" and leaves the
+// location out. The panel shows the rest.
+function reminderTitle(event, lang, details) {
+  if (!details) return Strings.tr(lang, "notify.anEvent")
   var title = text(event.title).trim()
   return truncateTitle(title || Strings.tr(lang, "common.noTitle"), 80)
 }
 
 // "Standup in 10 min", "Standup is starting"; an all-day event is just its
 // title, the day goes in the body.
-function reminderHeadline(event, nowMs, lang) {
-  if (event.allDay) return reminderTitle(event, lang)
+function reminderHeadline(event, nowMs, lang, details) {
+  if (event.allDay) return reminderTitle(event, lang, details)
   var minutes = Math.ceil((timeRange(event).start - nowMs) / MINUTE_MS)
   return minutes >= 1
-    ? Strings.tr(lang, "notify.title", [reminderTitle(event, lang), spanText(minutes, lang)])
-    : Strings.tr(lang, "notify.titleNow", [reminderTitle(event, lang)])
+    ? Strings.tr(lang, "notify.title", [reminderTitle(event, lang, details), spanText(minutes, lang)])
+    : Strings.tr(lang, "notify.titleNow", [reminderTitle(event, lang, details)])
 }
 
 // "13:00–13:45 · Google Meet", "Tomorrow · 09:00–09:30 · Room 4",
 // "Tomorrow · all day". Clock times and weekday names are Qt's, so the
-// caller passes formatTime(ms) and formatWeekday(ms).
-function reminderBody(event, nowMs, lang, formatTime, formatWeekday) {
+// caller passes formatTime(ms) and formatWeekday(ms). Without `details`
+// the location is left out; the name of a known video service stays.
+function reminderBody(event, nowMs, lang, formatTime, formatWeekday, details) {
   if (event.allDay)
     return capitalized(relativeTime(event, nowMs, lang)) + " · " + Strings.tr(lang, "insp.allDay")
 
@@ -1086,7 +1092,7 @@ function reminderBody(event, nowMs, lang, formatTime, formatWeekday) {
   if (range.end > range.start) times += "–" + formatTime(range.end)
   parts.push(times)
 
-  var where = meetingHost(meetingUrlFor(event)) || truncateTitle(text(event.location).trim(), 48)
+  var where = meetingHost(meetingUrlFor(event)) || (details ? truncateTitle(text(event.location).trim(), 48) : "")
   if (where) parts.push(where)
   return parts.join(" · ")
 }

@@ -189,6 +189,7 @@ BarWidget {
     id: reminders
     events: root.visibleEvents
     enabled: root.setting("reminders", true) !== false
+    details: root.setting("reminderDetails", false) === true
     language: root.language
     timeFormat: String(root.setting("eventTimeFormat", "HH:mm") || "HH:mm")
     isLeader: function() { return root.primaryWidget() === root }

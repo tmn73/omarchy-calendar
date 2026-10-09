@@ -28,6 +28,7 @@ Item {
   property string duringEvent: "untilEnd"
   property string nextDuringEvent: "announce"
   property bool reminders: true
+  property bool reminderDetails: false
 
   // Calendars
   property var calendars: []
@@ -231,6 +232,7 @@ Item {
         duringEvent: root.duringEvent
         nextDuringEvent: root.nextDuringEvent
         reminders: root.reminders
+        reminderDetails: root.reminderDetails
         onPicked: function(values) { root.picked(values) }
       }
 

@@ -185,12 +185,18 @@ test('slimReminderEvent keeps what a snoozed reminder needs', () => {
 })
 
 test('reminderHeadline counts down, then says it is starting', () => {
-  assert.equal(Model.reminderHeadline(event(), START - 10 * MIN, 'en'), 'Design review in 10 min')
-  assert.equal(Model.reminderHeadline(event(), START - 9.5 * MIN, 'pt'), 'Design review em 10 min')
-  assert.equal(Model.reminderHeadline(event(), START, 'en'), 'Design review is starting')
-  assert.equal(Model.reminderHeadline(event({ title: '  ' }), START - 90 * MIN, 'pt'), '(Sem título) em 1 h 30 min')
-  assert.equal(Model.reminderHeadline({ id: 'h', allDay: true, start: '2026-10-07', title: 'Holiday' }, START, 'en'), 'Holiday')
-  assert.equal(Model.reminderHeadline(event({ title: 'x'.repeat(100) }), START, 'en').length, 'x'.repeat(80).length + ' is starting'.length)
+  assert.equal(Model.reminderHeadline(event(), START - 10 * MIN, 'en', true), 'Design review in 10 min')
+  assert.equal(Model.reminderHeadline(event(), START - 9.5 * MIN, 'pt', true), 'Design review em 10 min')
+  assert.equal(Model.reminderHeadline(event(), START, 'en', true), 'Design review is starting')
+  assert.equal(Model.reminderHeadline(event({ title: '  ' }), START - 90 * MIN, 'pt', true), '(Sem título) em 1 h 30 min')
+  assert.equal(Model.reminderHeadline({ id: 'h', allDay: true, start: '2026-10-07', title: 'Holiday' }, START, 'en', true), 'Holiday')
+  assert.equal(Model.reminderHeadline(event({ title: 'x'.repeat(100) }), START, 'en', true).length, 'x'.repeat(80).length + ' is starting'.length)
+})
+
+test('reminderHeadline names no event unless details are on', () => {
+  assert.equal(Model.reminderHeadline(event(), START - 10 * MIN, 'en'), 'Event in 10 min')
+  assert.equal(Model.reminderHeadline(event(), START, 'pt'), 'Evento está começando')
+  assert.equal(Model.reminderHeadline({ id: 'h', allDay: true, start: '2026-10-07', title: 'Holiday' }, START, 'en'), 'Event')
 })
 
 const clock = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
@@ -198,11 +204,25 @@ const weekday = (ms) => ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday',
 
 test('reminderBody: times and where, with the day when it is not today', () => {
   const meet = event({ meetingUrl: 'https://meet.google.com/x', location: 'Room 4' })
-  assert.equal(Model.reminderBody(meet, START - 10 * MIN, 'en', clock, weekday), '13:00–13:45 · Google Meet')
-  assert.equal(Model.reminderBody(event({ location: ' Room 4 ' }), START - 10 * MIN, 'en', clock, weekday), '13:00–13:45 · Room 4')
+  assert.equal(Model.reminderBody(meet, START - 10 * MIN, 'en', clock, weekday, true), '13:00–13:45 · Google Meet')
+  assert.equal(Model.reminderBody(event({ location: ' Room 4 ' }), START - 10 * MIN, 'en', clock, weekday, true), '13:00–13:45 · Room 4')
   assert.equal(Model.reminderBody(event({ end: START_ISO }), START - 10 * MIN, 'en', clock, weekday), '13:00')
   assert.equal(Model.reminderBody(event(), localMs(2026, 9, 5, 20, 0), 'pt', clock, weekday), 'Amanhã · 13:00–13:45')
   assert.equal(Model.reminderBody(event(), localMs(2026, 9, 4, 20, 0), 'en', clock, weekday), 'Tuesday · 13:00–13:45')
+})
+
+test('reminderBody leaves the place out unless details are on, and keeps the video service', () => {
+  const meet = event({ meetingUrl: 'https://meet.google.com/x', location: 'Room 4' })
+  assert.equal(Model.reminderBody(meet, START - 10 * MIN, 'en', clock, weekday), '13:00–13:45 · Google Meet')
+  assert.equal(Model.reminderBody(event({ location: 'Dr. Lopez, 12 Main St' }), START - 10 * MIN, 'en', clock, weekday), '13:00–13:45')
+})
+
+test('a default reminder carries no title and no place', () => {
+  const secret = event({ title: 'Job interview at Acme', location: 'Acme HQ, floor 3' })
+  for (const nowMs of [START - 10 * MIN, START, localMs(2026, 9, 5, 20, 0)]) {
+    const sent = Model.reminderHeadline(secret, nowMs, 'en') + ' ' + Model.reminderBody(secret, nowMs, 'en', clock, weekday)
+    assert.ok(!/Acme|interview/.test(sent), sent)
+  }
 })
 
 test('reminderBody: an all-day event is its day', () => {

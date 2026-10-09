@@ -10,9 +10,13 @@ import "Strings.js" as Strings
 // widget rather than the panel because the widget is always loaded.
 //
 // Omarchy's notification cards draw no action buttons, so a reminder is
-// click-only: clicking it (also from the history) opens the meeting or the
-// event page. Snoozing is offered by the panel instead, through snooze() and
-// recentlyFired.
+// click-only: clicking it (also from the history) opens the panel, or the
+// meeting or the event page when `details` is on. Snoozing is offered by the
+// panel instead, through snooze() and recentlyFired.
+//
+// Every notification goes through process arguments, which other users of
+// the computer can read. So by default a reminder carries no title, no place
+// and no link: see Model.reminderTitle.
 //
 // What has been sent is kept in a small JSON file under XDG_RUNTIME_DIR, so a
 // shell reload never repeats a reminder, while a reboot (which clears the
@@ -23,6 +27,8 @@ Scope {
   // Already filtered by the widget (hidden calendars, declined).
   property var events: []
   property bool enabled: true
+  // Name the event, its place and its link in the notification.
+  property bool details: false
   property string language: "en"
   property string timeFormat: "HH:mm"
   // Several bar surfaces (one per monitor) each have a widget, and only one
@@ -67,7 +73,7 @@ Scope {
 
   // A one-off toast that is not a reminder ("No meeting to join").
   function notice(headline) {
-    send(headline, "", "", "low")
+    send(headline, "", null, "low")
   }
 
   // ---- Store
@@ -135,19 +141,20 @@ Scope {
   }
 
   function notify(event, nowMs) {
-    var url = Model.meetingUrlFor(event) || Model.eventUrlFor(event)
+    var url = details ? (Model.meetingUrlFor(event) || Model.eventUrlFor(event)) : ""
     var locale = Qt.locale(Strings.localeName(language))
     var body = Model.reminderBody(event, nowMs, language,
       function(ms) { return Qt.formatDateTime(new Date(ms), timeFormat) },
-      function(ms) { return locale.toString(new Date(ms), "dddd") })
-    send(Model.reminderHeadline(event, nowMs, language), body, url, "normal")
+      function(ms) { return locale.toString(new Date(ms), "dddd") }, details)
+    send(Model.reminderHeadline(event, nowMs, language, details), body,
+      url ? ["xdg-open", url] : ["omarchy-shell", "-q", "tmn73.calendar", "open"], "normal")
   }
 
   // Argv arrays, never a shell string: titles and locations come from other
-  // people's invitations. `--exec` has to be last.
-  function send(title, text, url, urgency) {
+  // people's invitations. `--exec` and its argv `exec` have to be last.
+  function send(title, text, exec, urgency) {
     var primary = [notifier, "-g", glyph, "-u", urgency, Model.notificationArg(title), Model.notificationArg(text)]
-    if (url) primary = primary.concat(["--exec", "xdg-open", url])
+    if (exec) primary = primary.concat(["--exec"], exec)
     var fallback = ["notify-send", "--app-name=" + Strings.tr(language, "notify.app"), "-u", urgency, "--", title, text]
     senderComponent.createObject(root, { command: primary, fallback: fallback, running: true })
   }
