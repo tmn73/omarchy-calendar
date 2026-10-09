@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -16,7 +17,7 @@ Rectangle {
   property string timeFormat: "HH:mm"
   property bool snoozable: false
   property string snoozeText: ""
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -43,7 +44,7 @@ Rectangle {
   visible: item !== null
   implicitHeight: Math.max(lines.implicitHeight, actions.height) + Style.space(12) * 2
   radius: Style.cornerRadius
-  color: Style.selectedFillFor(root.foreground, Color.accent)
+  color: Style.selectedFillFor(root.foreground, Commons.Color.accent)
 
   Column {
     id: lines
@@ -56,7 +57,7 @@ Rectangle {
 
     Text {
       text: root.badge.toUpperCase()
-      color: Color.accent
+      color: Commons.Color.accent
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.letterSpacing: 1
@@ -70,7 +71,7 @@ Rectangle {
       wrapMode: Text.Wrap
       maximumLineCount: 3
       elide: Text.ElideRight
-      color: titleMouse.containsMouse ? Style.hoverStateColor(root.foreground, Color.accent) : root.foreground
+      color: titleMouse.containsMouse ? Style.hoverStateColor(root.foreground, Commons.Color.accent) : root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.title
       font.bold: true

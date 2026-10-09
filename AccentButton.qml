@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // The panel's call to action, in the theme accent: filled for the one thing
@@ -15,14 +16,14 @@ Rectangle {
   property string tooltipText: ""
   property bool filled: true
   property bool large: false
-  property color foreground: Color.foreground
-  property color accent: Color.accent
+  property color foreground: Commons.Color.foreground
+  property color accent: Commons.Color.accent
   property string fontFamily: Style.font.family
 
   signal clicked()
 
   readonly property bool hot: mouse.containsMouse && enabled
-  readonly property color labelColor: filled ? Color.background : accent
+  readonly property color labelColor: filled ? Commons.Color.background : accent
   readonly property int padX: large ? Style.space(16) : (text === "" ? padY : Style.spacing.controlPaddingX)
   readonly property int padY: large ? Style.space(11) : Style.spacing.controlPaddingY
 

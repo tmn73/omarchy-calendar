@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -320,8 +321,8 @@ Column {
   BorderSurface {
     width: parent.width
     height: Math.max(Style.space(56), descriptionField.contentHeight + Style.space(12))
-    color: Style.controlFill(descriptionField.activeFocus, false, root.foreground, Color.accent)
-    borderSpec: Border.controlSpec(descriptionField.activeFocus ? "focus" : "normal", root.foreground, Color.accent)
+    color: Style.controlFill(descriptionField.activeFocus, false, root.foreground, Commons.Color.accent)
+    borderSpec: Border.controlSpec(descriptionField.activeFocus ? "focus" : "normal", root.foreground, Commons.Color.accent)
     radius: Style.cornerRadius
 
     TextEdit {
@@ -331,7 +332,7 @@ Column {
       wrapMode: TextEdit.Wrap
       textFormat: TextEdit.PlainText
       color: root.foreground
-      selectionColor: Style.selectionFillFor(root.foreground, Color.accent)
+      selectionColor: Style.selectionFillFor(root.foreground, Commons.Color.accent)
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
       onTextChanged: if (activeFocus) root.update({ description: text })

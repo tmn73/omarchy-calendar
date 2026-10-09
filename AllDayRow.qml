@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -16,7 +17,7 @@ Rectangle {
   property bool selected: false
   property bool snoozable: false
   property string snoozeText: ""
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -29,8 +30,8 @@ Rectangle {
   implicitHeight: Math.max(lines.implicitHeight, snoozeButton.visible ? snoozeButton.height : 0) + Style.space(7) * 2
   radius: Style.cornerRadius
   color: root.selected
-    ? Style.selectedFillFor(root.foreground, Color.accent)
-    : rowMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+    ? Style.selectedFillFor(root.foreground, Commons.Color.accent)
+    : rowMouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent) : "transparent"
 
   MouseArea {
     id: rowMouse
@@ -63,7 +64,7 @@ Rectangle {
         visible: root.item.done === true
         anchors.centerIn: parent
         text: "󰄬"
-        color: Color.background
+        color: Commons.Color.background
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
@@ -78,13 +79,13 @@ Rectangle {
       radius: Style.cornerRadius
       color: "transparent"
       border.width: Style.spacing.hairline
-      border.color: Color.urgent
+      border.color: Commons.Color.urgent
 
       Text {
         id: badgeLabel
         anchors.centerIn: parent
         text: Strings.tr(root.language, "agenda.deadlineBadge").toUpperCase()
-        color: Color.urgent
+        color: Commons.Color.urgent
         font.family: root.fontFamily
         font.pixelSize: Math.max(1, Style.font.caption - 1)
         font.bold: true

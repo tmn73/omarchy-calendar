@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -11,7 +12,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property var weeks: []
@@ -65,14 +66,14 @@ Column {
           height: Style.space(16)
           radius: Style.cornerRadius
           color: weekStartMouse.containsMouse
-            ? Style.hoverFillFor(root.foreground, Color.accent)
+            ? Style.hoverFillFor(root.foreground, Commons.Color.accent)
             : "transparent"
 
           Text {
             anchors.centerIn: parent
             text: root.tr("grid.week")
             color: weekStartMouse.containsMouse
-              ? Style.hoverStateColor(root.foreground, Color.accent)
+              ? Style.hoverStateColor(root.foreground, Commons.Color.accent)
               : Util.alpha(root.foreground, 0.50)
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -159,9 +160,9 @@ Column {
               // so the two marks never compete.
               color: dayCell.selected
                 ? Util.alpha(root.foreground, 0.10)
-                : dayMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+                : dayMouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent) : "transparent"
               border.width: modelData.today ? Style.spacing.hairline : 0
-              border.color: Style.normalBorderFor(root.foreground, Color.accent)
+              border.color: Style.normalBorderFor(root.foreground, Commons.Color.accent)
 
               Text {
                 id: dayNumber

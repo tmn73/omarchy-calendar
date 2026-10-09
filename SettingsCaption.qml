@@ -1,12 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // The title of a group of settings: small, bold, in capitals, with an
 // optional note at the right (a count, "Custom").
 Item {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string text: ""
   property string note: ""

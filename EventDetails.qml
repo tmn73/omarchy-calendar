@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -22,7 +23,7 @@ Column {
   property bool busy: false
   property bool snoozable: false
   property string snoozeText: ""
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -132,7 +133,7 @@ Column {
     text: root.item.displayTitle || root.tr("common.noTitle")
     wrapMode: TextEdit.Wrap
     color: root.foreground
-    selectionColor: Style.selectionFillFor(root.foreground, Color.accent)
+    selectionColor: Style.selectionFillFor(root.foreground, Commons.Color.accent)
     font.family: root.fontFamily
     font.pixelSize: Math.round(Style.font.heading * 1.25)
     font.bold: true
@@ -161,7 +162,7 @@ Column {
         textFormat: Text.PlainText
         text: Model.relativeTime(root.item, root.nowMs, root.language, true)
         wrapMode: Text.Wrap
-        color: root.soon ? Color.accent : root.muted
+        color: root.soon ? Commons.Color.accent : root.muted
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -242,7 +243,7 @@ Column {
       visible: root.mapsUrl !== ""
       anchors.right: parent.right
       text: root.tr("insp.directions")
-      color: directionsMouse.containsMouse ? Style.hoverStateColor(root.foreground, Color.accent) : Color.accent
+      color: directionsMouse.containsMouse ? Style.hoverStateColor(root.foreground, Commons.Color.accent) : Commons.Color.accent
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
 
@@ -268,7 +269,7 @@ Column {
       text: root.item.description || ""
       wrapMode: TextEdit.Wrap
       color: Util.alpha(root.foreground, 0.85)
-      selectionColor: Style.selectionFillFor(root.foreground, Color.accent)
+      selectionColor: Style.selectionFillFor(root.foreground, Commons.Color.accent)
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
     }

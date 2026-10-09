@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -21,7 +22,7 @@ Rectangle {
   property real nowMs: 0
   property string todayKey: ""
   property string timeFormat: "HH:mm"
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -50,10 +51,10 @@ Rectangle {
   implicitHeight: Math.max(lines.implicitHeight, times.implicitHeight, actions.height) + Style.space(8) * 2
   radius: Style.cornerRadius
   color: root.selected
-    ? Style.selectedFillFor(root.foreground, Color.accent)
+    ? Style.selectedFillFor(root.foreground, Commons.Color.accent)
     : rowMouse.containsMouse
-      ? Style.hoverFillFor(root.foreground, Color.accent)
-      : root.phase === "now" ? Util.alpha(Color.accent, 0.10) : "transparent"
+      ? Style.hoverFillFor(root.foreground, Commons.Color.accent)
+      : root.phase === "now" ? Util.alpha(Commons.Color.accent, 0.10) : "transparent"
 
   MouseArea {
     id: rowMouse
@@ -78,7 +79,7 @@ Rectangle {
 
       Text {
         text: root.clock(root.item.startMs)
-        color: root.phase === "now" && !root.declined ? Color.accent : root.foreground
+        color: root.phase === "now" && !root.declined ? Commons.Color.accent : root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
         font.strikeout: root.declined
@@ -131,7 +132,7 @@ Rectangle {
         width: parent.width
         textFormat: Text.PlainText
         text: root.countdown
-        color: root.soon ? Color.accent : Util.alpha(root.foreground, 0.6)
+        color: root.soon ? Commons.Color.accent : Util.alpha(root.foreground, 0.6)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.bold: root.soon

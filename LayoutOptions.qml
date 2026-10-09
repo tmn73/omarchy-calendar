@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -11,7 +12,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   // Model.layoutFromSettings
@@ -52,7 +53,7 @@ Column {
   Caption {
     text: root.tr("layout.preset")
     note: root.presetName === "" ? root.tr("layout.custom") : ""
-    noteColor: Color.accent
+    noteColor: Commons.Color.accent
   }
 
   ChoiceGroup {

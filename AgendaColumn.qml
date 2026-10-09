@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -11,7 +12,7 @@ import "Strings.js" as Strings
 Item {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property string timeFormat: "HH:mm"
@@ -170,7 +171,7 @@ Item {
         height: emptyText.implicitHeight + Style.space(14) * 2
         radius: Style.cornerRadius
         color: emptyMouse.containsMouse && root.syncState === "missing"
-          ? Style.hoverFillFor(root.foreground, Color.accent)
+          ? Style.hoverFillFor(root.foreground, Commons.Color.accent)
           : "transparent"
         border.width: Style.spacing.hairline
         border.color: Util.alpha(root.foreground, 0.2)

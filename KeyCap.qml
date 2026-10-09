@@ -1,12 +1,13 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // A key of the keyboard, drawn small: its label on a faint rounded square,
 // never narrower than it is tall, so "n" and "?" come out the same size.
 Rectangle {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string text: ""
   property bool highlighted: false

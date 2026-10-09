@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -14,7 +15,7 @@ Column {
   // Model.upcomingDays entries, each with a display `label` added.
   property var days: []
   property string timeFormat: "HH:mm"
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -76,7 +77,7 @@ Column {
           width: day.width
           height: Math.max(rowTitle.implicitHeight, joinButton.visible ? joinButton.height : 0) + Style.space(5) * 2
           radius: Style.cornerRadius
-          color: rowMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+          color: rowMouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent) : "transparent"
 
           MouseArea {
             id: rowMouse
@@ -123,7 +124,7 @@ Column {
             wrapMode: Text.Wrap
             maximumLineCount: 2
             elide: Text.ElideRight
-            color: row.modelData.kind === "deadline" ? Color.urgent : root.foreground
+            color: row.modelData.kind === "deadline" ? Commons.Color.urgent : root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -136,7 +137,7 @@ Column {
             anchors.verticalCenter: parent.verticalCenter
             iconText: "󰕧"
             tooltipText: root.tr("agenda.openHost", [Model.meetingHost(row.meetingUrl) || row.modelData.displayTitle || ""])
-            foreground: Color.accent
+            foreground: Commons.Color.accent
             fontFamily: root.fontFamily
             onClicked: root.joinRequested(row.modelData)
           }

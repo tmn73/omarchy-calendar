@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -25,7 +26,7 @@ Item {
 
   Rectangle {
     anchors.fill: parent
-    color: Qt.rgba(Color.background.r, Color.background.g, Color.background.b, 0.7)
+    color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.7)
     MouseArea { anchors.fill: parent; onClicked: root.canceled() }
   }
 
@@ -33,9 +34,9 @@ Item {
     anchors.centerIn: parent
     width: Math.min(parent.width - Style.space(40), Style.space(360))
     height: box.implicitHeight + Style.space(24)
-    color: Color.popups.background
-    borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-                                          Color.popups.border, Style.normalBorderWidth)
+    color: Commons.Color.popups.background
+    borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+                                          Commons.Color.popups.border, Style.normalBorderWidth)
     radius: Style.cornerRadius
 
     Column {
@@ -50,7 +51,7 @@ Item {
         textFormat: Text.PlainText
         text: root.message
         wrapMode: Text.WordWrap
-        color: Color.popups.text
+        color: Commons.Color.popups.text
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
       }

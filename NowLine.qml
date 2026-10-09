@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // Where now falls among the day's timed rows: a dot, the time, and a rule
 // across the rest. Drawn above the first row still to start, or after the
@@ -20,7 +21,7 @@ Item {
     width: Style.space(6)
     height: width
     radius: width / 2
-    color: Color.accent
+    color: Commons.Color.accent
   }
 
   Text {
@@ -29,7 +30,7 @@ Item {
     anchors.leftMargin: Style.space(6)
     anchors.verticalCenter: parent.verticalCenter
     text: root.timeText
-    color: Color.accent
+    color: Commons.Color.accent
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     font.bold: true
@@ -41,6 +42,6 @@ Item {
     anchors.leftMargin: Style.space(6)
     anchors.verticalCenter: parent.verticalCenter
     height: Math.max(1, Style.space(1.5))
-    color: Color.accent
+    color: Commons.Color.accent
   }
 }

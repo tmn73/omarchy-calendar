@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -12,7 +13,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property bool showYear: false
@@ -114,7 +115,7 @@ Column {
         width: Math.round(parent.width * rail.done)
         height: parent.height
         radius: parent.radius
-        color: Style.selectedStateColor(root.foreground, Color.accent)
+        color: Style.selectedStateColor(root.foreground, Commons.Color.accent)
 
         Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
       }

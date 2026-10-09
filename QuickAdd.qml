@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "QuickAddParser.js" as QuickAddParser
@@ -14,7 +15,7 @@ import "Strings.js" as Strings
 Rectangle {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   // { rows, hint, opensForm } from QuickAddParser.quickAddPreview
@@ -50,11 +51,11 @@ Rectangle {
 
   implicitHeight: content.implicitHeight + Style.space(4) * 2
   radius: Style.cornerRadius
-  color: Style.controlFill(field.activeFocus, false, root.foreground, Color.accent)
+  color: Style.controlFill(field.activeFocus, false, root.foreground, Commons.Color.accent)
   border.width: Style.spacing.hairline
   border.color: field.activeFocus || field.text !== ""
-    ? Color.accent
-    : Style.normalBorderFor(root.foreground, Color.accent)
+    ? Commons.Color.accent
+    : Style.normalBorderFor(root.foreground, Commons.Color.accent)
 
   Column {
     id: content
@@ -73,7 +74,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         text: "󰐕"
-        color: Color.accent
+        color: Commons.Color.accent
         font.family: root.fontFamily
         font.pixelSize: Style.font.icon
       }
@@ -131,7 +132,7 @@ Rectangle {
             x: origin.x
             y: origin.y
             textFormat: Text.StyledText
-            text: QuickAddParser.markedText(field.text, root.understood, root.hexOf(Color.accent))
+            text: QuickAddParser.markedText(field.text, root.understood, root.hexOf(Commons.Color.accent))
             color: root.foreground
             font: field.font
             renderType: field.renderType

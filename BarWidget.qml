@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 import "Strings.js" as Strings
@@ -51,7 +52,7 @@ BarWidget {
   readonly property bool urgent: barState.phase === "live"
   readonly property bool emphasized: barState.phase === "imminent" || urgent
   readonly property string barMeetingUrl: emphasized ? Model.meetingUrlFor(barState.event) : ""
-  readonly property color phaseColor: urgent ? (bar ? bar.urgent : Color.urgent) : Color.accent
+  readonly property color phaseColor: urgent ? (bar ? bar.urgent : Commons.Color.urgent) : Commons.Color.accent
 
   readonly property string clockText: formatted(displayDate)
   readonly property var verticalLines: clockText.split("\n")
@@ -335,7 +336,7 @@ BarWidget {
     property alias text: chipLabel.text
     property string fontFamily: Style.font.family
     property real lineHeight: Style.font.body
-    property color fill: Color.accent
+    property color fill: Commons.Color.accent
     property bool interactive: false
     signal clicked()
 
@@ -349,7 +350,7 @@ BarWidget {
       id: chipLabel
       anchors.centerIn: parent
       textFormat: Text.PlainText
-      color: Color.background
+      color: Commons.Color.background
       font.family: chip.fontFamily
       font.pixelSize: Style.font.caption
       font.weight: Font.Bold

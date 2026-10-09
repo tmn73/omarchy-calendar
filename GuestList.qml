@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -14,7 +15,7 @@ Column {
   property var guests: []
   // People from your events, most frequent first (the sync's guestSuggestions).
   property var suggestions: []
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 

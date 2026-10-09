@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // Shows that a Flickable holds more than it shows: a fade over its bottom
 // edge while there is more below, and a thin thumb on its right edge while
@@ -9,9 +10,9 @@ Item {
   id: root
 
   property Flickable flickable: null
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   // What the fade turns into: the surface behind the Flickable.
-  property color background: Color.popups.background
+  property color background: Commons.Color.popups.background
 
   readonly property bool scrollable: flickable !== null && flickable.contentHeight > flickable.height + 1
   readonly property bool moreBelow: scrollable

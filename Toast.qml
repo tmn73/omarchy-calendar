@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -12,7 +13,7 @@ Rectangle {
 
   property string text: ""
   property bool error: false
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
 
@@ -21,16 +22,16 @@ Rectangle {
   visible: text !== ""
   implicitHeight: Math.max(label.implicitHeight, dismiss.height) + Style.space(8) * 2
   radius: Style.cornerRadius
-  color: Color.popups.background
+  color: Commons.Color.popups.background
   border.width: Style.spacing.hairline
-  border.color: root.error ? Color.urgent : Util.alpha(root.foreground, 0.25)
+  border.color: root.error ? Commons.Color.urgent : Util.alpha(root.foreground, 0.25)
 
   // Raised over the list it covers: the popup background alone would read
   // as a gap in the agenda rather than a message on top of it.
   Rectangle {
     anchors.fill: parent
     radius: parent.radius
-    color: Style.selectedFillFor(root.foreground, Color.accent)
+    color: Style.selectedFillFor(root.foreground, Commons.Color.accent)
   }
 
   Text {
@@ -46,7 +47,7 @@ Rectangle {
     wrapMode: Text.Wrap
     maximumLineCount: 3
     elide: Text.ElideRight
-    color: root.error ? Color.urgent : root.foreground
+    color: root.error ? Commons.Color.urgent : root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
   }

@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // One choice of several, with an optional label and hint above it: the
@@ -9,7 +10,7 @@ import qs.Ui
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string label: ""
   property string hint: ""

@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 import "Strings.js" as Strings
 
@@ -10,7 +11,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   // [{ key, value, sources, assumed }] from QuickAddParser.quickAddPreview
@@ -103,7 +104,7 @@ Column {
         text: root.wordsOf(line.modelData)
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignRight
-        color: line.modelData.assumed ? root.muted : Color.accent
+        color: line.modelData.assumed ? root.muted : Commons.Color.accent
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
         font.italic: line.modelData.assumed

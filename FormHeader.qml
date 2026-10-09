@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 import "Strings.js" as Strings
 
@@ -10,7 +11,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property bool isEditing: false
@@ -79,7 +80,7 @@ Column {
     visible: root.errorText !== ""
     text: root.errorText
     textFormat: Text.PlainText
-    color: Color.urgent
+    color: Commons.Color.urgent
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     wrapMode: Text.WordWrap

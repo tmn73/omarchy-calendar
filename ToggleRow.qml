@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // A labelled on/off row: an optional colour swatch, the label with a hint
@@ -8,7 +9,7 @@ import qs.Ui
 Rectangle {
   id: toggle
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string label: ""
   property string hint: ""

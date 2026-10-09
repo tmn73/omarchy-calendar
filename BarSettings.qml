@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 import "Strings.js" as Strings
 
@@ -9,7 +10,7 @@ import "Strings.js" as Strings
 Column {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property int leadMinutes: 15
@@ -91,7 +92,7 @@ Column {
         shows: root.leadMinutes > 0
           ? root.tr("bar.soon", [root.tr("settings.previewTitle"), root.tr("unit.min", [root.previewMinutes])])
           : root.tr("settings.previewClockOnly")
-        showsColor: root.leadMinutes > 0 ? Color.accent : root.faint
+        showsColor: root.leadMinutes > 0 ? Commons.Color.accent : root.faint
       }
 
       // How long "Now" lasts goes in the left column: the right one is
@@ -100,7 +101,7 @@ Column {
         visible: root.leadMinutes > 0
         when: root.tr(root.duringEvent === "firstMinutes" ? "settings.previewFirstMinutes" : "settings.previewDuring")
         shows: root.tr("bar.live", [root.tr("settings.previewTitle")])
-        showsColor: Color.urgent
+        showsColor: Commons.Color.urgent
       }
 
       PreviewLine {

@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 
 // A section title that folds what is under it: a triangle, the title and
 // an optional summary on one line. A click unfolds the section; the owner
@@ -7,7 +8,7 @@ import qs.Commons
 Rectangle {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string text: ""
   property bool expanded: false
@@ -17,7 +18,7 @@ Rectangle {
   width: parent ? parent.width : 0
   height: label.implicitHeight + Style.space(4) * 2
   radius: Style.cornerRadius
-  color: mouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+  color: mouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent) : "transparent"
 
   Text {
     id: label

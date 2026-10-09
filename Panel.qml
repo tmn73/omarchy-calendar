@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 import "QuickAddParser.js" as QuickAddParser
@@ -280,7 +281,7 @@ Panel {
 
   // Guarded so the widget renders before the bar is injected (the bar-widget
   // contract instantiates it bare).
-  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property int agendaWidth: Style.space(330)

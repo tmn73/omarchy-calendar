@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -135,7 +136,7 @@ Item {
         radius: Style.cornerRadius
         color: current
           ? Util.alpha(root.foreground, 0.10)
-          : navMouse.containsMouse ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent"
+          : navMouse.containsMouse ? Style.hoverFillFor(root.foreground, Commons.Color.accent) : "transparent"
 
         Text {
           id: navIcon

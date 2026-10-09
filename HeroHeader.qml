@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Strings.js" as Strings
@@ -11,7 +12,7 @@ import "Strings.js" as Strings
 Item {
   id: root
 
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
   property string dateText: ""
@@ -32,7 +33,7 @@ Item {
   readonly property real naturalWidth: iconMetrics.advanceWidth + dateMetrics.advanceWidth + heroRow.spacing
   readonly property real fit: naturalWidth > 0 ? Math.max(0.4, Math.min(1, availableWidth / naturalWidth)) : 1
   readonly property color heroColor: homeMouse.containsMouse
-    ? Style.hoverStateColor(root.foreground, Color.accent)
+    ? Style.hoverStateColor(root.foreground, Commons.Color.accent)
     : root.foreground
 
   implicitHeight: Math.max(heroRow.height, buttons.height)

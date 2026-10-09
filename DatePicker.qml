@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 import "Model.js" as Model
@@ -15,7 +16,7 @@ Item {
   property string dateKey: ""
   property int weekStart: 1
   property string language: "en"
-  property color foreground: Color.popups.text
+  property color foreground: Commons.Color.popups.text
   property string fontFamily: Style.font.family
 
   signal picked(string dateKey)
@@ -82,9 +83,9 @@ Item {
     focus: true
 
     background: BorderSurface {
-      color: Color.popups.background
-      borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border,
-                                            Color.popups.border, Style.normalBorderWidth)
+      color: Commons.Color.popups.background
+      borderSpec: Border.localOrSurfaceSpec("popups", "border", Commons.Color.popups.border,
+                                            Commons.Color.popups.border, Style.normalBorderWidth)
       radius: Style.cornerRadius
     }
 
@@ -157,7 +158,7 @@ Item {
             height: Style.space(24)
             radius: Style.cornerRadius
             color: chosen
-              ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
+              ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.25)
               : dayHover.hovered ? root.fade(0.08) : "transparent"
             border.width: modelData.today ? Style.spacing.hairline : 0
             border.color: root.fade(0.5)
