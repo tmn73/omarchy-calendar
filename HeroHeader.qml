@@ -116,6 +116,14 @@ Item {
     spacing: Style.space(2)
 
     PanelActionButton {
+      iconText: "󰏌"
+      tooltipText: Strings.tr(root.language, "insp.openInGoogle")
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onClicked: Qt.openUrlExternally("https://calendar.google.com/")
+    }
+
+    PanelActionButton {
       iconText: root.settingsOpen ? "󰅖" : "󰒓"
       tooltipText: Strings.tr(root.language, root.settingsOpen ? "nav.backToCalendar" : "nav.settings")
       foreground: root.foreground
