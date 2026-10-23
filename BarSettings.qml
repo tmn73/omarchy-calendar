@@ -62,10 +62,21 @@ Column {
     return Qt.locale(Strings.localeName(root.language)).toString(d, String(format).replace(/ww/g, week))
   }
 
+  // The field text stays as typed while it has focus, even when it names a
+  // preset and the stored custom format goes back to "", so it never empties
+  // under the user's fingers. It takes the stored value again on the way out.
   function commitFormat() {
-    if (formatField.text.trim() === root.customFormat) return
-    root.picked(Model.customClockFormatValues(formatField.text, root.customFormat, root.clockFormat, root.presets, "dddd HH:mm"))
-    formatField.text = Qt.binding(function() { return root.customFormat })
+    saveTimer.stop()
+    if (formatField.text.trim() !== root.customFormat || root.typedPreset !== "")
+      root.picked(Model.customClockFormatValues(formatField.text, root.customFormat, root.clockFormat, root.presets, "dddd HH:mm"))
+    if (!formatField.activeFocus) formatField.text = Qt.binding(function() { return root.customFormat })
+  }
+
+  // Saved a moment after the last key, like every other setting here.
+  Timer {
+    id: saveTimer
+    interval: 600
+    onTriggered: root.commitFormat()
   }
 
   spacing: Style.space(8)
@@ -89,7 +100,7 @@ Column {
     width: parent.width
     spacing: Style.space(10)
 
-    // Saved on Enter or when the field loses focus; Escape puts it back.
+    // Saved as you type. Enter and Escape give the keys back to the panel.
     TextField {
       id: formatField
       width: Math.round(parent.width * 0.45)
@@ -98,10 +109,10 @@ Column {
       placeholderText: "dddd d MMM HH:mm"
       foreground: root.foreground
       font.family: root.fontFamily
+      onTextEdited: saveTimer.restart()
       onEditingFinished: root.commitFormat()
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
-          formatField.text = Qt.binding(function() { return root.customFormat })
           root.editingFinished()
           event.accepted = true
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
