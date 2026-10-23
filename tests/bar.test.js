@@ -232,3 +232,13 @@ test('adoptedCustomFormat keeps a hand-written format that right click is about 
   assert.equal(Model.adoptedCustomFormat(alt, '', alt, PRESETS), '')
   assert.equal(Model.adoptedCustomFormat('', '', alt, PRESETS), '')
 })
+
+test('the default and alternate formats are presets of their orientation', () => {
+  for (const vertical of [false, true]) {
+    const presets = Model.clockFormats(vertical)
+    assert.ok(presets.includes(Model.defaultClockFormat(vertical)))
+    assert.ok(presets.includes(Model.defaultAltClockFormat(vertical)))
+  }
+  assert.equal(Model.defaultClockFormat(false), 'dddd HH:mm')
+  assert.equal(Model.defaultAltClockFormat(true), "dd\nMMM\n'W'ww\n''yy")
+})

@@ -267,6 +267,16 @@ function clockFormats(vertical) {
   return vertical ? VERTICAL_CLOCK_FORMATS.slice() : CLOCK_FORMATS.slice()
 }
 
+// The label a bar shows before anything is set, and the one its alternate
+// slot starts on. Both are presets.
+function defaultClockFormat(vertical) {
+  return vertical ? VERTICAL_CLOCK_FORMATS[0] : CLOCK_FORMATS[0]
+}
+
+function defaultAltClockFormat(vertical) {
+  return vertical ? VERTICAL_CLOCK_FORMATS[2] : CLOCK_FORMATS[6]
+}
+
 // The presets in a fixed order, then the user's own format, the configured
 // alternate and the current format when they are something else. The order
 // must not depend on which entry is current: cycling writes the result back

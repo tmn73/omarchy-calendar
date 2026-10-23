@@ -1074,9 +1074,9 @@ Panel {
                 reminders: root.setting("reminders", true) !== false
                 reminderDetails: root.setting("reminderDetails", false) === true
                 barVertical: root.barVertical
-                clockFormat: root.barVertical
-                  ? String(root.setting("verticalFormat", "HH\n—\nmm"))
-                  : String(root.setting("format", "dddd HH:mm"))
+                clockFormat: String(root.setting(root.barVertical ? "verticalFormat" : "format", Model.defaultClockFormat(root.barVertical)))
+                clockAltFormat: String(root.setting(root.barVertical ? "verticalFormatAlt" : "formatAlt", Model.defaultAltClockFormat(root.barVertical)))
+                now: root.nowTick
                 customFormat: String(root.setting(root.barVertical ? "customVerticalFormat" : "customFormat", ""))
                 syncState: root.syncState
                 setupCommand: root.setupCommand

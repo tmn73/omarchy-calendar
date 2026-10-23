@@ -24,12 +24,8 @@ BarWidget {
 
   readonly property string language: Strings.resolveLanguage(setting("language", "auto"), Qt.locale().name)
 
-  readonly property string configuredFormat: vertical
-    ? setting("verticalFormat", "HH\n—\nmm")
-    : setting("format", "dddd HH:mm")
-  readonly property string configuredAltFormat: vertical
-    ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
-    : setting("formatAlt", "d MMMM 'W'ww yyyy")
+  readonly property string configuredFormat: setting(vertical ? "verticalFormat" : "format", Model.defaultClockFormat(vertical))
+  readonly property string configuredAltFormat: setting(vertical ? "verticalFormatAlt" : "formatAlt", Model.defaultAltClockFormat(vertical))
   // The user's own format, from Settings › Bar, one per orientation.
   readonly property string customFormat: setting(vertical ? "customVerticalFormat" : "customFormat", "")
   readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical), customFormat)

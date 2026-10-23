@@ -26,8 +26,12 @@ Column {
   // The bar's current format and the user's own one ("" when unset), both
   // for the bar's orientation: a vertical bar keeps a pair of its own.
   property bool vertical: false
-  property string clockFormat: "dddd HH:mm"
+  property string clockFormat: ""
+  property string clockAltFormat: ""
   property string customFormat: ""
+  // The panel's clock: it is set again on every open, so the examples never
+  // show the day the shell started.
+  property date now: new Date()
 
   // The settings to store, for example { duringEvent: "firstMinutes" }.
   signal picked(var values)
@@ -41,10 +45,8 @@ Column {
   readonly property Item field: vertical ? stackField : lineField
   readonly property string typed: Model.cleanClockFormat(field.text)
   readonly property string typedPreset: Model.presetClockFormat(typed, presets)
-  // The formats right click walks.
-  readonly property var ring: Model.clockFormatRing("", "", presets, customFormat)
-  // Set again each time the section shows: the panel stays loaded for days.
-  property date sampleDate: new Date()
+  // The formats right click walks, as the bar builds its own list.
+  readonly property var ring: Model.clockFormatRing(clockFormat, clockAltFormat, presets, customFormat)
   // The preview counts down from 5 minutes, or less with a shorter lead.
   readonly property int previewMinutes: Math.min(5, leadMinutes)
 
@@ -60,7 +62,7 @@ Column {
 
   // A format as the bar label renders it, ISO week included.
   function render(format) {
-    var d = root.sampleDate
+    var d = root.now
     var week = Model.isoWeekLiteral(d.getFullYear(), d.getMonth(), d.getDate())
     return Qt.locale(Strings.localeName(root.language)).toString(d, String(format).replace(/ww/g, week))
   }
@@ -72,7 +74,7 @@ Column {
     root.field.text = root.customFormat
   }
 
-  onVisibleChanged: if (visible) { sampleDate = new Date(); seedField() }
+  onVisibleChanged: if (visible) seedField()
   onVerticalChanged: seedField()
   onCustomFormatChanged: if (!root.field.activeFocus) seedField()
   Component.onCompleted: seedField()
@@ -81,7 +83,7 @@ Column {
     saveTimer.stop()
     if (root.typed !== root.customFormat || root.typedPreset !== "") {
       var values = Model.customClockFormatValues(root.typed, root.customFormat, root.clockFormat, root.presets,
-        root.vertical ? "HH\n—\nmm" : "dddd HH:mm")
+        Model.defaultClockFormat(root.vertical))
       var stored = {}
       stored[root.vertical ? "customVerticalFormat" : "customFormat"] = values.custom
       stored[root.vertical ? "verticalFormat" : "format"] = values.format

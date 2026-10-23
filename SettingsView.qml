@@ -30,8 +30,11 @@ Item {
   property bool reminders: true
   property bool reminderDetails: false
   property bool barVertical: false
-  property string clockFormat: "dddd HH:mm"
+  property string clockFormat: ""
+  property string clockAltFormat: ""
   property string customFormat: ""
+  // The panel's clock, for the format examples.
+  property date now: new Date()
 
   // Calendars
   property var calendars: []
@@ -240,7 +243,9 @@ Item {
         reminderDetails: root.reminderDetails
         vertical: root.barVertical
         clockFormat: root.clockFormat
+        clockAltFormat: root.clockAltFormat
         customFormat: root.customFormat
+        now: root.now
         onPicked: function(values) { root.picked(values) }
         onEditingFinished: root.editingFinished()
       }

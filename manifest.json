@@ -24,7 +24,7 @@
       "format": "dddd HH:mm",
       "formatAlt": "d MMMM 'W'ww yyyy",
       "customFormat": "",
-      "verticalFormat": "HH\n-\nmm",
+      "verticalFormat": "HH\n—\nmm",
       "customVerticalFormat": "",
       "eventTimeFormat": "HH:mm",
       "language": "auto",
@@ -62,7 +62,7 @@
         "key": "verticalFormat",
         "type": "string",
         "label": "Vertical bar format",
-        "defaultValue": "HH\n-\nmm"
+        "defaultValue": "HH\n—\nmm"
       },
       {
         "key": "eventTimeFormat",
