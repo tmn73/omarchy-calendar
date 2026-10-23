@@ -30,6 +30,8 @@ Panel {
   // switchPanelFrom looks the slot up the same way. It also owns reminders,
   // which is where snoozing goes.
   property var hostWidget: null
+  // The bar stands on a screen edge, and its clock is a stack of lines.
+  readonly property bool barVertical: !!hostWidget && hostWidget.vertical === true
   readonly property var barIdentity: hostWidget || root
 
   readonly property string language: Strings.resolveLanguage(setting("language", "auto"), Qt.locale().name)
@@ -1071,8 +1073,11 @@ Panel {
                 nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
                 reminders: root.setting("reminders", true) !== false
                 reminderDetails: root.setting("reminderDetails", false) === true
-                clockFormat: String(root.setting("format", "dddd HH:mm"))
-                customFormat: String(root.setting("customFormat", ""))
+                barVertical: root.barVertical
+                clockFormat: root.barVertical
+                  ? String(root.setting("verticalFormat", "HH\n—\nmm"))
+                  : String(root.setting("format", "dddd HH:mm"))
+                customFormat: String(root.setting(root.barVertical ? "customVerticalFormat" : "customFormat", ""))
                 syncState: root.syncState
                 setupCommand: root.setupCommand
                 setupCommandCopied: root.setupCommandCopied

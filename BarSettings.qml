@@ -23,7 +23,9 @@ Column {
   property string nextDuringEvent: "announce"
   property bool reminders: true
   property bool reminderDetails: false
-  // The bar's current format, and the user's own one ("" when unset).
+  // The bar's current format and the user's own one ("" when unset), both
+  // for the bar's orientation: a vertical bar keeps a pair of its own.
+  property bool vertical: false
   property string clockFormat: "dddd HH:mm"
   property string customFormat: ""
 
@@ -33,15 +35,16 @@ Column {
   signal editingFinished()
 
   readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
-  readonly property var presets: Model.clockFormats(false)
-  readonly property string typedPreset: Model.presetClockFormat(formatField.text, presets)
-  // The formats right click walks, as the bar would show them now. Spaces
-  // inside a format do not break, so a line only wraps between two formats.
-  readonly property string ring: Model.clockFormatRing("", "", presets, customFormat)
-    .map(function(format) { return root.render(format).replace(/ /g, " ") })
-    .join("  ›  ")
-  // Fixed while the page is open: the examples need not tick.
-  readonly property date sampleDate: new Date()
+  readonly property var presets: Model.clockFormats(vertical)
+  // One line on a horizontal bar, one line per line of the clock on a
+  // vertical one.
+  readonly property Item field: vertical ? stackField : lineField
+  readonly property string typed: Model.cleanClockFormat(field.text)
+  readonly property string typedPreset: Model.presetClockFormat(typed, presets)
+  // The formats right click walks.
+  readonly property var ring: Model.clockFormatRing("", "", presets, customFormat)
+  // Set again each time the section shows: the panel stays loaded for days.
+  property date sampleDate: new Date()
   // The preview counts down from 5 minutes, or less with a shorter lead.
   readonly property int previewMinutes: Math.min(5, leadMinutes)
 
@@ -62,14 +65,29 @@ Column {
     return Qt.locale(Strings.localeName(root.language)).toString(d, String(format).replace(/ww/g, week))
   }
 
-  // The field text stays as typed while it has focus, even when it names a
-  // preset and the stored custom format goes back to "", so it never empties
-  // under the user's fingers. It takes the stored value again on the way out.
+  // The field has no binding to customFormat: a save trims what was typed,
+  // and a binding would write that back under the user's fingers. It is
+  // seeded instead, whenever it does not have focus.
+  function seedField() {
+    root.field.text = root.customFormat
+  }
+
+  onVisibleChanged: if (visible) { sampleDate = new Date(); seedField() }
+  onVerticalChanged: seedField()
+  onCustomFormatChanged: if (!root.field.activeFocus) seedField()
+  Component.onCompleted: seedField()
+
   function commitFormat() {
     saveTimer.stop()
-    if (formatField.text.trim() !== root.customFormat || root.typedPreset !== "")
-      root.picked(Model.customClockFormatValues(formatField.text, root.customFormat, root.clockFormat, root.presets, "dddd HH:mm"))
-    if (!formatField.activeFocus) formatField.text = Qt.binding(function() { return root.customFormat })
+    if (root.typed !== root.customFormat || root.typedPreset !== "") {
+      var values = Model.customClockFormatValues(root.typed, root.customFormat, root.clockFormat, root.presets,
+        root.vertical ? "HH\n—\nmm" : "dddd HH:mm")
+      var stored = {}
+      stored[root.vertical ? "customVerticalFormat" : "customFormat"] = values.custom
+      stored[root.vertical ? "verticalFormat" : "format"] = values.format
+      root.picked(stored)
+    }
+    if (!root.field.activeFocus) seedField()
   }
 
   // Saved a moment after the last key, like every other setting here.
@@ -89,33 +107,31 @@ Column {
 
   Text {
     width: parent.width
-    text: root.tr("settings.clockFormatHint")
+    text: root.tr(root.vertical ? "settings.clockFormatHintVertical" : "settings.clockFormatHint")
     color: root.faint
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
     wrapMode: Text.WordWrap
   }
 
+  // Saved as you type, like every other setting here.
   Row {
     width: parent.width
     spacing: Style.space(10)
 
-    // Saved as you type. Enter and Escape give the keys back to the panel.
+    // Enter and Escape give the keys back to the panel.
     TextField {
-      id: formatField
+      id: lineField
+      visible: !root.vertical
       width: Math.round(parent.width * 0.45)
       anchors.verticalCenter: parent.verticalCenter
-      text: root.customFormat
       placeholderText: "dddd d MMM HH:mm"
       foreground: root.foreground
       font.family: root.fontFamily
       onTextEdited: saveTimer.restart()
       onEditingFinished: root.commitFormat()
       Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape) {
-          root.editingFinished()
-          event.accepted = true
-        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.editingFinished()
           event.accepted = true
         }
@@ -123,23 +139,85 @@ Column {
     }
 
     Text {
-      width: parent.width - formatField.width - parent.spacing
+      visible: !root.vertical && root.typed !== ""
+      width: parent.width - lineField.width - parent.spacing
       anchors.verticalCenter: parent.verticalCenter
-      visible: formatField.text.trim() !== ""
       textFormat: Text.PlainText
-      text: "→ " + root.render(formatField.text.trim())
+      text: "→ " + root.render(root.typed)
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
       font.bold: true
       elide: Text.ElideRight
     }
+
+    // Several lines, so Enter starts a new one. Escape gives the keys back.
+    BorderSurface {
+      visible: root.vertical
+      width: Math.round(parent.width * 0.45)
+      height: Math.max(Style.space(80), stackField.contentHeight + Style.space(12))
+      color: Style.controlFill(stackField.activeFocus, false, root.foreground, Commons.Color.accent)
+      borderSpec: Border.controlSpec(stackField.activeFocus ? "focus" : "normal", root.foreground, Commons.Color.accent)
+      radius: Style.cornerRadius
+
+      TextEdit {
+        id: stackField
+        anchors.fill: parent
+        anchors.margins: Style.space(6)
+        textFormat: TextEdit.PlainText
+        color: root.foreground
+        selectionColor: Style.selectionFillFor(root.foreground, Commons.Color.accent)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+        onTextChanged: if (activeFocus) saveTimer.restart()
+        onEditingFinished: root.commitFormat()
+        Keys.onEscapePressed: function(event) { root.editingFinished(); event.accepted = true }
+
+        Text {
+          visible: stackField.text === "" && !stackField.activeFocus
+          text: "ddd\nHH\nmm"
+          color: root.faint
+          font: stackField.font
+        }
+      }
+    }
+
+    // Stacked as the bar draws it.
+    Column {
+      visible: root.vertical && root.typed !== ""
+      spacing: Style.space(2)
+
+      Repeater {
+        model: root.vertical ? root.render(root.typed).split("\n") : []
+
+        Text {
+          required property var modelData
+          textFormat: Text.PlainText
+          text: modelData
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+      }
+    }
+  }
+
+  Text {
+    visible: root.vertical
+    width: parent.width
+    text: root.tr("settings.clockFormatNewLine")
+    color: root.faint
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
   }
 
   Text {
     width: parent.width
     textFormat: Text.PlainText
-    text: ["dddd", "ddd", "d MMM", "HH:mm", "h:mm AP"].map(function(format) {
+    text: (root.vertical
+      ? ["dd", "MMM", "HH", "mm", "'W'ww"]
+      : ["dddd", "ddd", "d MMM", "HH:mm", "h:mm AP"]).map(function(format) {
       return format + " " + root.render(format)
     }).join("  ·  ")
     color: root.faint
@@ -176,21 +254,61 @@ Column {
 
     KeyCap {
       id: rightClick
-      anchors.verticalCenter: parent.verticalCenter
       foreground: root.foreground
       fontFamily: root.fontFamily
       text: root.tr("settings.rightClick")
     }
 
+    // Spaces inside a format do not break, so a line only wraps between two
+    // formats.
     Text {
+      visible: !root.vertical
       width: parent.width - rightClick.width - parent.spacing
-      anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
-      text: root.ring
+      text: root.ring.map(function(format) { return root.render(format).replace(/ /g, " ") }).join("  ›  ")
       color: root.faint
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       wrapMode: Text.WordWrap
+    }
+
+    // On a vertical bar, each format as the small stack the bar draws.
+    Flow {
+      visible: root.vertical
+      width: parent.width - rightClick.width - parent.spacing
+      spacing: Style.space(6)
+
+      Repeater {
+        model: root.vertical ? root.ring : []
+
+        Rectangle {
+          id: chip
+          required property var modelData
+          width: Math.max(Style.space(36), chipLines.implicitWidth + Style.space(6) * 2)
+          height: chipLines.implicitHeight + Style.space(4) * 2
+          radius: Style.cornerRadius
+          color: Util.alpha(root.foreground, 0.06)
+
+          Column {
+            id: chipLines
+            anchors.centerIn: parent
+
+            Repeater {
+              model: root.render(chip.modelData).split("\n")
+
+              Text {
+                required property var modelData
+                anchors.horizontalCenter: parent.horizontalCenter
+                textFormat: Text.PlainText
+                text: modelData
+                color: root.faint
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+          }
+        }
+      }
     }
   }
 

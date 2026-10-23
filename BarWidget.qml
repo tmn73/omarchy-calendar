@@ -30,8 +30,8 @@ BarWidget {
   readonly property string configuredAltFormat: vertical
     ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
     : setting("formatAlt", "d MMMM 'W'ww yyyy")
-  // The user's own format, from Settings › Bar. Horizontal bars only.
-  readonly property string customFormat: vertical ? "" : setting("customFormat", "")
+  // The user's own format, from Settings › Bar, one per orientation.
+  readonly property string customFormat: setting(vertical ? "customVerticalFormat" : "customFormat", "")
   readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical), customFormat)
 
   // ---- Events. Read here rather than off the panel so the label and the
@@ -82,6 +82,9 @@ BarWidget {
     var entry = { id: root.moduleName }
     for (var key in root.settings) if (key !== "id") entry[key] = root.settings[key]
     entry[vertical ? "verticalFormat" : "format"] = next
+    // A hand-written format would leave the ring with this click: keep it.
+    var custom = Model.adoptedCustomFormat(current, customFormat, configuredAltFormat, Model.clockFormats(vertical))
+    if (custom !== customFormat) entry[vertical ? "customVerticalFormat" : "customFormat"] = custom
 
     // Applied locally first so the label changes on the click itself; the
     // shell.json write comes back through the bar as the same value.

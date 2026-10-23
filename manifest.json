@@ -25,6 +25,7 @@
       "formatAlt": "d MMMM 'W'ww yyyy",
       "customFormat": "",
       "verticalFormat": "HH\n-\nmm",
+      "customVerticalFormat": "",
       "eventTimeFormat": "HH:mm",
       "language": "auto",
       "reminders": true,
@@ -49,6 +50,12 @@
         "key": "customFormat",
         "type": "string",
         "label": "Your clock format",
+        "defaultValue": ""
+      },
+      {
+        "key": "customVerticalFormat",
+        "type": "string",
+        "label": "Your vertical clock format",
         "defaultValue": ""
       },
       {

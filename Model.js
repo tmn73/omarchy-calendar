@@ -290,28 +290,48 @@ function nextClockFormat(ring, current) {
   return ring[(ring.indexOf(text(current)) + 1) % ring.length]
 }
 
-// The preset that `format` already is, or "". Runs of spaces count as one,
-// so "dddd  HH:mm" typed by hand still finds "dddd HH:mm".
+// A typed format as it is stored: each line trimmed with its runs of spaces
+// made one, and blank lines at either end dropped. Line breaks stay, since a
+// vertical bar draws one line of the clock per line of the format.
+function cleanClockFormat(format) {
+  return text(format).split("\n").map(function(line) {
+    return line.trim().replace(/\s+/g, " ")
+  }).join("\n").replace(/^\n+|\n+$/g, "")
+}
+
+// The preset that `format` already is, or "". Compared cleaned, so
+// "dddd  HH:mm" typed by hand still finds "dddd HH:mm".
 function presetClockFormat(format, presets) {
-  var wanted = text(format).trim().replace(/\s+/g, " ")
+  var wanted = cleanClockFormat(format)
   if (wanted === "") return ""
   for (var i = 0; i < (presets || []).length; i++)
-    if (text(presets[i]).replace(/\s+/g, " ") === wanted) return presets[i]
+    if (cleanClockFormat(presets[i]) === wanted) return presets[i]
   return ""
 }
 
-// The settings to store when the user's own clock format is set to `typed`.
-// It lives in `customFormat`, its own key, so right click can walk away from
-// it and come back: cycling only ever rewrites `format`. A preset is not kept
-// as a custom format, since the ring already has it. Clearing the field puts
-// a bar that still shows the old custom format back on `defaultFormat`.
+// What to store when the user's own clock format is set to `typed`:
+// { custom, format }, for the bar's custom key and its format key. The
+// custom format has a key of its own so right click can walk away from it
+// and come back: cycling only ever rewrites the format key. A preset is not
+// kept as a custom format, since the ring already has it. Clearing the field
+// puts a bar that still shows the old custom format back on `defaultFormat`.
 function customClockFormatValues(typed, previousCustom, currentFormat, presets, defaultFormat) {
-  var format = text(typed).trim()
+  var format = cleanClockFormat(typed)
   var preset = presetClockFormat(format, presets)
-  if (preset !== "") return { customFormat: "", format: preset }
-  if (format !== "") return { customFormat: format, format: format }
+  if (preset !== "") return { custom: "", format: preset }
+  if (format !== "") return { custom: format, format: format }
   var showsOld = text(currentFormat) === text(previousCustom)
-  return { customFormat: "", format: showsOld ? defaultFormat : text(currentFormat) }
+  return { custom: "", format: showsOld ? defaultFormat : text(currentFormat) }
+}
+
+// The custom format to keep when right click leaves `current`. A format
+// written by hand in shell.json, before there was a custom key, would be
+// lost on that click, so it becomes the custom format instead. One already
+// set, a preset or the alternate format is left alone.
+function adoptedCustomFormat(current, custom, alt, presets) {
+  if (text(custom) !== "") return text(custom)
+  if (text(current) === "" || text(current) === text(alt)) return ""
+  return presetClockFormat(current, presets) === "" ? text(current) : ""
 }
 
 // ---- Month grid

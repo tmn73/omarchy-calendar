@@ -29,6 +29,7 @@ Item {
   property string nextDuringEvent: "announce"
   property bool reminders: true
   property bool reminderDetails: false
+  property bool barVertical: false
   property string clockFormat: "dddd HH:mm"
   property string customFormat: ""
 
@@ -237,6 +238,7 @@ Item {
         nextDuringEvent: root.nextDuringEvent
         reminders: root.reminders
         reminderDetails: root.reminderDetails
+        vertical: root.barVertical
         clockFormat: root.clockFormat
         customFormat: root.customFormat
         onPicked: function(values) { root.picked(values) }
