@@ -35,9 +35,10 @@ Column {
   readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
   readonly property var presets: Model.clockFormats(false)
   readonly property string typedPreset: Model.presetClockFormat(formatField.text, presets)
-  // The formats right click walks, as the bar would show them now.
+  // The formats right click walks, as the bar would show them now. Spaces
+  // inside a format do not break, so a line only wraps between two formats.
   readonly property string ring: Model.clockFormatRing("", "", presets, customFormat)
-    .map(function(format) { return root.render(format) })
+    .map(function(format) { return root.render(format).replace(/ /g, " ") })
     .join("  ›  ")
   // Fixed while the page is open: the examples need not tick.
   readonly property date sampleDate: new Date()
