@@ -30,7 +30,9 @@ BarWidget {
   readonly property string configuredAltFormat: vertical
     ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
     : setting("formatAlt", "d MMMM 'W'ww yyyy")
-  readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical))
+  // The user's own format, from Settings › Bar. Horizontal bars only.
+  readonly property string customFormat: vertical ? "" : setting("customFormat", "")
+  readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical), customFormat)
 
   // ---- Events. Read here rather than off the panel so the label and the
   //      reminders keep working whether or not the panel was ever opened.

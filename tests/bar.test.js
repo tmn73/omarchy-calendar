@@ -162,3 +162,47 @@ test('barState keeping the current event: live until its end, next one or not', 
   assert.equal(state.phase, 'live')
   assert.equal(state.event.id, 'now')
 })
+
+const PRESETS = Model.clockFormats(false)
+
+test('clockFormatRing keeps the custom format after the presets, whatever is current', () => {
+  const ring = Model.clockFormatRing('HH:mm', '', PRESETS, 'dddd d MMM HH:mm')
+  assert.equal(ring.length, PRESETS.length + 1)
+  assert.equal(ring[PRESETS.length], 'dddd d MMM HH:mm')
+  assert.deepEqual(Model.clockFormatRing('dddd d MMM HH:mm', '', PRESETS, 'dddd d MMM HH:mm'), ring)
+})
+
+test('right click walks off the custom format and comes back to it', () => {
+  const custom = 'dddd d MMM HH:mm'
+  let current = custom
+  const seen = []
+  for (let i = 0; i <= PRESETS.length; i++) {
+    current = Model.nextClockFormat(Model.clockFormatRing(current, '', PRESETS, custom), current)
+    seen.push(current)
+  }
+  assert.equal(seen[0], PRESETS[0])
+  assert.equal(seen[seen.length - 1], custom)
+})
+
+test('presetClockFormat finds a preset typed with extra spaces, and nothing else', () => {
+  assert.equal(Model.presetClockFormat('  dddd   HH:mm ', PRESETS), 'dddd HH:mm')
+  assert.equal(Model.presetClockFormat('dddd d MMM HH:mm', PRESETS), '')
+  assert.equal(Model.presetClockFormat('', PRESETS), '')
+})
+
+test('customClockFormatValues stores a new format and shows it', () => {
+  assert.deepEqual(Model.customClockFormatValues(' dddd d MMM HH:mm ', '', 'HH:mm', PRESETS, 'dddd HH:mm'),
+    { customFormat: 'dddd d MMM HH:mm', format: 'dddd d MMM HH:mm' })
+})
+
+test('customClockFormatValues never keeps a preset as the custom format', () => {
+  assert.deepEqual(Model.customClockFormatValues('HH:mm', 'dddd d MMM HH:mm', 'dddd d MMM HH:mm', PRESETS, 'dddd HH:mm'),
+    { customFormat: '', format: 'HH:mm' })
+})
+
+test('clearing the custom format puts the bar back on the default only if it still showed it', () => {
+  assert.deepEqual(Model.customClockFormatValues('', 'dddd d MMM HH:mm', 'dddd d MMM HH:mm', PRESETS, 'dddd HH:mm'),
+    { customFormat: '', format: 'dddd HH:mm' })
+  assert.deepEqual(Model.customClockFormatValues('', 'dddd d MMM HH:mm', 'h:mm AP', PRESETS, 'dddd HH:mm'),
+    { customFormat: '', format: 'h:mm AP' })
+})

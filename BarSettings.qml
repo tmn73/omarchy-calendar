@@ -1,12 +1,15 @@
 import QtQuick
 import qs.Commons
 import qs.Commons as Commons
+import qs.Ui
 
+import "Model.js" as Model
 import "Strings.js" as Strings
 
-// The Bar section of Settings: what the bar shows before and during an
-// event, and the desktop reminders. A preview on top puts the choices in
-// words. It reads the values and emits the settings to store.
+// The Bar section of Settings: the user's own clock format, what the bar
+// shows before and during an event, and the desktop reminders. A preview
+// puts the event choices in words. It reads the values and emits the
+// settings to store.
 Column {
   id: root
 
@@ -20,11 +23,24 @@ Column {
   property string nextDuringEvent: "announce"
   property bool reminders: true
   property bool reminderDetails: false
+  // The bar's current format, and the user's own one ("" when unset).
+  property string clockFormat: "dddd HH:mm"
+  property string customFormat: ""
 
   // The settings to store, for example { duringEvent: "firstMinutes" }.
   signal picked(var values)
+  // The format field let go of the keys.
+  signal editingFinished()
 
   readonly property color faint: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.50)
+  readonly property var presets: Model.clockFormats(false)
+  readonly property string typedPreset: Model.presetClockFormat(formatField.text, presets)
+  // The formats right click walks, as the bar would show them now.
+  readonly property string ring: Model.clockFormatRing("", "", presets, customFormat)
+    .map(function(format) { return root.render(format) })
+    .join("  ›  ")
+  // Fixed while the page is open: the examples need not tick.
+  readonly property date sampleDate: new Date()
   // The preview counts down from 5 minutes, or less with a shorter lead.
   readonly property int previewMinutes: Math.min(5, leadMinutes)
 
@@ -38,7 +54,135 @@ Column {
     root.picked(values)
   }
 
+  // A format as the bar label renders it, ISO week included.
+  function render(format) {
+    var d = root.sampleDate
+    var week = Model.isoWeekLiteral(d.getFullYear(), d.getMonth(), d.getDate())
+    return Qt.locale(Strings.localeName(root.language)).toString(d, String(format).replace(/ww/g, week))
+  }
+
+  function commitFormat() {
+    if (formatField.text.trim() === root.customFormat) return
+    root.picked(Model.customClockFormatValues(formatField.text, root.customFormat, root.clockFormat, root.presets, "dddd HH:mm"))
+    formatField.text = Qt.binding(function() { return root.customFormat })
+  }
+
   spacing: Style.space(8)
+
+  SettingsCaption {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    text: root.tr("settings.clockFormat")
+  }
+
+  Text {
+    width: parent.width
+    text: root.tr("settings.clockFormatHint")
+    color: root.faint
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
+  }
+
+  Row {
+    width: parent.width
+    spacing: Style.space(10)
+
+    // Saved on Enter or when the field loses focus; Escape puts it back.
+    TextField {
+      id: formatField
+      width: Math.round(parent.width * 0.45)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.customFormat
+      placeholderText: "dddd d MMM HH:mm"
+      foreground: root.foreground
+      font.family: root.fontFamily
+      onEditingFinished: root.commitFormat()
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape) {
+          formatField.text = Qt.binding(function() { return root.customFormat })
+          root.editingFinished()
+          event.accepted = true
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+          root.editingFinished()
+          event.accepted = true
+        }
+      }
+    }
+
+    Text {
+      width: parent.width - formatField.width - parent.spacing
+      anchors.verticalCenter: parent.verticalCenter
+      visible: formatField.text.trim() !== ""
+      textFormat: Text.PlainText
+      text: "→ " + root.render(formatField.text.trim())
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+      elide: Text.ElideRight
+    }
+  }
+
+  Text {
+    width: parent.width
+    textFormat: Text.PlainText
+    text: ["dddd", "ddd", "d MMM", "HH:mm", "h:mm AP"].map(function(format) {
+      return format + " " + root.render(format)
+    }).join("  ·  ")
+    color: root.faint
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    wrapMode: Text.WordWrap
+  }
+
+  Rectangle {
+    visible: root.typedPreset !== ""
+    width: parent.width
+    height: builtIn.implicitHeight + Style.space(8) * 2
+    radius: Style.cornerRadius
+    color: Util.alpha(Commons.Color.accent, 0.12)
+    border.width: Style.spacing.hairline
+    border.color: Util.alpha(Commons.Color.accent, 0.60)
+
+    Text {
+      id: builtIn
+      x: Style.space(12)
+      y: Style.space(8)
+      width: parent.width - Style.space(24)
+      text: root.tr("settings.clockFormatBuiltIn")
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      wrapMode: Text.WordWrap
+    }
+  }
+
+  Row {
+    width: parent.width
+    spacing: Style.space(8)
+
+    KeyCap {
+      id: rightClick
+      anchors.verticalCenter: parent.verticalCenter
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      text: root.tr("settings.rightClick")
+    }
+
+    Text {
+      width: parent.width - rightClick.width - parent.spacing
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: root.ring
+      color: root.faint
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      wrapMode: Text.WordWrap
+    }
+  }
+
+  Gap {}
 
   component Gap: Item { width: 1; height: Style.space(8) }
 

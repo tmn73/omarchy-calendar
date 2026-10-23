@@ -267,14 +267,14 @@ function clockFormats(vertical) {
   return vertical ? VERTICAL_CLOCK_FORMATS.slice() : CLOCK_FORMATS.slice()
 }
 
-// The presets in a fixed order, plus the configured alternate and current
-// format when they are something else. The order must not depend on which
-// entry is current: cycling writes the result back to shell.json, and a ring
-// that reshuffled itself around the current value would bounce between two
-// entries instead of walking.
-function clockFormatRing(configured, configuredAlt, presets) {
+// The presets in a fixed order, then the user's own format, the configured
+// alternate and the current format when they are something else. The order
+// must not depend on which entry is current: cycling writes the result back
+// to shell.json, and a ring that reshuffled itself around the current value
+// would bounce between two entries instead of walking.
+function clockFormatRing(configured, configuredAlt, presets, custom) {
   var ring = []
-  var candidates = (presets || []).concat([configuredAlt, configured])
+  var candidates = (presets || []).concat([custom, configuredAlt, configured])
   for (var i = 0; i < candidates.length; i++) {
     var format = text(candidates[i])
     if (format === "" || ring.indexOf(format) !== -1) continue
@@ -288,6 +288,30 @@ function clockFormatRing(configured, configuredAlt, presets) {
 function nextClockFormat(ring, current) {
   if (!ring || ring.length === 0) return ""
   return ring[(ring.indexOf(text(current)) + 1) % ring.length]
+}
+
+// The preset that `format` already is, or "". Runs of spaces count as one,
+// so "dddd  HH:mm" typed by hand still finds "dddd HH:mm".
+function presetClockFormat(format, presets) {
+  var wanted = text(format).trim().replace(/\s+/g, " ")
+  if (wanted === "") return ""
+  for (var i = 0; i < (presets || []).length; i++)
+    if (text(presets[i]).replace(/\s+/g, " ") === wanted) return presets[i]
+  return ""
+}
+
+// The settings to store when the user's own clock format is set to `typed`.
+// It lives in `customFormat`, its own key, so right click can walk away from
+// it and come back: cycling only ever rewrites `format`. A preset is not kept
+// as a custom format, since the ring already has it. Clearing the field puts
+// a bar that still shows the old custom format back on `defaultFormat`.
+function customClockFormatValues(typed, previousCustom, currentFormat, presets, defaultFormat) {
+  var format = text(typed).trim()
+  var preset = presetClockFormat(format, presets)
+  if (preset !== "") return { customFormat: "", format: preset }
+  if (format !== "") return { customFormat: format, format: format }
+  var showsOld = text(currentFormat) === text(previousCustom)
+  return { customFormat: "", format: showsOld ? defaultFormat : text(currentFormat) }
 }
 
 // ---- Month grid

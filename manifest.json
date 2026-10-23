@@ -23,6 +23,7 @@
     "defaults": {
       "format": "dddd HH:mm",
       "formatAlt": "d MMMM 'W'ww yyyy",
+      "customFormat": "",
       "verticalFormat": "HH\n-\nmm",
       "eventTimeFormat": "HH:mm",
       "language": "auto",
@@ -43,6 +44,12 @@
         "type": "string",
         "label": "Alternate format",
         "defaultValue": "d MMMM 'W'ww yyyy"
+      },
+      {
+        "key": "customFormat",
+        "type": "string",
+        "label": "Your clock format",
+        "defaultValue": ""
       },
       {
         "key": "verticalFormat",

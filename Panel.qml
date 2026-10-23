@@ -1071,6 +1071,8 @@ Panel {
                 nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
                 reminders: root.setting("reminders", true) !== false
                 reminderDetails: root.setting("reminderDetails", false) === true
+                clockFormat: String(root.setting("format", "dddd HH:mm"))
+                customFormat: String(root.setting("customFormat", ""))
                 syncState: root.syncState
                 setupCommand: root.setupCommand
                 setupCommandCopied: root.setupCommandCopied
@@ -1085,6 +1087,7 @@ Panel {
                 onWriteSetupCopyRequested: root.copyWriteSetupCommand()
                 onCloseRequested: root.settingsOpen = false
                 onPicked: function(values) { root.persistSettings(values) }
+                onEditingFinished: root.focusKeys()
                 onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
                 onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
                 onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
