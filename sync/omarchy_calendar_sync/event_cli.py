@@ -18,8 +18,8 @@ from pathlib import Path
 
 from . import config as config_module
 from . import cli, contract, event_form, writes
-from .errors import SyncError
-from .gws import GwsAuthError, GwsNotFound, GwsSignInError
+from .errors import EventNotFound, SyncError
+from .gws import GwsAuthError, GwsSignInError
 from .localzone import resolve_local_timezone
 
 SYNC_UNIT = "omarchy-calendar-sync.service"
@@ -69,7 +69,7 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sy
         event_id, resource, series = _write(client, request, tz)
     except writes.WriteRequestError as error:
         return 1, _fail(str(error))
-    except GwsNotFound:
+    except EventNotFound:
         # The file still shows the event. The sync takes the row away.
         start_sync()
         return 1, _fail(GONE)

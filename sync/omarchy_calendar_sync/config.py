@@ -15,7 +15,8 @@ DEFAULTS = {
     # "gws" reads Google directly and needs a Google Cloud project;
     # "eds" reads Evolution Data Server and needs none; "ics" reads iCal
     # feeds such as Google's secret address and needs nothing; "caldir" reads
-    # the caldir CLI and reuses its sign-in. See the README.
+    # the caldir CLI and reuses its sign-in; "caldav" reads and writes a
+    # CalDAV server such as iCloud with an app password. See the README.
     "backend": "gws",
     # Opt-in. sync/setup --write sets it, together with the calendar.events
     # scope. Off, the sync publishes no writable calendars and the panel
@@ -23,7 +24,11 @@ DEFAULTS = {
     "write": False,
     # ics only: feed URLs, each a string or {"url", "name", "color"}.
     "ics": [],
-    # eds and ics: the address whose invitation answers count as "yours".
+    # caldav only: an account {"url", "username", "passwordCommand"}, or a
+    # list of them. "password" works in place of the command, in a file
+    # with mode 600; sync/setup --caldav keeps it in the keyring instead.
+    "caldav": [],
+    # eds, ics and caldav: the address whose invitation answers count as "yours".
     # Blank means responseStatus is left unset rather than guessed.
     "identity": "",
     "profile": str(Path.home() / ".config" / "gws-omarchy-calendar"),

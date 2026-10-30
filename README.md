@@ -4,7 +4,9 @@
 events on it, a bar that tells you what is coming before it starts, and a
 form to create or edit events without opening Google.
 
-Not a Google user? The sync reads any iCal feed, see
+Not a Google user? The sync reads and writes iCloud and any other CalDAV
+server, see [Sync from iCloud or CalDAV](#sync-from-icloud-or-caldav), and
+reads any iCal feed, see
 [Sync from the secret iCal address](#sync-from-the-secret-ical-address). The
 widget itself reads a plain JSON file, so caldir, khal, vdirsyncer or Nextcloud work
 just as well. See [Sync from caldir](#sync-from-caldir) and [Use another source](#use-another-source).
@@ -355,6 +357,64 @@ caldir up to date, set `"caldirPull": false` and it only reads the local files.
 As with gws, a systemd user service does not see your shell PATH, so when
 caldir lives somewhere unusual set `"caldirPath"` to its absolute path.
 
+## Sync from iCloud or CalDAV
+
+Reads and writes iCloud, Nextcloud, Fastmail or any other CalDAV server
+directly, with a username and an app password. No Google Cloud project, no
+Evolution, no second program. An event made or changed in the panel shows
+up on your phone, and one made on the phone shows up at the next sync.
+
+```bash
+~/.config/omarchy/plugins/tmn73.calendar/sync/setup --caldav
+```
+
+For iCloud, do not use your Apple ID password: make an app-specific one at
+[account.apple.com](https://account.apple.com) under *Sign-In and Security*
+> *App-Specific Passwords* (two-factor authentication must be on), and keep
+the default address. The username is your Apple ID. For another server,
+give its CalDAV address, such as `https://your-server/remote.php/dav/` for
+Nextcloud or `https://caldav.fastmail.com/` for Fastmail.
+
+The setup keeps the password in your keyring with `secret-tool`, runs a test
+sync, and only then writes `~/.config/omarchy/calendar-sync.json` and
+installs the timer. If the test fails, your current config stays as it was.
+Or by hand:
+
+```json
+{
+  "backend": "caldav",
+  "write": true,
+  "identity": "you@icloud.com",
+  "caldav": {
+    "url": "https://caldav.icloud.com/",
+    "username": "you@icloud.com",
+    "passwordCommand": ["secret-tool", "lookup", "service", "omarchy-calendar-caldav", "username", "you@icloud.com"]
+  }
+}
+```
+
+`passwordCommand` is any command that prints the password, such as
+`["op", "read", "op://Private/iCloud/app-password"]` for 1Password or
+`["pass", "show", "icloud-caldav"]`; it runs without a shell. `"password"`
+works in its place, in a file you keep at mode 600. `caldav` also takes a
+list of accounts. Calendar ids are the calendars' URLs, so
+`calendars.include`/`exclude` take those or the names. iCloud's Reminders
+lists are left out, and so are calendars shared with you read only, from
+the edit buttons. The calendar iCloud uses for new events comes first.
+
+Needs `python-icalendar` and `python-recurring-ical-events` (the setup installs
+them). What the form offers and CalDAV cannot store is left out of the form
+for these calendars: Google Meet, Google's event colours, and guests. A
+CalDAV server sends invitations itself, so the panel could not honour "don't
+send", and it does not add guests; invite them on your phone or Mac. An event
+you were invited to keeps its guests when you edit it. "Default"
+notifications mean none, since CalDAV has no calendar default. Clicking an
+event opens nothing, because CalDAV carries no link to it.
+
+Each save sends the event with the version the panel read, so a change made
+on another device in the meantime is refused rather than overwritten. Wait
+for the next sync, then try again.
+
 ## Use another source
 
 The widget has no idea Google exists. It reads one file and renders it:
@@ -400,7 +460,8 @@ These extra fields are optional. Omit them and everything still works:
 | `reminders` | List of whole minutes before the start, e.g. `[10, 60]`, at which to raise a desktop notification. `[]` or absent means none given. The bundled sync takes Google's pop-up reminders (the calendar's defaults when the event uses them) or an iCal feed's `DISPLAY`/`AUDIO` alarms counted from the start; e-mail reminders are left out |
 
 A top-level `writableCalendars` list (`id`, `name`, `color`) turns on the
-panel's edit buttons for those calendars. Only the bundled sync should write
+panel's edit buttons for those calendars. An optional `lacks` list on each
+(`guests`, `meet`, `color`) leaves those fields out of the form. Only the bundled sync should write
 it: the panel sends its edits to the bundled event command, not to your writer.
 
 Rules a writer has to follow:
@@ -518,6 +579,8 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | `401 invalid_grant` | The refresh token expired. Almost always an app left in Testing, which caps refresh tokens at seven days. Publish it, then log in again |
 | `gws is not installed or not on PATH` from the timer, but it works in your terminal | `gwsPath` is not absolute. `sync/setup` writes it for you |
 | "Write access not granted" in the event form | The token has no `calendar.events` scope. See [Create and edit events](#create-and-edit-events) |
+| `refused the sign-in` on the CalDAV backend | For iCloud, the password must be an app-specific one, not your Apple ID password. Revoking it at account.apple.com also ends here. Run `sync/setup --caldav` again |
+| `passwordCommand did not answer` from the timer | The keyring is locked. It unlocks with your login; check `secret-tool lookup service omarchy-calendar-caldav username you@icloud.com` in a terminal |
 | "Google refused the change: Shared properties can only be changed by the organizer" | The event is an invitation. Only its organizer can change its title, time or guests. Your own colour, notification and busy or free still change |
 | `cannot parse gws version` from the timer, with `exec: node: not found` | `gwsPath` is absolute but points at an npm wrapper that needs node on your shell PATH. With mise, use its shim: `~/.local/share/mise/shims/gws`. `sync/setup` checks this and records the shim for you |
 | `Not in a workspace` during setup, or setup says gws is not the Google Workspace CLI | Another program named `gws` comes first on your PATH, for example the git workspace helper. Pass the right one: `GWS=/absolute/path/to/gws sync/setup` |

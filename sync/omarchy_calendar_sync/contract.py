@@ -133,6 +133,9 @@ def _validate_writable(writable):
             value = calendar.get(field)
             if not isinstance(value, str) or not value:
                 problems.append(f"{where}.{field} must be a non-empty string")
+        lacks = calendar.get("lacks", [])
+        if not isinstance(lacks, list) or not all(isinstance(item, str) for item in lacks):
+            problems.append(f"{where}.lacks must be a list of strings when present")
     return problems
 
 
