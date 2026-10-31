@@ -4,6 +4,15 @@ const { loadQmlJs } = require('./load-qml-js.js')
 
 const Model = loadQmlJs('Model.js')
 
+test('shortcutLegendText lines the labels up under the longest keys', () => {
+  const text = Model.shortcutLegendText('Shortcuts', [
+    { keys: 'n', label: 'new' },
+    { keys: '← →', label: 'days' },
+    { keys: 'Esc', label: 'back' }
+  ])
+  assert.equal(text, 'Shortcuts\nn    new\n← →  days\nEsc  back')
+})
+
 test('layoutFromSettings: no settings gives the standard layout', () => {
   assert.deepEqual(Model.layoutFromSettings(undefined), Model.layoutPreset('standard'))
   assert.deepEqual(Model.layoutFromSettings({}), Model.layoutPreset('standard'))

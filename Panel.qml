@@ -112,7 +112,6 @@ Panel {
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
   readonly property bool agendaBelow: root.layout.agendaPlacement === "below"
-  readonly property bool shortcutLegendExpanded: setting("shortcutLegendExpanded", false) === true
   readonly property bool showYearProgress: root.layout.showYearProgress
   // Google's working-location markers describe no commitment, so they are
   // out by default. Declined invitations stay in: you probably still want
@@ -991,6 +990,7 @@ Panel {
                   Model.isoWeek(root.today.getFullYear(), root.today.getMonth(), root.today.getDate())
                 ])
                 settingsOpen: root.settingsOpen
+                showShortcuts: root.layout.showShortcutLegend
                 canGoHome: root.selectedDayKey !== root.todayKey
                   || root.viewYear !== root.today.getFullYear() || root.viewMonth !== root.today.getMonth()
                 onHomeRequested: root.goToToday()
@@ -1040,16 +1040,6 @@ Panel {
                 visible: root.agendaBelow && !root.settingsOpen
                 width: parent.width
                 height: visible ? Math.min(agenda.naturalHeight, root.agendaBelowMaxHeight) : 0
-              }
-
-              ShortcutLegend {
-                width: parent.width
-                visible: !root.settingsOpen && root.layout.showShortcutLegend
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                expanded: root.shortcutLegendExpanded
-                onExpandToggled: root.persistSettings({ shortcutLegendExpanded: !root.shortcutLegendExpanded })
               }
 
               // Everything settings changes is owned by this panel and

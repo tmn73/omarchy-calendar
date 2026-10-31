@@ -5,8 +5,8 @@ import qs.Ui
 
 import "Strings.js" as Strings
 
-// Today, large, with "weekday · time · week N" under it and the settings
-// button at the right. Once the view has moved away from today
+// Today, large, with "weekday · time · week N" under it and the shortcuts
+// and settings buttons at the right. Once the view has moved away from today
 // the date is also the way back: clicking what you are looking for beats
 // hunting for a reset button.
 Item {
@@ -19,6 +19,7 @@ Item {
   property string sublineText: ""
   property bool settingsOpen: false
   property bool canGoHome: false
+  property bool showShortcuts: true
 
   signal homeRequested()
   signal settingsToggled()
@@ -114,6 +115,13 @@ Item {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
+
+    ShortcutsButton {
+      visible: root.showShortcuts && !root.settingsOpen
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      language: root.language
+    }
 
     PanelActionButton {
       iconText: root.settingsOpen ? "󰅖" : "󰒓"
