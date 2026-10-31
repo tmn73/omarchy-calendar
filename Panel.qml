@@ -294,6 +294,11 @@ Panel {
   readonly property int settingsWidth: grid.width + Style.spacing.hairline + root.agendaWidth + root.columnPadding * 2
   readonly property int inspectorWidth: Style.space(290)
   readonly property int columnPadding: Style.space(14)
+  // Each column pads its right side only toward a divider. At the panel's
+  // edge the panel's own padding is the margin, and a column padding on top
+  // of it left the right side twice as wide as the left.
+  readonly property bool agendaBeside: !root.agendaBelow && !root.settingsOpen
+  readonly property bool columnAfterMonth: root.agendaBeside || root.inspectorOpen
 
   function applyEvents(raw) {
     var doc = null
@@ -963,7 +968,7 @@ Panel {
           // ---- Left: the month.
           Flickable {
             id: leftScroll
-            width: leftContent.width + root.columnPadding
+            width: leftContent.width + (root.columnAfterMonth ? root.columnPadding : 0)
             height: parent.height
             contentWidth: width
             contentHeight: leftContent.implicitHeight
@@ -1105,7 +1110,7 @@ Panel {
           }
 
           Rectangle {
-            visible: !root.agendaBelow && !root.settingsOpen
+            visible: root.agendaBeside
             width: Style.spacing.hairline
             height: parent.height
             color: Util.alpha(root.contentForeground, 0.1)
@@ -1114,8 +1119,8 @@ Panel {
           // ---- Middle: the agenda, unless it sits under the month.
           Item {
             id: agendaBesideSlot
-            visible: !root.agendaBelow && !root.settingsOpen
-            width: root.agendaWidth + root.columnPadding * 2
+            visible: root.agendaBeside
+            width: root.agendaWidth + root.columnPadding * (root.inspectorOpen ? 2 : 1)
             height: parent.height
 
             AgendaColumn {
@@ -1125,7 +1130,7 @@ Panel {
               parent: root.agendaBelow ? agendaBelowSlot : agendaBesideSlot
               anchors.fill: parent
               anchors.leftMargin: root.agendaBelow ? 0 : root.columnPadding
-              anchors.rightMargin: root.agendaBelow ? 0 : root.columnPadding
+              anchors.rightMargin: root.agendaBelow || !root.inspectorOpen ? 0 : root.columnPadding
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               language: root.language
