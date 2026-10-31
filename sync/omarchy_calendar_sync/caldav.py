@@ -38,6 +38,7 @@ from datetime import date, datetime, timedelta, timezone
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
 from .errors import EventNotFound, SyncError
 from .ics import FEED_COLORS, _load_libs, _popup_reminders, occurrence_to_event
 from .localzone import resolve_local_timezone
@@ -172,9 +173,11 @@ def _http(method, url, headers, data):
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with _OPENER.open(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            return response.status, dict(response.headers), response.read()
+            return response.status, dict(response.headers), read_body(response)
     except urllib.error.HTTPError as error:
-        return error.code, dict(error.headers or {}), error.read() or b""
+        return error.code, dict(error.headers or {}), read_at_most(error, MAX_ERROR_BYTES)
+    except ResponseTooLarge as error:
+        raise CaldavError("%s answered: %s" % (redact(url), error)) from error
     except (urllib.error.URLError, OSError) as error:
         raise CaldavError("cannot reach %s: %s" % (redact(url), getattr(error, "reason", error))) from error
 

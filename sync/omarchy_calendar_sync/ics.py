@@ -25,6 +25,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 
+from .bounded import read_body
 from .errors import SyncError
 from .localzone import resolve_local_timezone
 from .resources import build_event
@@ -162,7 +163,8 @@ def parse_feeds(raw):
 def _http_get(url):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:
-        return response.read()
+        # ResponseTooLarge is a ValueError, so calendars() skips only this feed.
+        return read_body(response)
 
 
 def to_node(value, local_tz):

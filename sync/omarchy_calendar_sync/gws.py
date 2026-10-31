@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
 from .errors import EventNotFound, SyncError
 
 MINIMUM_VERSION = (0, 13, 2)
@@ -84,9 +85,11 @@ def _https(method, url, headers, data):
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
-            return response.status, response.read().decode("utf-8", "replace")
+            return response.status, read_body(response).decode("utf-8", "replace")
     except urllib.error.HTTPError as error:
-        return error.code, error.read().decode("utf-8", "replace")
+        return error.code, read_at_most(error, MAX_ERROR_BYTES).decode("utf-8", "replace")
+    except ResponseTooLarge as error:
+        raise GwsApiError(f"Google answered: {error}") from error
     except (urllib.error.URLError, OSError) as error:
         raise GwsApiError(f"cannot reach Google: {getattr(error, 'reason', error)}") from error
 
