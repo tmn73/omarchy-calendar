@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from .errors import SyncError
+from .errors import EventNotFound, SyncError
 
 MINIMUM_VERSION = (0, 13, 2)
 FALLBACK_COLOR = "#9e9e9e"
@@ -55,7 +55,7 @@ class GwsApiError(GwsError):
     """Google returned an error, or gws returned something unparseable."""
 
 
-class GwsNotFound(GwsApiError):
+class GwsNotFound(GwsApiError, EventNotFound):
     """The event or the calendar does not exist (Google error 404)."""
 
 

@@ -1326,6 +1326,22 @@ function isWritable(event, writableCalendars) {
   return false
 }
 
+// A writable calendar's "lacks" lists what the form offers that it cannot
+// store ("guests", "meet", "color"). Absent means it lacks nothing, which
+// is Google.
+function calendarLacks(calendar, feature) {
+  var lacks = (calendar && calendar.lacks) || []
+  for (var i = 0; i < lacks.length; i++)
+    if (lacks[i] === feature) return true
+  return false
+}
+
+// The backend that wrote the events file: "caldav" for a source of
+// "caldav/7.3.0", blank before the first sync.
+function sourceBackend(source) {
+  return text(source).split("/")[0]
+}
+
 // Today: the next half hour. Another day: 09:00. Always 30 minutes, and
 // never past midnight, so the default always saves.
 function defaultFormTimes(dateKeyText, now) {
@@ -1380,12 +1396,16 @@ function isValidEmail(address) {
 }
 
 // The guests who would get an email: everyone but the calendar's owner.
+// An attendee with no address cannot get one: an iCalendar source can
+// report only your own answer, with no email beside it.
 function otherGuests(form) {
   var me = normalizeEmail(form.calendarId)
   var out = []
   var guests = form.guests || []
-  for (var i = 0; i < guests.length; i++)
-    if (normalizeEmail(guests[i].email) !== me) out.push(guests[i])
+  for (var i = 0; i < guests.length; i++) {
+    var email = normalizeEmail(guests[i].email)
+    if (email && email !== me) out.push(guests[i])
+  }
   return out
 }
 

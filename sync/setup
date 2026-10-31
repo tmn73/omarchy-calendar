@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Interactive onboarding for the calendar sync.
 #
-# With --ics it only asks for secret iCal addresses. Otherwise it sets up the
-# gws backend. Automates: GCP project creation, Calendar API enablement, gws profile
+# With --ics it only asks for secret iCal addresses. With --caldav it asks for
+# a CalDAV account such as iCloud. Otherwise it sets up the gws backend. Automates: GCP project creation, Calendar API enablement, gws profile
 # layout, the scoped login, and the systemd timer.
 # Cannot automate: the OAuth consent screen, declaring the calendar scope,
 # publishing to production, and creating the Desktop OAuth client. Google
@@ -16,13 +16,19 @@ set -euo pipefail
 # --ics skips Google Cloud entirely: it asks for your calendar's secret iCal
 # address and reads that instead. Read only. Run setup again without --ics to
 # go back to the Google Cloud sync.
+#
+# --caldav skips Google entirely too: it asks for a CalDAV server (iCloud by
+# default), a username and an app password, keeps the password in the
+# keyring, and reads and writes that server.
 WRITE=0
 ICS=0
+CALDAV=0
 for arg in "$@"; do
   case "$arg" in
     --write) WRITE=1 ;;
     --ics) ICS=1 ;;
-    *) echo "unknown option: $arg (expected --write or --ics)"; exit 2 ;;
+    --caldav) CALDAV=1 ;;
+    *) echo "unknown option: $arg (expected --write, --ics or --caldav)"; exit 2 ;;
   esac
 done
 
@@ -158,6 +164,107 @@ PYEOF
   exit 0
 }
 
+setup_caldav() {
+  step "Reading and writing your calendars over CalDAV"
+  if ! python3 -c 'import icalendar, recurring_ical_events' 2>/dev/null; then
+    echo "  Installing python-icalendar and python-recurring-ical-events"
+    sudo pacman -S --needed --noconfirm python-icalendar python-recurring-ical-events
+  fi
+
+  cat <<'EOF'
+
+  iCloud: do not use your Apple ID password. Make an app-specific one:
+    account.apple.com > Sign-In and Security > App-Specific Passwords
+  (two-factor authentication must be on). The username is your Apple ID.
+
+  Another server: its CalDAV address, for example
+    Nextcloud  https://your-server/remote.php/dav/
+    Fastmail   https://caldav.fastmail.com/
+EOF
+  [ -t 0 ] || { echo "  Not a terminal, cannot ask for the account."; exit 1; }
+
+  local url username password
+  read -r -p "  CalDAV address [https://caldav.icloud.com/]: " url || true
+  url="${url:-https://caldav.icloud.com/}"
+  # The password travels with every request, so only https, or plain http
+  # to a server on this machine.
+  case "$url" in
+    https://* | http://localhost[:/]* | http://127.0.0.1[:/]*) ;;
+    *) echo "  Expected an https:// address, nothing changed."; exit 1 ;;
+  esac
+  read -r -p "  Username: " username || true
+  [ -n "$username" ] || { echo "  No username given, nothing changed."; exit 1; }
+  read -r -s -p "  App password: " password || true
+  echo
+  [ -n "$password" ] || { echo "  No password given, nothing changed."; exit 1; }
+
+  if [ "$WRITE" = 0 ]; then
+    printf '\n  Create and edit events from the widget? [Y/n] '
+    read -r answer || true
+    case "${answer:-}" in n|N|no|No|NO) WRITE=0 ;; *) WRITE=1 ;; esac
+  fi
+
+  # The password goes to the keyring on stdin, never as an argument, and
+  # the config only names the lookup. Without secret-tool it goes in the
+  # config instead, which is mode 600.
+  local in_keyring=0
+  if command -v secret-tool >/dev/null; then
+    printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
+      service omarchy-calendar-caldav username "$username"
+    in_keyring=1
+  else
+    echo "  secret-tool not found, so the password goes in $CONFIG (mode 600)."
+  fi
+
+  mkdir -p "$(dirname "$CONFIG")"
+  # The new config replaces the current one only after a test sync passes.
+  local candidate
+  candidate=$(mktemp "$CONFIG.XXXXXX")
+  # :- because the trap runs after this function's locals are gone.
+  trap 'rm -f "${candidate:-}"' EXIT
+  # The password goes in on file descriptor 3, as the iCal addresses do.
+  python3 - "$CONFIG" "$candidate" "$url" "$username" "$in_keyring" "$WRITE" 3< <(printf '%s' "$password") <<'PY'
+import json, os, pathlib, sys
+
+path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
+url, username, in_keyring, write = sys.argv[3], sys.argv[4], sys.argv[5] == "1", sys.argv[6] == "1"
+with os.fdopen(3) as stream:
+    password = stream.read()
+config = {}
+if path.exists():
+    try:
+        config = json.loads(path.read_text())
+    except ValueError:
+        config = {}
+account = {"url": url, "username": username}
+if in_keyring:
+    account["passwordCommand"] = ["secret-tool", "lookup", "service", "omarchy-calendar-caldav",
+                                  "username", username]
+else:
+    account["password"] = password
+config["backend"] = "caldav"
+config["caldav"] = account
+config["write"] = write
+if "@" in username and not config.get("identity"):
+    config["identity"] = username
+fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "w") as stream:
+    stream.write(json.dumps(config, indent=2) + "\n")
+os.chmod(candidate, 0o600)
+PY
+
+  step "Testing the account"
+  "$SYNC_BIN" --config "$candidate" || {
+    echo "  The sync failed, see above. $CONFIG is unchanged."
+    exit 1
+  }
+  mv -f "$candidate" "$CONFIG"
+  echo "  backend set to caldav for $username in $CONFIG"
+
+  install_timer_and_sync
+  exit 0
+}
+
 # `read` returns non-zero at EOF, which under `set -e` would end the script
 # silently at the first prompt whenever stdin is not a terminal.
 pause() {
@@ -170,6 +277,7 @@ pause() {
 }
 
 [ "$ICS" = 1 ] && setup_ics
+[ "$CALDAV" = 1 ] && setup_caldav
 
 if [ ! -t 0 ]; then
   cat <<'EOF'

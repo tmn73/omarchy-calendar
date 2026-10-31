@@ -7,3 +7,7 @@ which backend produced it.
 
 class SyncError(Exception):
     """A calendar source could not be read."""
+
+
+class EventNotFound(SyncError):
+    """The event a write names is no longer at its source."""

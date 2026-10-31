@@ -45,6 +45,11 @@ Column {
       if (root.calendars[i].id === root.form.calendarId) return root.calendars[i]
     return { id: root.form.calendarId || "", name: root.form.calendarId || "", color: "transparent" }
   }
+  // A CalDAV calendar has no Meet, no Google colours and no guests the
+  // panel can invite (see the sync's caldav.py), so the form leaves them out.
+  readonly property bool hasGuests: !Model.calendarLacks(root.calendar, "guests")
+  readonly property bool hasMeet: !Model.calendarLacks(root.calendar, "meet")
+  readonly property bool hasColor: !Model.calendarLacks(root.calendar, "color")
 
   spacing: Style.space(8)
 
@@ -270,6 +275,9 @@ Column {
 
   GuestList {
     id: guestList
+    // Still shown when quick add brought guests along, so they can be
+    // removed: the save refuses them on a calendar that lacks guests.
+    visible: root.hasGuests || Model.otherGuests(root.form).length > 0
     width: parent.width
     guests: root.form.guests || []
     suggestions: root.guestSuggestions
@@ -282,6 +290,7 @@ Column {
 
   FieldRow {
     id: meetRow
+    visible: root.hasMeet
     label: root.tr("form.meet")
     ToggleSwitch {
       id: meetToggle
@@ -397,6 +406,8 @@ Column {
     width: parent.width
     form: root.form
     calendarColor: root.calendar.color
+    hasGuests: root.hasGuests
+    hasColor: root.hasColor
     language: root.language
     foreground: root.foreground
     fontFamily: root.fontFamily

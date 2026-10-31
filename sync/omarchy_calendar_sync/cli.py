@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import config as config_module
 from . import contract, normalize, suggestions
+from .caldav import Caldav
 from .caldir import Caldir
 from .eds import Eds
 from .errors import SyncError
@@ -123,11 +124,14 @@ def run(client, cfg, now, out_path, local_tz):
     # writing on and the backend can write; otherwise the key is absent.
     writable = []
     if cfg.get("write") and getattr(client, "can_write", False):
-        writable = [
-            {"id": c["id"], "name": c["name"], "color": c["color"]}
-            for c in calendars
-            if c.get("writable")
-        ]
+        for c in calendars:
+            if not c.get("writable"):
+                continue
+            entry = {"id": c["id"], "name": c["name"], "color": c["color"]}
+            # What the form offers that this calendar cannot store.
+            if c.get("lacks"):
+                entry["lacks"] = list(c["lacks"])
+            writable.append(entry)
     # Only for the event form, so only when writing is on.
     guests = []
     if writable:
@@ -156,8 +160,10 @@ def build_client(cfg, local_tz=None):
         return Ics(cfg.get("ics"), identity=cfg.get("identity", ""), local_tz=local_tz)
     if backend == "caldir":
         return Caldir(binary=cfg["caldirPath"], pull=bool(cfg.get("caldirPull")))
+    if backend == "caldav":
+        return Caldav(cfg.get("caldav"), identity=cfg.get("identity", ""), local_tz=local_tz)
     raise config_module.ConfigError(
-        "unknown backend %r; expected \"gws\", \"eds\", \"ics\" or \"caldir\"" % backend
+        "unknown backend %r; expected \"gws\", \"eds\", \"ics\", \"caldir\" or \"caldav\"" % backend
     )
 
 

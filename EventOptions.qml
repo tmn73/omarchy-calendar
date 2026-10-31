@@ -18,6 +18,9 @@ Column {
   property string language: "en"
   // The colour the event shows with no colorId: its calendar's.
   property color calendarColor: "transparent"
+  // Off for a calendar that cannot store them (EventForm reads its lacks).
+  property bool hasGuests: true
+  property bool hasColor: true
 
   signal edited(var patch)
 
@@ -138,6 +141,7 @@ Column {
     }
 
     OptionRow {
+      visible: root.hasColor
       label: root.tr("options.colour")
       Flow {
         width: parent.width
@@ -168,6 +172,7 @@ Column {
 
       OptionRow {
         required property string modelData
+        visible: root.hasGuests
         label: root.tr("options." + modelData)
         stacked: false
         controlWidth: permissionToggle.implicitWidth

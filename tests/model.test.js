@@ -514,6 +514,25 @@ test('otherGuests leaves out the calendar owner', () => {
   assert.deepEqual(Model.otherGuests({ calendarId: 'me@example.com', guests: [] }), [])
 })
 
+test('otherGuests leaves out an attendee with no address', () => {
+  const form = { calendarId: 'https://caldav.example.com/home/', guests: [{ email: '', responseStatus: 'accepted' }] }
+  assert.deepEqual(Model.otherGuests(form), [])
+})
+
+test('calendarLacks reads the calendar\'s lacks list', () => {
+  const caldav = { id: 'h', name: 'Home', color: '#000000', lacks: ['guests', 'meet', 'color'] }
+  assert.equal(Model.calendarLacks(caldav, 'meet'), true)
+  assert.equal(Model.calendarLacks(caldav, 'reminders'), false)
+  assert.equal(Model.calendarLacks({ id: 'g', name: 'Google', color: '#000000' }, 'meet'), false)
+  assert.equal(Model.calendarLacks(null, 'meet'), false)
+})
+
+test('sourceBackend names the backend that wrote the events file', () => {
+  assert.equal(Model.sourceBackend('caldav/7.3.0'), 'caldav')
+  assert.equal(Model.sourceBackend('gws/0.13.2'), 'gws')
+  assert.equal(Model.sourceBackend(undefined), '')
+})
+
 const SUGGESTIONS = [
   { email: 'bo.lee@example.com', name: 'Bo Lee' },
   { email: 'ana@example.com', name: '' },

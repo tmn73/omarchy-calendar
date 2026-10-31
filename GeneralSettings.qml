@@ -67,7 +67,7 @@ Column {
   SettingsCaption {
     foreground: root.foreground
     fontFamily: root.fontFamily
-    text: root.tr("settings.googleAccount")
+    text: root.tr("settings.account")
   }
 
   // The panel cannot turn writing on by itself: it needs a Google sign-in
