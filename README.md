@@ -396,7 +396,10 @@ Or by hand:
 `passwordCommand` is any command that prints the password, such as
 `["op", "read", "op://Private/iCloud/app-password"]` for 1Password or
 `["pass", "show", "icloud-caldav"]`; it runs without a shell. `"password"`
-works in its place, in a file you keep at mode 600. `caldav` also takes a
+works in its place, in a file you keep at mode 600. The password goes only
+over https, to the server in `url` and to the servers it names for your
+calendars (iCloud keeps each account's on a host of its own); a request that
+a redirect would take anywhere else is refused. `caldav` also takes a
 list of accounts. Calendar ids are the calendars' URLs, so
 `calendars.include`/`exclude` take those or the names. iCloud's Reminders
 lists are left out, and so are calendars shared with you read only, from
@@ -580,6 +583,7 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | `gws is not installed or not on PATH` from the timer, but it works in your terminal | `gwsPath` is not absolute. `sync/setup` writes it for you |
 | "Write access not granted" in the event form | The token has no `calendar.events` scope. See [Create and edit events](#create-and-edit-events) |
 | `refused the sign-in` on the CalDAV backend | For iCloud, the password must be an app-specific one, not your Apple ID password. Revoking it at account.apple.com also ends here. Run `sync/setup --caldav` again |
+| `redirected to … which gets no password` on the CalDAV backend | The address in `url` redirects to another server, often from `/.well-known/caldav`. Put the server's own CalDAV address in `url` |
 | `passwordCommand did not answer` from the timer | The keyring is locked. It unlocks with your login; check `secret-tool lookup service omarchy-calendar-caldav username you@icloud.com` in a terminal |
 | "Google refused the change: Shared properties can only be changed by the organizer" | The event is an invitation. Only its organizer can change its title, time or guests. Your own colour, notification and busy or free still change |
 | `cannot parse gws version` from the timer, with `exec: node: not found` | `gwsPath` is absolute but points at an npm wrapper that needs node on your shell PATH. With mise, use its shim: `~/.local/share/mise/shims/gws`. `sync/setup` checks this and records the shim for you |

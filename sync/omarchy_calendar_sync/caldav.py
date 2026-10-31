@@ -124,9 +124,15 @@ def redact(url):
     return "%s://%s/..." % (parts.scheme, parts.hostname) if parts.hostname else "(no url)"
 
 
-def _base_domain(host):
-    labels = (host or "").lower().split(".")
-    return ".".join(labels[-2:])
+def _origin(url):
+    """(scheme, host, port) of a URL, the unit the password is given to.
+    None when the URL names no host or a bad port."""
+    parts = urllib.parse.urlsplit(url)
+    try:
+        port = parts.port or {"https": 443, "http": 80}.get(parts.scheme)
+    except ValueError:
+        return None
+    return (parts.scheme, parts.hostname, port) if parts.hostname else None
 
 
 def _run_password_command(argv):
@@ -152,8 +158,8 @@ def _run_password_command(argv):
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     # urllib follows a redirect only for GET and HEAD, and drops the body.
-    # WebDAV redirects PROPFIND too (iCloud sends every account to its own
-    # host), so redirects are followed by hand, method and body intact.
+    # WebDAV redirects PROPFIND too (/.well-known/caldav, for one), so
+    # redirects are followed by hand, method and body intact.
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
@@ -583,6 +589,8 @@ class Caldav:
         self._passwords = {}
         # Calendar id -> account, filled by calendars().
         self._owners = {}
+        # (url, username) -> the origins that get the password. See _servers.
+        self._named = {}
 
     # ---- surface shared with the other backends
 
@@ -763,20 +771,32 @@ class Caldav:
         return username if "@" in username else ""
 
     def _account_for(self, calendar_id):
+        if calendar_id not in self._owners and len(self._accounts) > 1:
+            # The event command runs without a sync first, so it has no map
+            # of calendars to accounts. Only an account's own listing says a
+            # calendar is its: a guess from the host could send one account's
+            # password to another account's server.
+            for account in self._accounts:
+                try:
+                    for calendar in self._discover(account):
+                        self._owners[calendar["id"]] = account
+                except CaldavError:
+                    continue
+                if calendar_id in self._owners:
+                    break
         if calendar_id in self._owners:
             return self._owners[calendar_id]
         if len(self._accounts) == 1:
             return self._accounts[0]
-        # The event command runs without a sync first, so it has no map of
-        # calendars to accounts. iCloud moves each account to a host of its
-        # own, so the match is on the domain, not the host.
-        domain = _base_domain(urllib.parse.urlsplit(calendar_id).hostname)
-        for account in self._accounts:
-            if _base_domain(urllib.parse.urlsplit(account["url"]).hostname) == domain:
-                return account
-        if self._accounts:
-            return self._accounts[0]
-        raise CaldavError("no account configured")
+        raise CaldavNotFound("no account lists %s" % redact(calendar_id))
+
+    def _servers(self, account):
+        """The servers that get the account's password: the one in its url,
+        and those that server named in discovery. iCloud keeps each
+        account's calendars on a host of its own, named in the calendar
+        home, not reached by a redirect."""
+        key = (account["url"], account["username"])
+        return self._named.setdefault(key, {_origin(account["url"])})
 
     def _password(self, account):
         key = (account["url"], account["username"])
@@ -789,18 +809,35 @@ class Caldav:
 
     def _request(self, account_or_calendar, method, url, body=None, headers=None, expect=(200, 207)):
         """Send one request, following redirects. Returns (status, headers,
-        body, final url). The password goes only to the account's domain."""
-        account = (
-            account_or_calendar if isinstance(account_or_calendar, dict)
-            else self._account_for(account_or_calendar)
-        )
-        domain = _base_domain(urllib.parse.urlsplit(account["url"]).hostname)
+        body, final url). Every request carries the password, so one to a
+        server outside the account's is refused before it leaves."""
+        if isinstance(account_or_calendar, dict):
+            account = account_or_calendar
+            servers = self._servers(account)
+        else:
+            account = self._account_for(account_or_calendar)
+            # A calendar id comes from the account's own listing, or from the
+            # events file that listing wrote (writes.parse_request refuses
+            # any other), so its server is one the account's server named.
+            servers = self._servers(account) | {_origin(account_or_calendar)}
+        start = url
         for _ in range(MAX_REDIRECTS + 1):
-            parts = urllib.parse.urlsplit(url)
-            sent = {"User-Agent": USER_AGENT, **(headers or {})}
-            if _may_send_password(parts, domain):
-                token = "%s:%s" % (account["username"], self._password(account))
-                sent["Authorization"] = "Basic " + base64.b64encode(token.encode()).decode()
+            if not _may_send_password(url, servers):
+                if url == start:
+                    raise CaldavError(
+                        "%s is not an https address of the account's server, so it gets "
+                        "no password" % redact(url)
+                    )
+                raise CaldavError(
+                    "redirected to %s, which gets no password; put that address in "
+                    "the account's url" % redact(url)
+                )
+            token = "%s:%s" % (account["username"], self._password(account))
+            sent = {
+                "User-Agent": USER_AGENT,
+                **(headers or {}),
+                "Authorization": "Basic " + base64.b64encode(token.encode()).decode(),
+            }
             status, reply_headers, reply = self._http(method, url, sent, body)
             location = _header(reply_headers, "Location")
             if status in (301, 302, 303, 307, 308) and location:
@@ -838,7 +875,12 @@ class Caldav:
         return parse_multistatus(body, final)
 
     def _discover(self, account):
-        """The account's event calendars: principal, home, then the list."""
+        """The account's event calendars: principal, home, then the list.
+
+        Every answer comes from a server that gets the password already
+        (_request refuses any other), so the servers it names get it too.
+        """
+        servers = self._servers(account)
         principal = ""
         for start in (account["url"], urllib.parse.urljoin(account["url"], "/.well-known/caldav")):
             try:
@@ -853,6 +895,7 @@ class Caldav:
                 break
         if not principal:
             raise CaldavError("%s did not name a CalDAV principal" % redact(account["url"]))
+        servers.add(_origin(principal))
 
         home = inbox = ""
         for _href, props in self._propfind(
@@ -862,6 +905,7 @@ class Caldav:
             inbox = inbox or _href_in(props, "c", "schedule-inbox-URL", principal)
         if not home:
             raise CaldavError("%s has no calendar home" % redact(principal))
+        servers.update(_origin(url) for url in (home, inbox) if url)
 
         default = ""
         if inbox:
@@ -884,6 +928,7 @@ class Caldav:
             if calendar is None:
                 continue
             calendar["primary"] = bool(default) and _same_collection(href, default)
+            servers.add(_origin(href))
             calendars.append(calendar)
         return calendars
 
@@ -955,12 +1000,15 @@ class Caldav:
                       expect=(200, 201, 204))
 
 
-def _may_send_password(parts, domain):
-    """Only over https, and only to the account's own domain, so a redirect
-    cannot carry the password elsewhere. Plain http only to this machine."""
-    if _base_domain(parts.hostname) != domain:
+def _may_send_password(url, servers):
+    """Only to one of the account's servers, exactly, so a redirect cannot
+    carry the password elsewhere, and only over https. Plain http only to
+    this machine."""
+    origin = _origin(url)
+    if origin is None or origin not in servers:
         return False
-    return parts.scheme == "https" or parts.hostname in ("localhost", "127.0.0.1", "::1")
+    scheme, host, _port = origin
+    return scheme == "https" or host in ("localhost", "127.0.0.1", "::1")
 
 
 def _if_match(etag):

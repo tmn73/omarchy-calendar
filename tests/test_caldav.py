@@ -89,8 +89,9 @@ def _multistatus(responses):
 
 
 class FakeServer:
-    """Enough of iCloud: a redirect to the account's host, discovery, a
-    calendar-query REPORT, and PUT and DELETE with ETag preconditions."""
+    """Enough of iCloud: discovery on the address everyone uses, which names
+    the account's own host for its calendars, a calendar-query REPORT, and
+    PUT and DELETE with ETag preconditions."""
 
     def __init__(self, resources=None, password="app-pass", default=PERSONAL, bare_default=False,
                  uid_filter=True):
@@ -117,13 +118,16 @@ class FakeServer:
         self.calls.append((method, url, dict(headers)))
         parts = urllib.parse.urlsplit(url)
         expected = "Basic " + base64.b64encode(("me@example.com:" + self.password).encode()).decode()
-        if parts.hostname == "caldav.example.com":
-            # iCloud sends every account on to its own host.
-            return 301, {"Location": HOST + parts.path}, b""
         if headers.get("Authorization") != expected:
             return 401, {}, b""
         body = (data or b"").decode()
         path = parts.path
+        if parts.hostname == "caldav.example.com":
+            # Like iCloud: discovery only, naming the account's own host for
+            # its calendar home.
+            if method == "PROPFIND" and path in ("/", "/.well-known/caldav", PRINCIPAL, INBOX):
+                return 207, {}, self._propfind(path, headers.get("Depth"))
+            return 404, {}, b""
         if method == "PROPFIND":
             return 207, {}, self._propfind(path, headers.get("Depth"))
         calendar_url = next((c for c in self.store if url.startswith(c)), None)
@@ -163,7 +167,7 @@ class FakeServer:
         if path == PRINCIPAL:
             return _multistatus([(path, "<c:calendar-home-set><d:href>%s</d:href></c:calendar-home-set>"
                                         "<c:schedule-inbox-URL><d:href>%s</d:href></c:schedule-inbox-URL>"
-                                        % (HOME, INBOX))])
+                                        % (HOST + HOME, INBOX))])
         if path == INBOX:
             default = urllib.parse.urlsplit(self.default).path
             if not self.bare_default:
@@ -224,26 +228,59 @@ class TestDiscovery(unittest.TestCase):
         calendars = make_client(FakeServer(default=WORK, bare_default=True)).calendars()
         self.assertEqual([c["name"] for c in calendars if c["primary"]], ["Work"])
 
-    def test_follows_the_redirect_with_the_password(self):
+    def test_the_host_the_server_names_gets_the_password(self):
         server = FakeServer()
         make_client(server).calendars()
-        first, second = server.calls[0], server.calls[1]
-        self.assertEqual(urllib.parse.urlsplit(first[1]).hostname, "caldav.example.com")
-        self.assertEqual(first[0], second[0])
-        self.assertIn("Authorization", second[2])
+        named = [call for call in server.calls if call[1].startswith(HOST)]
+        self.assertTrue(named)
+        self.assertTrue(all("Authorization" in call[2] for call in named))
 
-    def test_never_sends_the_password_to_another_domain(self):
+    def test_follows_a_redirect_on_the_same_server_with_the_password(self):
         server = FakeServer()
 
-        def leaky(method, url, headers, data):
-            if urllib.parse.urlsplit(url).hostname == "caldav.example.com":
-                return 301, {"Location": "https://evil.example.org/"}, b""
-            server.calls.append((method, url, dict(headers)))
-            return 404, {}, b""
+        def moved(method, url, headers, data):
+            if url == ACCOUNT["url"]:
+                server.calls.append((method, url, dict(headers)))
+                return 301, {"Location": "/.well-known/caldav"}, b""
+            return server(method, url, headers, data)
 
-        with self.assertRaises(CaldavError):
-            make_client(leaky).calendars()
-        self.assertTrue(all("Authorization" not in call[2] for call in server.calls))
+        self.assertEqual(len(make_client(moved).calendars()), 2)
+        method, url, headers = server.calls[1]
+        self.assertEqual((method, url), ("PROPFIND", "https://caldav.example.com/.well-known/caldav"))
+        self.assertIn("Authorization", headers)
+
+    def test_a_redirect_to_any_other_server_is_refused_before_it_leaves(self):
+        # The same parent domain is not enough: under a suffix such as
+        # com.br, that would be anyone's server.
+        for account_url, elsewhere in (
+            (ACCOUNT["url"], "https://evil.example.org/"),
+            (ACCOUNT["url"], "https://p02-caldav.example.com/"),
+            ("https://cloud.empresa.com.br/", "https://outra.com.br/"),
+        ):
+            with self.subTest(elsewhere=elsewhere):
+                reached = []
+
+                def leaky(method, url, headers, data):
+                    if url == account_url:
+                        return 301, {"Location": elsewhere}, b""
+                    reached.append(url)
+                    return 404, {}, b""
+
+                client = make_client(leaky, accounts=dict(ACCOUNT, url=account_url))
+                with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(CaldavError) as caught:
+                    client.calendars()
+                self.assertEqual(reached, [])
+                self.assertIn(urllib.parse.urlsplit(elsewhere).hostname, str(caught.exception))
+
+    def test_a_calendar_gets_only_its_own_accounts_password(self):
+        server = FakeServer([(PERSONAL, "lone-1.ics", LONE)])
+        other = {"url": "https://dav.other.test/", "username": "you", "password": "other-pass"}
+        # The event command: no sync first, and the other account comes first.
+        make_client(server, accounts=[other, ACCOUNT]).get(PERSONAL, "lone-1")
+        mine = "Basic " + base64.b64encode(b"me@example.com:app-pass").decode()
+        for _method, url, headers in server.calls:
+            ours = urllib.parse.urlsplit(url).hostname != "dav.other.test"
+            self.assertEqual(headers["Authorization"] == mine, ours, url)
 
     def test_wrong_password_names_the_app_specific_password(self):
         with self.assertRaises(CaldavAuthError) as caught:
