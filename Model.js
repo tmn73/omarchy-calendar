@@ -1250,6 +1250,21 @@ var LAYOUT_PRESETS = {
   }
 }
 
+// The keyboard map as the lines of a tooltip: the title, then one key per
+// line with its label. The keys are padded so the labels line up in a
+// monospace font. `rows` are { keys, label }, the label already translated.
+function shortcutLegendText(title, rows) {
+  var width = 0
+  for (var i = 0; i < rows.length; i++) width = Math.max(width, rows[i].keys.length)
+  var lines = [title]
+  for (var r = 0; r < rows.length; r++) {
+    var keys = rows[r].keys
+    while (keys.length < width) keys += " "
+    lines.push(keys + "  " + rows[r].label)
+  }
+  return lines.join("\n")
+}
+
 // A copy, so the caller can persist or change it without touching the preset.
 function layoutPreset(name) {
   var preset = LAYOUT_PRESETS[name] || LAYOUT_PRESETS.standard
