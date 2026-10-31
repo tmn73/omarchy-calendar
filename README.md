@@ -1,15 +1,18 @@
 # Calendar for Omarchy
 
-**Your Google Calendar, in your Omarchy bar.** A month view with your real
-events on it, a bar that tells you what is coming before it starts, and a
-form to create or edit events without opening Google.
+**Your calendar, in your Omarchy bar.** A month view with your real events
+on it, a bar that tells you what is coming before it starts, and a form to
+create or edit events without leaving the desktop.
 
-Not a Google user? The sync reads and writes iCloud and any other CalDAV
-server (community-maintained), see [Sync from iCloud or CalDAV](#sync-from-icloud-or-caldav), and
-reads any iCal feed, see
-[Sync from the secret iCal address](#sync-from-the-secret-ical-address). The
-widget itself reads a plain JSON file, so caldir, khal, vdirsyncer or Nextcloud work
-just as well. See [Sync from caldir](#sync-from-caldir) and [Use another source](#use-another-source).
+Where your events come from:
+
+- **Google Calendar**, read and write. See [Sync your Google Calendar](#sync-your-google-calendar)
+- **iCloud, Nextcloud, Fastmail or any other CalDAV server**, read and write
+  (community-maintained). See [Sync from iCloud or CalDAV](#sync-from-icloud-or-caldav)
+- **Any iCal feed**, read only. See [Sync from the secret iCal address](#sync-from-the-secret-ical-address)
+- **Anything else**: the widget reads a plain JSON file, so caldir, khal or
+  vdirsyncer work just as well. See [Sync from caldir](#sync-from-caldir) and
+  [Use another source](#use-another-source)
 
 ![Preview](preview.png)
 

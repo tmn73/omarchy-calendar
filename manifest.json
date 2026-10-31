@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "tmn73.calendar",
   "name": "Calendar",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "author": "tmn73",
   "license": "MIT",
-  "description": "Your Google Calendar in the bar. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",
+  "description": "Your calendar in the bar: Google, iCloud, any CalDAV server or an iCal feed. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",
   "kinds": [
     "bar-widget"
   ],
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Calendar",
-    "description": "Your Google Calendar in the bar. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",
+    "description": "Your calendar in the bar: Google, iCloud, any CalDAV server or an iCal feed. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",
     "category": "Time",
     "allowMultiple": false,
     "defaults": {
