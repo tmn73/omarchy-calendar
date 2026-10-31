@@ -1321,6 +1321,12 @@ function calendarLacks(calendar, feature) {
   return false
 }
 
+// The backend that wrote the events file: "caldav" for a source of
+// "caldav/7.3.0", blank before the first sync.
+function sourceBackend(source) {
+  return text(source).split("/")[0]
+}
+
 // Today: the next half hour. Another day: 09:00. Always 30 minutes, and
 // never past midnight, so the default always saves.
 function defaultFormTimes(dateKeyText, now) {

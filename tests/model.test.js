@@ -527,6 +527,12 @@ test('calendarLacks reads the calendar\'s lacks list', () => {
   assert.equal(Model.calendarLacks(null, 'meet'), false)
 })
 
+test('sourceBackend names the backend that wrote the events file', () => {
+  assert.equal(Model.sourceBackend('caldav/7.3.0'), 'caldav')
+  assert.equal(Model.sourceBackend('gws/0.13.2'), 'gws')
+  assert.equal(Model.sourceBackend(undefined), '')
+})
+
 const SUGGESTIONS = [
   { email: 'bo.lee@example.com', name: 'Bo Lee' },
   { email: 'ana@example.com', name: '' },

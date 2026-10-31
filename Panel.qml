@@ -107,7 +107,9 @@ Panel {
   // location, so it is right however the plugin was installed.
   readonly property string setupCommand: Model.commandPathFromUrl(
     Qt.resolvedUrl("sync/setup"), Quickshell.env("HOME") || "")
-  readonly property string writeSetupCommand: root.setupCommand + " --write"
+  // A CalDAV account turns writing on in its own setup: --write would start
+  // the Google Cloud one.
+  readonly property string writeSetupCommand: root.setupCommand + (root.caldavSource ? " --caldav" : " --write")
 
   // Which blocks the panel shows. See Model.layoutFromSettings.
   readonly property var layout: Model.layoutFromSettings(root.settings)
@@ -144,9 +146,11 @@ Panel {
   }
 
   // ---- Writing. The sync lists the calendars the panel may change; with no
-  //      list, quick add goes to Google Calendar in the browser instead.
+  //      list, quick add goes to Google Calendar in the browser instead,
+  //      except for CalDAV, whose events are not in Google.
   readonly property var writableCalendars: (eventDoc && eventDoc.writableCalendars) || []
   readonly property bool canWrite: writableCalendars.length > 0
+  readonly property bool caldavSource: Model.sourceBackend(eventDoc ? eventDoc.source : "") === "caldav"
   property bool formOpen: false
   // The form the event form opens with: a get's reply, or a new one.
   property var formInitial: null
@@ -608,6 +612,11 @@ Panel {
     }
     if (!parsed) {
       if (agenda.quickText.trim() !== "") root.showToast(root.tr("quick.needsTitle"))
+      return
+    }
+    if (!root.canWrite && root.caldavSource) {
+      // The text stays in the field for when writing is on.
+      root.showToast(root.tr("toast.writeOff"))
       return
     }
     if (!root.canWrite) {

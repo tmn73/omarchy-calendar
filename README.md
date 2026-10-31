@@ -49,7 +49,8 @@ time away for an event title would be a downgrade you pay for all day.
   with no time is all day, and no day and no time is the next half hour. An
   email address adds a guest, and then Enter opens the form, so you check the
   address before anyone gets an invitation. Read-only sources open Google
-  Calendar with the event filled in
+  Calendar with the event filled in, except CalDAV, whose events are not in
+  Google: with writing off, Enter says so and keeps the text
 
   ![Quick add showing the words it understood](docs/images/quick-add.png)
 - **Details** on click: full title, when, Join, directions, description,
