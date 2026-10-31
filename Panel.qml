@@ -952,7 +952,11 @@ Panel {
         anchors.fill: parent
         contentWidth: columns.width
         contentHeight: height
-        clip: true
+        // Clip only while scrolling. At a fractional scale (1.25) the clip
+        // edge rounds onto the next device pixel and eats the top border
+        // of whatever sits flush against it: quick add, the settings back
+        // button. Content that fits needs no clip.
+        clip: interactive
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentWidth > width
 
@@ -967,7 +971,7 @@ Panel {
             height: parent.height
             contentWidth: width
             contentHeight: leftContent.implicitHeight
-            clip: true
+            clip: interactive
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight > height
 
