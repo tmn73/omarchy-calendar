@@ -5,7 +5,7 @@ events on it, a bar that tells you what is coming before it starts, and a
 form to create or edit events without opening Google.
 
 Not a Google user? The sync reads and writes iCloud and any other CalDAV
-server, see [Sync from iCloud or CalDAV](#sync-from-icloud-or-caldav), and
+server (community-maintained), see [Sync from iCloud or CalDAV](#sync-from-icloud-or-caldav), and
 reads any iCal feed, see
 [Sync from the secret iCal address](#sync-from-the-secret-ical-address). The
 widget itself reads a plain JSON file, so caldir, khal, vdirsyncer or Nextcloud work
@@ -81,8 +81,8 @@ time away for an event title would be a downgrade you pay for all day.
   cycle them, the year and life progress bars if you want them back
 - Theme aware, light themes included, because it is a fork of the built-in clock
 - No Google Cloud project needed if you read your calendars from their secret
-  iCal address (read only), through Evolution Data Server or caldir
-  (both community-maintained), or from any other source that writes the events file
+  iCal address (read only), through Evolution Data Server, caldir or
+  CalDAV (all three community-maintained), or from any other source that writes the events file
 
 ## Requirements
 
@@ -359,6 +359,10 @@ As with gws, a systemd user service does not see your shell PATH, so when
 caldir lives somewhere unusual set `"caldirPath"` to its absolute path.
 
 ## Sync from iCloud or CalDAV
+
+> **Community-maintained.** The author does not use iCloud or another CalDAV
+> server, so the people who use this backend are the ones who test it. When
+> you open an issue about it, say that you are on the CalDAV backend.
 
 Reads and writes iCloud, Nextcloud, Fastmail or any other CalDAV server
 directly, with a username and an app password. No Google Cloud project, no
