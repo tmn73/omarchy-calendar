@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tmn73.calendar",
   "name": "Calendar",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "author": "tmn73",
   "license": "MIT",
   "description": "Your calendar in the bar: Google, iCloud, any CalDAV server or an iCal feed. Your day at a glance, one click to join a meeting, and events you create and edit without leaving the desktop.",

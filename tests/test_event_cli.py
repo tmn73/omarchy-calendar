@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 from zoneinfo import ZoneInfo
@@ -11,6 +12,8 @@ from omarchy_calendar_sync import event_cli
 from omarchy_calendar_sync.gws import GwsAuthError, GwsNotFound, GwsSignInError
 
 BOGOTA = ZoneInfo("America/Bogota")
+# The fixtures sit around this day, inside the default window it opens.
+SYNCED_AT = datetime(2026, 9, 25, tzinfo=timezone.utc)
 ME = {"id": "me@example.com", "name": "Me", "color": "#7bd148"}
 ON = {"write": True}
 
@@ -101,6 +104,7 @@ class TestPerform(unittest.TestCase):
         return event_cli.perform(
             raw, cfg, client, self.path, BOGOTA,
             lambda: self.background.append(1), lambda: self.inline.append(1),
+            now=SYNCED_AT,
         )
 
     def events(self):

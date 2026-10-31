@@ -1,9 +1,11 @@
 import unittest
+from datetime import date
 from zoneinfo import ZoneInfo
 
 from omarchy_calendar_sync import writes
 
 BOGOTA = ZoneInfo("America/Bogota")
+WINDOW = (date(2026, 9, 1), date(2026, 11, 30))
 ME = {"id": "me@example.com", "name": "Me", "color": "#7bd148"}
 
 
@@ -89,29 +91,34 @@ class TestSplice(unittest.TestCase):
 
     def test_create_adds_the_new_rows(self):
         reply = resource("new1", "2026-09-26T12:00:00-05:00", "2026-09-26T12:30:00-05:00")
-        doc = writes.splice(self.doc(row("a", "2026-09-26")), ME, "new1", reply, BOGOTA)
+        doc = writes.splice(self.doc(row("a", "2026-09-26")), ME, "new1", reply, BOGOTA, WINDOW)
         self.assertEqual(sorted(r["id"] for r in doc["events"]), ["a", "new1"])
 
     def test_update_replaces_every_row_of_the_event(self):
         old = self.doc(row("m", "2026-09-26"), row("m", "2026-09-27"))
         reply = resource("m", "2026-09-28T09:00:00-05:00", "2026-09-28T10:00:00-05:00", "New")
-        doc = writes.splice(old, ME, "m", reply, BOGOTA)
+        doc = writes.splice(old, ME, "m", reply, BOGOTA, WINDOW)
         self.assertEqual([(r["dateKey"], r["title"]) for r in doc["events"]], [("2026-09-28", "New")])
 
     def test_delete_keeps_the_other_occurrences_of_a_series(self):
         old = self.doc(row("s_20260926", "2026-09-26"), row("s_20260927", "2026-09-27"))
-        doc = writes.splice(old, ME, "s_20260926", None, BOGOTA)
+        doc = writes.splice(old, ME, "s_20260926", None, BOGOTA, WINDOW)
         self.assertEqual([r["id"] for r in doc["events"]], ["s_20260927"])
 
     def test_the_same_id_on_another_calendar_is_left_alone(self):
         old = self.doc(row("x", "2026-09-26"), row("x", "2026-09-26", calendar_id="other@example.com"))
-        doc = writes.splice(old, ME, "x", None, BOGOTA)
+        doc = writes.splice(old, ME, "x", None, BOGOTA, WINDOW)
         self.assertEqual([r["calendarId"] for r in doc["events"]], ["other@example.com"])
+
+    def test_an_event_ending_in_year_9998_costs_only_the_window(self):
+        reply = resource("long", "2026-11-28T09:00:00-05:00", "9998-12-31T10:00:00-05:00")
+        doc = writes.splice(self.doc(), ME, "long", reply, BOGOTA, WINDOW)
+        self.assertEqual([r["dateKey"] for r in doc["events"]], ["2026-11-28", "2026-11-29", "2026-11-30"])
 
     def test_other_top_level_fields_survive(self):
         old = self.doc()
         old["writableCalendars"] = [ME]
-        self.assertEqual(writes.splice(old, ME, "x", None, BOGOTA)["writableCalendars"], [ME])
+        self.assertEqual(writes.splice(old, ME, "x", None, BOGOTA, WINDOW)["writableCalendars"], [ME])
 
 
 if __name__ == "__main__":

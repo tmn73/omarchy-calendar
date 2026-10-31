@@ -45,11 +45,13 @@ def start_background_sync():
     )
 
 
-def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sync_now=None):
+def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sync_now=None,
+            now=None):
     """Run one request. Returns (exit code, reply).
 
     start_sync starts a sync in the background. sync_now runs one inline,
     for the writes a splice cannot express: anything that touches a series.
+    now is the moment the sync window is measured from, the clock by default.
     """
     if not cfg.get("write"):
         return 1, _fail(WRITE_OFF)
@@ -85,7 +87,8 @@ def perform(raw, cfg, client, doc_path, tz, start_sync=start_background_sync, sy
         return 0, {"ok": True, "eventId": event_id}
 
     try:
-        spliced = writes.splice(doc, calendar, event_id, resource, tz)
+        window = config_module.window_dates(cfg, now or datetime.now(timezone.utc), tz)
+        spliced = writes.splice(doc, calendar, event_id, resource, tz, window)
         if not contract.validate(spliced):
             cli.write_atomic(Path(doc_path), spliced)
     except (KeyError, TypeError, ValueError, OSError):

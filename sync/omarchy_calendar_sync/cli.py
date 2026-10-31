@@ -95,10 +95,7 @@ def run(client, cfg, now, out_path, local_tz):
         # dedup. The sort is stable, so the rest keep their name order.
         calendars.sort(key=lambda calendar: not calendar.get("primary"))
         time_min, time_max = config_module.window_bounds(cfg, now)
-        window = (
-            datetime.fromisoformat(time_min).astimezone(local_tz).date(),
-            datetime.fromisoformat(time_max).astimezone(local_tz).date(),
-        )
+        window = config_module.window_dates(cfg, now, local_tz)
 
         rows = []
         seen = set()

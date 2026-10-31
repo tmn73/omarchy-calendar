@@ -6,7 +6,7 @@ with no file at all.
 
 import copy
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "omarchy" / "calendar-sync.json"
@@ -143,4 +143,14 @@ def window_bounds(config, now):
     return (
         (now - timedelta(days=past)).isoformat(),
         (now + timedelta(days=future)).isoformat(),
+    )
+
+
+def window_dates(config, now, tz):
+    """The (first, last) local dates of the events query. Days outside it
+    get no row, so an event that ends in the year 9998 costs only these."""
+    time_min, time_max = window_bounds(config, now)
+    return (
+        datetime.fromisoformat(time_min).astimezone(tz).date(),
+        datetime.fromisoformat(time_max).astimezone(tz).date(),
     )

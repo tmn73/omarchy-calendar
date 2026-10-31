@@ -59,18 +59,21 @@ def parse_request(raw, writable_ids):
     return request
 
 
-def splice(doc, calendar, event_id, resource, tz):
+def splice(doc, calendar, event_id, resource, tz, window):
     """Replace one event's rows in the document.
 
     `resource` is Google's reply to a create or an update, or None for a
     delete. Rows match on calendarId and id: every row of a multi-day event
     shares its id, and each occurrence of a series has an id of its own.
+    `window` is the sync's (first, last) local dates, as for the sync
+    itself: without it, an event ending in the year 9998 costs millions
+    of rows.
     """
     kept = [
         row for row in doc.get("events", [])
         if not (row.get("calendarId") == calendar["id"] and row.get("id") == event_id)
     ]
     if resource is not None:
-        kept.extend(normalize.normalize_event(resource, calendar, tz))
+        kept.extend(normalize.normalize_event(resource, calendar, tz, window))
     kept.sort(key=normalize.row_order)
     return {**doc, "events": kept}
