@@ -952,7 +952,11 @@ Panel {
         anchors.fill: parent
         contentWidth: columns.width
         contentHeight: height
-        clip: true
+        // Clip only while scrolling. At a fractional scale (1.25) the clip
+        // edge rounds onto the next device pixel and eats the top border
+        // of whatever sits flush against it: quick add, the settings back
+        // button. Content that fits needs no clip.
+        clip: interactive
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentWidth > width
 
@@ -967,7 +971,7 @@ Panel {
             height: parent.height
             contentWidth: width
             contentHeight: leftContent.implicitHeight
-            clip: true
+            clip: interactive
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight > height
 
@@ -1205,7 +1209,11 @@ Panel {
               anchors.topMargin: formHeader.visible ? Style.space(12) : 0
               anchors.bottom: parent.bottom
               contentWidth: width
-              contentHeight: inspectorContent.implicitHeight
+              // The hairline above the content keeps the details' close
+              // button and the form's first field off the clip edge, which
+              // at a fractional scale rounds onto their top border. This one
+              // scrolls, so it cannot simply stop clipping like the columns.
+              contentHeight: inspectorContent.implicitHeight + Style.spacing.hairline
               clip: true
               boundsBehavior: Flickable.StopAtBounds
               interactive: contentHeight > height
@@ -1223,6 +1231,7 @@ Panel {
               Column {
                 id: inspectorContent
                 x: root.columnPadding
+                y: Style.spacing.hairline
                 width: root.inspectorWidth
 
                 EventDetails {
