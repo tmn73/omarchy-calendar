@@ -913,7 +913,7 @@ Panel {
     // scroll beside it, so moving between days never makes the popup jump
     // and a quiet day leaves no empty space. Under the calendar, the agenda
     // is part of that column, so the panel fits the day.
-    contentHeight: panel.fittedContentHeight(leftContent.implicitHeight + root.columnPadding)
+    contentHeight: panel.fittedContentHeight(leftContent.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
