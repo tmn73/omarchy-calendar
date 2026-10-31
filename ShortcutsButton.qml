@@ -6,7 +6,7 @@ import qs.Ui
 import "Model.js" as Model
 import "Strings.js" as Strings
 
-// The keyboard map behind a "?" beside the settings button. A panel
+// The keyboard map behind a keyboard icon beside the settings button. A panel
 // summoned by hotkey is used from the keyboard, but once the keys are
 // learnt the map is only in the way, so it takes no room until asked for:
 // a click shows it, another click or moving away hides it.
@@ -31,7 +31,7 @@ PanelActionButton {
     { keys: "Esc", label: "keys.back" }
   ]
 
-  iconText: "?"
+  iconText: "󰌌"
   Accessible.name: Strings.tr(root.language, "keys.title")
 
   onClicked: root.open = !root.open
