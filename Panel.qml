@@ -1209,7 +1209,11 @@ Panel {
               anchors.topMargin: formHeader.visible ? Style.space(12) : 0
               anchors.bottom: parent.bottom
               contentWidth: width
-              contentHeight: inspectorContent.implicitHeight
+              // The hairline above the content keeps the details' close
+              // button and the form's first field off the clip edge, which
+              // at a fractional scale rounds onto their top border. This one
+              // scrolls, so it cannot simply stop clipping like the columns.
+              contentHeight: inspectorContent.implicitHeight + Style.spacing.hairline
               clip: true
               boundsBehavior: Flickable.StopAtBounds
               interactive: contentHeight > height
@@ -1227,6 +1231,7 @@ Panel {
               Column {
                 id: inspectorContent
                 x: root.columnPadding
+                y: Style.spacing.hairline
                 width: root.inspectorWidth
 
                 EventDetails {
