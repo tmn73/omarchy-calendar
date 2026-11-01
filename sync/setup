@@ -164,6 +164,43 @@ PYEOF
   exit 0
 }
 
+# Writes the caldav account into a copy of $CONFIG at $1. With lookup
+# attributes after the password, the config names a secret-tool lookup;
+# without, it holds the password itself.
+write_caldav_config() {
+  local dest=$1 url=$2 username=$3 password=$4
+  shift 4
+  # The password goes in on file descriptor 3, as the iCal addresses do.
+  python3 - "$CONFIG" "$dest" "$url" "$username" "$WRITE" "$@" 3< <(printf '%s' "$password") <<'PY'
+import json, os, pathlib, sys
+
+path, dest = pathlib.Path(sys.argv[1]), sys.argv[2]
+url, username, write, lookup = sys.argv[3], sys.argv[4], sys.argv[5] == "1", sys.argv[6:]
+with os.fdopen(3) as stream:
+    password = stream.read()
+config = {}
+if path.exists():
+    try:
+        config = json.loads(path.read_text())
+    except ValueError:
+        config = {}
+account = {"url": url, "username": username}
+if lookup:
+    account["passwordCommand"] = ["secret-tool", "lookup", *lookup]
+else:
+    account["password"] = password
+config["backend"] = "caldav"
+config["caldav"] = account
+config["write"] = write
+if "@" in username and not config.get("identity"):
+    config["identity"] = username
+fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, "w") as stream:
+    stream.write(json.dumps(config, indent=2) + "\n")
+os.chmod(dest, 0o600)
+PY
+}
+
 setup_caldav() {
   step "Reading and writing your calendars over CalDAV"
   if ! python3 -c 'import icalendar, recurring_ical_events' 2>/dev/null; then
@@ -207,10 +244,16 @@ EOF
   # The password goes to the keyring on stdin, never as an argument, and
   # the config only names the lookup. Without secret-tool it goes in the
   # config instead, which is mode 600.
+  #
+  # The test sync reads it from a one-off entry under another service, so
+  # a failed test never replaces the secret the current config looks up,
+  # not even through an older lookup that names no server. Only a passing
+  # test stores it for good, keyed by server and username.
   local in_keyring=0
   if command -v secret-tool >/dev/null; then
-    printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
-      service omarchy-calendar-caldav username "$username"
+    SETUP_NONCE=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+    printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV (setup test)" \
+      service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"
     in_keyring=1
   else
     echo "  secret-tool not found, so the password goes in $CONFIG (mode 600)."
@@ -221,43 +264,26 @@ EOF
   local candidate
   candidate=$(mktemp "$CONFIG.XXXXXX")
   # :- because the trap runs after this function's locals are gone.
-  trap 'rm -f "${candidate:-}"' EXIT
-  # The password goes in on file descriptor 3, as the iCal addresses do.
-  python3 - "$CONFIG" "$candidate" "$url" "$username" "$in_keyring" "$WRITE" 3< <(printf '%s' "$password") <<'PY'
-import json, os, pathlib, sys
+  trap 'rm -f "${candidate:-}"; [ -z "${SETUP_NONCE:-}" ] || secret-tool clear service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"' EXIT
 
-path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
-url, username, in_keyring, write = sys.argv[3], sys.argv[4], sys.argv[5] == "1", sys.argv[6] == "1"
-with os.fdopen(3) as stream:
-    password = stream.read()
-config = {}
-if path.exists():
-    try:
-        config = json.loads(path.read_text())
-    except ValueError:
-        config = {}
-account = {"url": url, "username": username}
-if in_keyring:
-    account["passwordCommand"] = ["secret-tool", "lookup", "service", "omarchy-calendar-caldav",
-                                  "username", username]
-else:
-    account["password"] = password
-config["backend"] = "caldav"
-config["caldav"] = account
-config["write"] = write
-if "@" in username and not config.get("identity"):
-    config["identity"] = username
-fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-with os.fdopen(fd, "w") as stream:
-    stream.write(json.dumps(config, indent=2) + "\n")
-os.chmod(candidate, 0o600)
-PY
+  if [ "$in_keyring" = 1 ]; then
+    write_caldav_config "$candidate" "$url" "$username" "$password" \
+      service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"
+  else
+    write_caldav_config "$candidate" "$url" "$username" "$password"
+  fi
 
   step "Testing the account"
   "$SYNC_BIN" --config "$candidate" || {
     echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
+  if [ "$in_keyring" = 1 ]; then
+    printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
+      service omarchy-calendar-caldav url "$url" username "$username"
+    write_caldav_config "$candidate" "$url" "$username" "$password" \
+      service omarchy-calendar-caldav url "$url" username "$username"
+  fi
   mv -f "$candidate" "$CONFIG"
   echo "  backend set to caldav for $username in $CONFIG"
 
