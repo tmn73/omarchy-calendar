@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from . import budget
 from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
 from .errors import EventNotFound, SyncError
 
@@ -75,7 +76,9 @@ def _write_params(send_updates):
 
 
 def _subprocess_runner(argv, env):
-    completed = subprocess.run(argv, env=env, capture_output=True, text=True)
+    completed = subprocess.run(
+        argv, env=env, capture_output=True, text=True, timeout=budget.HELPER_SECONDS
+    )
     return completed.returncode, completed.stdout, completed.stderr
 
 
@@ -119,6 +122,8 @@ class Gws:
         env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = self.profile
         try:
             code, stdout, stderr = self._runner([self.binary, *args], env)
+        except subprocess.TimeoutExpired as error:
+            raise GwsError(f"{self.binary} did not answer in {budget.HELPER_SECONDS} s") from error
         except FileNotFoundError as error:
             raise GwsMissing(
                 f"{self.binary} is not installed or not on PATH. "

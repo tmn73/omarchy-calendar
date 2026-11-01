@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config as config_module
-from . import cli, contract, event_form, writes
+from . import budget, cli, contract, event_form, writes
 from .errors import EventNotFound, SyncError
 from .gws import GwsAuthError, GwsSignInError
 from .localzone import resolve_local_timezone
@@ -212,10 +212,14 @@ def main(argv=None, stdin=None):
     except config_module.ConfigError as error:
         return _emit(1, _fail(f"Config error: {error}"))
 
-    code, reply = perform(
-        raw, cfg, client, contract.CONTRACT_PATH, tz,
-        sync_now=lambda: _sync_inline(client, cfg, tz),
-    )
+    try:
+        with budget.deadline(budget.EVENT_SECONDS):
+            code, reply = perform(
+                raw, cfg, client, contract.CONTRACT_PATH, tz,
+                sync_now=lambda: _sync_inline(client, cfg, tz),
+            )
+    except budget.TookTooLong as error:
+        return _emit(1, _fail(f"The calendar did not answer: {error}."))
     return _emit(code, reply)
 
 

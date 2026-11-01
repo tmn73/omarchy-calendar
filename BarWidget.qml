@@ -99,9 +99,13 @@ BarWidget {
     return Qt.locale(Strings.localeName(root.language)).toString(date, configuredFormat.replace(/ww/g, Model.isoWeekLiteral(date.getFullYear(), date.getMonth(), date.getDate())))
   }
 
+  // With an event, the click was on its visible Join chip. Without one it
+  // was blind, so a link from an unknown host opens the panel instead.
   function join(event) {
-    var url = Model.meetingUrlFor(event || Model.meetingToJoin(visibleEvents, Date.now(), barState.event))
+    var meeting = event || Model.meetingToJoin(visibleEvents, Date.now(), barState.event)
+    var url = event ? Model.meetingUrlFor(meeting) : Model.blindJoinUrl(meeting)
     if (url) Qt.openUrlExternally(url)
+    else if (Model.meetingUrlFor(meeting)) open()
     else reminders.notice(Strings.tr(language, "toast.noMeeting"))
   }
 

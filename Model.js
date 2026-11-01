@@ -530,19 +530,36 @@ var MEETING_HOSTS = [
   { pattern: /(^|\.)zoom\.(us|com)$/, name: "Zoom" },
   { pattern: /^teams\.(microsoft|live)\.com$/, name: "Teams" },
   { pattern: /(^|\.)webex\.com$/, name: "Webex" },
-  { pattern: /^meet\.jit\.si$|(^|\.)jitsi\./, name: "Jitsi" },
+  { pattern: /^meet\.jit\.si$/, name: "Jitsi" },
+  // Anyone can name a host jitsi.something, so it names the button but
+  // never opens blind.
+  { pattern: /(^|\.)jitsi\./, name: "Jitsi", anyoneCanHost: true },
   { pattern: /(^|\.)whereby\.com$/, name: "Whereby" }
 ]
 
 // The service behind a meeting link, for "Join Zoom" rather than a bare
 // "Join". "" for anything unknown or unsafe.
 function meetingHost(url) {
+  var service = meetingService(url)
+  return service ? service.name : ""
+}
+
+function meetingService(url) {
   var match = safeUrl(url).match(/^https:\/\/(?:[^\/?#@]*@)?([^\/?#:]+)/)
-  if (!match) return ""
+  if (!match) return null
   var host = match[1].toLowerCase()
   for (var i = 0; i < MEETING_HOSTS.length; i++)
-    if (MEETING_HOSTS[i].pattern.test(host)) return MEETING_HOSTS[i].name
-  return ""
+    if (MEETING_HOSTS[i].pattern.test(host)) return MEETING_HOSTS[i]
+  return null
+}
+
+// The link a click opens without showing it first: the middle click on the
+// clock, or a keybinding. Whoever sends an invitation sets its link, so only
+// a known video service opens blind; any other link is shown in the panel.
+function blindJoinUrl(event) {
+  var url = meetingUrlFor(event)
+  var service = meetingService(url)
+  return service && !service.anyoneCanHost ? url : ""
 }
 
 // encodeURIComponent leaves ' ( ) ! * alone, and safeUrl refuses a quote,

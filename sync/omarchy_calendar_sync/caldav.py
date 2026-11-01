@@ -26,6 +26,7 @@ on a machine without python-icalendar and python-recurring-ical-events.
 
 import base64
 import copy
+import ipaddress
 import re
 import shlex
 import subprocess
@@ -38,6 +39,7 @@ from datetime import date, datetime, timedelta, timezone
 from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import budget
 from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
 from .errors import EventNotFound, SyncError
 from .ics import FEED_COLORS, _load_libs, _popup_reminders, occurrence_to_event
@@ -650,7 +652,12 @@ class Caldav:
         for href, _etag, calendar in self._query(calendar_id, span):
             series = is_series(calendar)
             try:
-                occurrences = rie.of(calendar).between(start, end)
+                # One budget for the whole calendar, not one per resource.
+                occurrences = budget.occurrences(
+                    rie, calendar, start, end, budget.MAX_EVENTS - len(events)
+                )
+            except budget.TooManyEvents:
+                raise
             except Exception as error:
                 # One malformed resource costs its own events, not the sync.
                 print("skipping %s: cannot expand it: %s" % (redact(href), error))
@@ -801,6 +808,14 @@ class Caldav:
         key = (account["url"], account["username"])
         return self._named.setdefault(key, {_origin(account["url"])})
 
+    def _admit(self, account, servers, url):
+        """Adds a server the account's server named, if _may_name allows it.
+        A refused one gets no request at all, so it is reported here."""
+        if _may_name(account["url"], url):
+            servers.add(_origin(url))
+        else:
+            print("not sending the password to %s, named by %s" % (redact(url), redact(account["url"])))
+
     def _password(self, account):
         key = (account["url"], account["username"])
         if key not in self._passwords:
@@ -822,7 +837,9 @@ class Caldav:
             # A calendar id comes from the account's own listing, or from the
             # events file that listing wrote (writes.parse_request refuses
             # any other), so its server is one the account's server named.
-            servers = self._servers(account) | {_origin(account_or_calendar)}
+            servers = set(self._servers(account))
+            if _may_name(account["url"], account_or_calendar):
+                servers.add(_origin(account_or_calendar))
         start = url
         for _ in range(MAX_REDIRECTS + 1):
             if not _may_send_password(url, servers):
@@ -881,7 +898,8 @@ class Caldav:
         """The account's event calendars: principal, home, then the list.
 
         Every answer comes from a server that gets the password already
-        (_request refuses any other), so the servers it names get it too.
+        (_request refuses any other). The servers it names get it too, if
+        they are on its own host or domain over https (_may_name).
         """
         servers = self._servers(account)
         principal = ""
@@ -898,7 +916,7 @@ class Caldav:
                 break
         if not principal:
             raise CaldavError("%s did not name a CalDAV principal" % redact(account["url"]))
-        servers.add(_origin(principal))
+        self._admit(account, servers, principal)
 
         home = inbox = ""
         for _href, props in self._propfind(
@@ -908,7 +926,9 @@ class Caldav:
             inbox = inbox or _href_in(props, "c", "schedule-inbox-URL", principal)
         if not home:
             raise CaldavError("%s has no calendar home" % redact(principal))
-        servers.update(_origin(url) for url in (home, inbox) if url)
+        for url in (home, inbox):
+            if url:
+                self._admit(account, servers, url)
 
         default = ""
         if inbox:
@@ -931,7 +951,7 @@ class Caldav:
             if calendar is None:
                 continue
             calendar["primary"] = bool(default) and _same_collection(href, default)
-            servers.add(_origin(href))
+            self._admit(account, servers, href)
             calendars.append(calendar)
         return calendars
 
@@ -1001,6 +1021,53 @@ class Caldav:
         headers.update({"If-None-Match": "*"} if create else _if_match(etag))
         self._request(calendar_id, "PUT", href, body=calendar.to_ical(), headers=headers,
                       expect=(200, 201, 204))
+
+
+# Second levels that are a public suffix under a country code, as in
+# co.uk or com.br, where the parent domain is anyone's.
+_SHARED_SECOND_LEVELS = {"ac", "co", "com", "edu", "gov", "net", "org"}
+
+
+def _family(host):
+    """The domain a provider's own hosts share: caldav.icloud.com gives
+    icloud.com. A host of two labels, an address, or a host right under a
+    suffix like com.br is its own family."""
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    parent = host.split(".")[1:]
+    if len(parent) < 2:
+        return host
+    if len(parent) == 2 and len(parent[1]) == 2 and parent[0] in _SHARED_SECOND_LEVELS:
+        return host
+    return ".".join(parent)
+
+
+def _may_name(account_url, url):
+    """Whether the account's server may add url to the servers that get the
+    password. That server answers discovery, so a hostile one could name any
+    address: only https on its own host or domain, and plain http only when
+    it is the configured url's own origin."""
+    own, named = _origin(account_url), _origin(url)
+    if own is None or named is None:
+        return False
+    if named == own:
+        return True
+    scheme, host, _port = named
+    if scheme != "https":
+        return False
+    family = _family(own[1])
+    return host == own[1] or host == family or host.endswith("." + family)
+
+
+def url_problem(url):
+    """Why an account url cannot get the password, or blank. sync/setup asks
+    this, so the setup and the sync apply the same rule."""
+    if _may_send_password(url, {_origin(url)}):
+        return ""
+    return "expected an https:// address, or plain http to this machine"
 
 
 def _may_send_password(url, servers):

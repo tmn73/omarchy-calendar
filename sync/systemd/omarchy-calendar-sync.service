@@ -10,6 +10,10 @@ Type=oneshot
 # into calendar-sync.json; this list is the fallback for everyone else.
 Environment=PATH=%h/.local/bin:%h/.cache/.bun/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.config/omarchy/plugins/tmn73.calendar/sync/omarchy-calendar-sync
+# The sync stops itself after 120 s. These hold if it cannot: a oneshot
+# unit has no start timeout by default, and nothing else caps its memory.
+TimeoutStartSec=180
+MemoryMax=512M
 # A failed run is deliberately allowed to surface as a failed unit. The
 # sync leaves the previous events file intact either way, and a user
 # needs `systemctl --user status` to show that something is wrong.

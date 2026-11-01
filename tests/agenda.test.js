@@ -290,3 +290,13 @@ test('mapsUrl output passes safeUrl', () => {
   const url = Model.mapsUrl('Rua "A" <1>, it\'s here')
   assert.equal(Model.safeUrl(url), url)
 })
+
+test('blindJoinUrl opens only a known video service', () => {
+  const at = (meetingUrl) => ({ meetingUrl })
+  assert.equal(Model.blindJoinUrl(at('https://meet.google.com/abc-defg-hij')), 'https://meet.google.com/abc-defg-hij')
+  assert.equal(Model.blindJoinUrl(at('https://us02web.zoom.us/j/123')), 'https://us02web.zoom.us/j/123')
+  assert.equal(Model.blindJoinUrl(at('https://evil.example/join')), '')
+  assert.equal(Model.blindJoinUrl(at('https://jitsi.evil.example/room')), '')
+  assert.equal(Model.blindJoinUrl(at('https://meet.google.com.evil.example/x')), '')
+  assert.equal(Model.blindJoinUrl(null), '')
+})

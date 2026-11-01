@@ -272,6 +272,40 @@ class TestDiscovery(unittest.TestCase):
                 self.assertEqual(reached, [])
                 self.assertIn(urllib.parse.urlsplit(elsewhere).hostname, str(caught.exception))
 
+    def test_a_server_named_off_the_accounts_domain_gets_no_password(self):
+        # The account's server answers discovery, so a hostile one can name
+        # any address as the principal. Neither this machine over plain
+        # http nor another domain gets a request carrying the password.
+        for named in ("http://127.0.0.1:9/p/", "https://evil.example.org/p/"):
+            with self.subTest(named=named):
+                server = FakeServer()
+                reached = []
+
+                def names_elsewhere(method, url, headers, data):
+                    if urllib.parse.urlsplit(url).path in ("/", "/.well-known/caldav"):
+                        server.calls.append((method, url, dict(headers)))
+                        return 207, {}, _multistatus([("/", "<d:current-user-principal><d:href>%s"
+                                                             "</d:href></d:current-user-principal>" % named)])
+                    if not url.startswith(("https://caldav.example.com", HOST)):
+                        reached.append(url)
+                        return 404, {}, b""
+                    return server(method, url, headers, data)
+
+                with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(CaldavError):
+                    make_client(names_elsewhere).calendars()
+                self.assertEqual(reached, [])
+
+    def test_a_named_server_must_share_the_accounts_domain(self):
+        may_name = caldav._may_name
+        self.assertTrue(may_name("https://caldav.icloud.com/", "https://p42-caldav.icloud.com/1/"))
+        self.assertTrue(may_name("http://localhost:5232/", "http://localhost:5232/me/"))
+        self.assertFalse(may_name("http://localhost:5232/", "http://localhost:9/"))
+        self.assertFalse(may_name("https://caldav.icloud.com/", "http://p42-caldav.icloud.com/"))
+        self.assertFalse(may_name("https://example.com/", "https://evil.com/"))
+        self.assertFalse(may_name("https://dav.foo.co.uk/", "https://bar.co.uk/"))
+        self.assertFalse(may_name("https://empresa.com.br/", "https://outra.com.br/"))
+        self.assertFalse(may_name("https://10.0.0.1/", "https://20.0.0.1/"))
+
     def test_a_calendar_gets_only_its_own_accounts_password(self):
         server = FakeServer([(PERSONAL, "lone-1.ics", LONE)])
         other = {"url": "https://dav.other.test/", "username": "you", "password": "other-pass"}

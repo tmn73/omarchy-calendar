@@ -67,7 +67,9 @@ time away for an event title would be a downgrade you pay for all day.
   colour and a Join chip, then "Now" in the urgent colour until it ends, or
   for its first 2 minutes if you prefer. When the next event is due, it
   takes over, unless you keep the current one. A `+1` shows when two things
-  start at once. Middle click joins
+  start at once. Middle click joins a Google Meet, Zoom, Teams, Webex,
+  meet.jit.si or Whereby link. The sender of an invitation sets its link,
+  so any other link opens the panel, where you see it before you open it
 - **Settings in four sections**: Panel, Bar, Calendars and General, one at
   a time, each setting with a line that says what it does
 - **Desktop reminders** from your Google notification times (10 minutes for
@@ -406,10 +408,12 @@ Or by hand:
 `passwordCommand` is any command that prints the password, such as
 `["op", "read", "op://Private/iCloud/app-password"]` for 1Password or
 `["pass", "show", "icloud-caldav"]`; it runs without a shell. `"password"`
-works in its place, in a file you keep at mode 600. The password goes only
-over https, to the server in `url` and to the servers it names for your
-calendars (iCloud keeps each account's on a host of its own); a request that
-a redirect would take anywhere else is refused. `caldav` also takes a
+works in its place, in a file you keep at mode 600. The password goes to
+the server in `url`, and to the servers it names for your calendars only
+when they are on the same host or domain over https (iCloud keeps each
+account's on a host of its own, such as `p42-caldav.icloud.com`). Plain
+http is only for a `url` on this machine, and then only to that address. A
+request that a redirect would take anywhere else is refused. `caldav` also takes a
 list of accounts. Calendar ids are the calendars' URLs, so
 `calendars.include`/`exclude` take those or the names. iCloud's Reminders
 lists are left out, and so are calendars shared with you read only, from
@@ -515,7 +519,8 @@ With the panel open:
 | `Esc` | Back out one step: dialog, form, details, selection, then the panel |
 
 `omarchy-shell tmn73.calendar join` joins the next meeting from anywhere, for
-a Hyprland binding.
+a Hyprland binding. Like the middle click, it opens only a known video
+service and shows any other link in the panel.
 
 ## Reminders
 
@@ -578,6 +583,24 @@ Sync behaviour lives in `~/.config/omarchy/calendar-sync.json`:
 `include: []` means all of them. Names and ids both match. `gwsPath` has to be
 absolute: a systemd user service does not inherit your shell's `PATH`, so a
 `gws` installed by bun, cargo or pipx is invisible to it under its bare name.
+
+## Limits
+
+A calendar source is someone else's server, so one sync holds only so much,
+whatever it sends:
+
+- **20 MB** per answer, and 60 s to receive it. An error answer is read up
+  to 64 KB, for its message.
+- **10,000 events** and **20,000 rows** (one row per day an event covers).
+  A calendar that would pass either is skipped with a line in the journal,
+  and the others still sync.
+- **120 s** per sync, 55 s per change from the panel, and 60 s for a helper
+  such as `gws`, `caldir` or a `passwordCommand`. The systemd unit adds
+  `TimeoutStartSec=180` and `MemoryMax=512M` in case the sync cannot stop
+  itself. The setup copies the unit, so an install from before 0.9.5 gets
+  those two by running the setup again.
+- The secret iCal address goes over https only, or plain http to this
+  machine, because the address is the password.
 
 ## Troubleshooting
 

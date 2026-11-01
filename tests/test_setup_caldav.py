@@ -61,6 +61,8 @@ class SetupCaldavTest(unittest.TestCase):
         sync = self.root / "sync"
         (sync / "systemd").mkdir(parents=True)
         shutil.copy(REPO / "sync" / "setup", sync / "setup")
+        # The setup checks the address with the sync's own code.
+        (sync / "omarchy_calendar_sync").symlink_to(REPO / "sync" / "omarchy_calendar_sync")
         for unit in ("service", "timer"):
             (sync / "systemd" / ("omarchy-calendar-sync." + unit)).touch()
         _executable(sync / "omarchy-calendar-sync", FAKE_SYNC)
@@ -77,7 +79,8 @@ class SetupCaldavTest(unittest.TestCase):
         )
 
     def setup(self, server, password, test_passes, commit_fails=False):
-        answers = "https://%s/\nme\n%s\n" % (server, password)
+        url = server if "://" in server else "https://%s/" % server
+        answers = "%s\nme\n%s\n" % (url, password)
         command = "%s --caldav --write" % (self.root / "sync" / "setup")
         env = dict(self.env, FAKE_FAIL="0" if test_passes else "1")
         if commit_fails:
@@ -122,6 +125,11 @@ class SetupCaldavTest(unittest.TestCase):
         self.setup("a.example", "password-a", test_passes=True)
         self.setup("b.example", "password-b", test_passes=True)
         self.assertEqual(self.password_the_config_finds(), ("https://b.example/", "password-b"))
+
+    def test_an_address_that_only_looks_local_is_refused_before_the_password(self):
+        self.setup("http://localhost:x@evil.example/", "password-b", test_passes=True)
+        self.assertFalse((self.root / "home/.config/omarchy/calendar-sync.json").exists())
+        self.assertEqual(list((self.root / "keyring").iterdir()), [])
 
     # A sync that still runs on the old config, during or after the setup,
     # must never find the new server's password.

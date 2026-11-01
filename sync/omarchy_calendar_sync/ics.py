@@ -25,6 +25,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta
 
+from . import budget
 from .bounded import read_body
 from .errors import SyncError
 from .localzone import resolve_local_timezone
@@ -85,6 +86,12 @@ SECRET_HINT = (
 )
 
 
+def _local_http(url):
+    """Plain http to this machine, which never crosses the network."""
+    parts = urllib.parse.urlsplit(url)
+    return parts.scheme == "http" and parts.hostname in ("localhost", "127.0.0.1", "::1")
+
+
 def url_problem(value):
     """Why a URL is not a usable feed, or blank when it looks fine.
 
@@ -92,7 +99,9 @@ def url_problem(value):
     secret one, and both are easy to copy by mistake.
     """
     url = feed_url(value)
-    if not url.startswith(("https://", "http://")):
+    if not url.startswith("https://") and not _local_http(url):
+        # The secret address is the password, and plain http shows it to
+        # anyone on the network.
         return "expected an https:// or webcal:// address"
     if "calendar.google.com" in url:
         if "/embed" in url:
@@ -161,6 +170,9 @@ def parse_feeds(raw):
 
 
 def _http_get(url):
+    if not url.startswith("https://") and not _local_http(url):
+        # A ValueError, so calendars() skips only this feed.
+        raise ValueError("plain http would send the secret address in clear; use https")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:
         # ResponseTooLarge is a ValueError, so calendars() skips only this feed.
@@ -349,7 +361,9 @@ class Ics:
         start = datetime.fromisoformat(time_min)
         end = datetime.fromisoformat(time_max)
         try:
-            occurrences = rie.of(calendar).between(start, end)
+            occurrences = budget.occurrences(rie, calendar, start, end)
+        except budget.TooManyEvents:
+            raise
         except Exception as error:
             raise IcsError("cannot expand %s: %s" % (calendar_id, error))
 

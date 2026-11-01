@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config as config_module
-from . import contract, normalize, suggestions
+from . import budget, contract, normalize, suggestions
 from .caldav import Caldav
 from .caldir import Caldir
 from .eds import Eds
@@ -84,6 +84,17 @@ def _drop_duplicates(gevents, seen):
     return fresh
 
 
+def _rows_within_budget(gevents, calendar, tz, window, rows_so_far):
+    """The rows of one calendar, or None as soon as the sync would pass
+    budget.MAX_ROWS. Stops early, so the rows past the budget never exist."""
+    rows = []
+    for gevent in gevents:
+        rows.extend(normalize.normalize_event(gevent, calendar, tz, window))
+        if rows_so_far + len(rows) > budget.MAX_ROWS:
+            return None
+    return rows
+
+
 def run(client, cfg, now, out_path, local_tz):
     """Fetch, normalize, write. Returns a process exit code."""
     try:
@@ -101,10 +112,25 @@ def run(client, cfg, now, out_path, local_tz):
         seen = set()
         fetched = []
         for calendar in calendars:
-            raw = client.events(calendar["id"], time_min, time_max)
-            fresh = _drop_duplicates(raw, seen)
+            # A calendar past the budget is skipped, like a broken feed, so
+            # one hostile source costs its own events and not the sync.
+            try:
+                raw = client.events(calendar["id"], time_min, time_max)
+            except budget.TooManyEvents as error:
+                print(f"skipping {calendar['name']}: {error}")
+                continue
+            calendar_seen = set(seen)
+            fresh = _drop_duplicates(raw, calendar_seen)
+            calendar_rows = None
+            if len(fetched) + len(fresh) <= budget.MAX_EVENTS:
+                calendar_rows = _rows_within_budget(fresh, calendar, local_tz, window, len(rows))
+            if calendar_rows is None:
+                print(f"skipping {calendar['name']}: the sync would hold more than "
+                      f"{budget.MAX_EVENTS} events or {budget.MAX_ROWS} rows")
+                continue
+            seen = calendar_seen
             fetched.extend(fresh)
-            rows.extend(normalize.normalize_all(fresh, calendar, local_tz, window))
+            rows.extend(calendar_rows)
 
         source = client.SOURCE_NAME + "/" + ".".join(
             str(part) for part in client.version()
@@ -189,7 +215,13 @@ def main(argv=None):
         print(f"config error: {error}", file=sys.stderr)
         return EXIT_BAD_CONFIG
 
-    return run(client, cfg, now, out_path, local_tz)
+    try:
+        with budget.deadline(budget.SYNC_SECONDS):
+            return run(client, cfg, now, out_path, local_tz)
+    except budget.TookTooLong as error:
+        # Past the deadline in the write itself; the old file stays.
+        print(f"sync failed: {error}", file=sys.stderr)
+        return EXIT_SYNC_FAILED
 
 
 if __name__ == "__main__":

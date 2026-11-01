@@ -2,6 +2,7 @@
 
 import http.server
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -13,6 +14,18 @@ CAP = 1024
 class _Endless(http.server.BaseHTTPRequestHandler):
     # Sends far more than the cap, with no Content-Length, like a hostile server.
     def do_GET(self):
+        if self.path == "/trickle":
+            # A byte at a time, well inside the socket timeout.
+            self.send_response(200)
+            self.end_headers()
+            try:
+                for _ in range(100):
+                    self.wfile.write(b"x")
+                    self.wfile.flush()
+                    time.sleep(0.1)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         status = 500 if self.path == "/error" else 200
         self.send_response(status)
         self.end_headers()
@@ -54,6 +67,13 @@ class BoundedBodyTest(unittest.TestCase):
     def test_a_google_answer_past_the_cap_is_refused(self):
         with self.assertRaisesRegex(gws.GwsApiError, "larger than"):
             gws._https("GET", self.url + "/calendar", {}, None)
+
+    def test_a_body_that_trickles_in_is_refused_at_the_time_cap(self):
+        began = time.monotonic()
+        with mock.patch.object(bounded, "MAX_BODY_SECONDS", 1):
+            with self.assertRaisesRegex(bounded.ResponseTooLarge, "longer than"):
+                ics._http_get(self.url + "/trickle")
+        self.assertLess(time.monotonic() - began, 4)
 
     def test_an_error_body_is_cut_to_the_error_cap(self):
         status, _headers, body = caldav._http("GET", self.url + "/error", {}, None)

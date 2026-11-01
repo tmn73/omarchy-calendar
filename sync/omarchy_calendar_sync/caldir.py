@@ -16,6 +16,7 @@ import re
 import subprocess
 from datetime import date, datetime, timedelta
 
+from . import budget
 from .errors import SyncError
 from .resources import build_event
 
@@ -33,7 +34,7 @@ class CaldirMissing(CaldirError):
 
 
 def _subprocess_runner(argv):
-    completed = subprocess.run(argv, capture_output=True, text=True)
+    completed = subprocess.run(argv, capture_output=True, text=True, timeout=budget.HELPER_SECONDS)
     return completed.returncode, completed.stdout, completed.stderr
 
 
@@ -127,6 +128,8 @@ class Caldir:
     def _run(self, args):
         try:
             return self._runner([os.path.expanduser(self.binary), *args])
+        except subprocess.TimeoutExpired as error:
+            raise CaldirError("%s did not answer in %d s" % (self.binary, budget.HELPER_SECONDS)) from error
         except FileNotFoundError as error:
             raise CaldirMissing(
                 "%s is not installed or not on PATH. A systemd user service "

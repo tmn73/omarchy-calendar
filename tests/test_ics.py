@@ -158,6 +158,12 @@ class TestFeeds(unittest.TestCase):
         self.assertIn("embed link", ics.url_problem(embed))
         self.assertIn("https://", ics.url_problem("not a url"))
 
+    def test_plain_http_is_refused_except_to_this_machine(self):
+        self.assertIn("https://", ics.url_problem("http://cal.example/private-abc/basic.ics"))
+        self.assertEqual(ics.url_problem("http://localhost:5232/me/cal.ics"), "")
+        with self.assertRaisesRegex(ValueError, "in clear"):
+            ics._http_get("http://cal.example/private-abc/basic.ics")
+
     def test_no_feeds_is_an_error(self):
         with self.assertRaises(ics.IcsError):
             client(feeds=[]).check()
