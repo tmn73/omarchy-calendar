@@ -398,7 +398,7 @@ Or by hand:
   "caldav": {
     "url": "https://caldav.icloud.com/",
     "username": "you@icloud.com",
-    "passwordCommand": ["secret-tool", "lookup", "service", "omarchy-calendar-caldav", "url", "https://caldav.icloud.com/", "username", "you@icloud.com"]
+    "passwordCommand": ["secret-tool", "lookup", "service", "omarchy-calendar-caldav-account", "url", "https://caldav.icloud.com/", "username", "you@icloud.com"]
   }
 }
 ```
@@ -594,7 +594,7 @@ systemctl --user list-timers omarchy-calendar-sync.timer
 | "Write access not granted" in the event form | The token has no `calendar.events` scope. See [Create and edit events](#create-and-edit-events) |
 | `refused the sign-in` on the CalDAV backend | For iCloud, the password must be an app-specific one, not your Apple ID password. Revoking it at account.apple.com also ends here. Run `sync/setup --caldav` again |
 | `redirected to … which gets no password` on the CalDAV backend | The address in `url` redirects to another server, often from `/.well-known/caldav`. Put the server's own CalDAV address in `url` |
-| `passwordCommand did not answer` from the timer | The keyring is locked. It unlocks with your login; check `secret-tool lookup service omarchy-calendar-caldav url https://caldav.icloud.com/ username you@icloud.com` in a terminal |
+| `passwordCommand did not answer` from the timer | The keyring is locked. It unlocks with your login; check `secret-tool lookup service omarchy-calendar-caldav-account url https://caldav.icloud.com/ username you@icloud.com` in a terminal |
 | "Google refused the change: Shared properties can only be changed by the organizer" | The event is an invitation. Only its organizer can change its title, time or guests. Your own colour, notification and busy or free still change |
 | `cannot parse gws version` from the timer, with `exec: node: not found` | `gwsPath` is absolute but points at an npm wrapper that needs node on your shell PATH. With mise, use its shim: `~/.local/share/mise/shims/gws`. `sync/setup` checks this and records the shim for you |
 | `Not in a workspace` during setup, or setup says gws is not the Google Workspace CLI | Another program named `gws` comes first on your PATH, for example the git workspace helper. Pass the right one: `GWS=/absolute/path/to/gws sync/setup` |

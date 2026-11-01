@@ -245,10 +245,11 @@ EOF
   # the config only names the lookup. Without secret-tool it goes in the
   # config instead, which is mode 600.
   #
-  # The test sync reads it from a one-off entry under another service, so
-  # a failed test never replaces the secret the current config looks up,
-  # not even through an older lookup that names no server. Only a passing
-  # test stores it for good, keyed by server and username.
+  # secret-tool lookup treats an attribute it is not given as a wildcard,
+  # so neither entry below uses the service of setups before 0.9.4. Their
+  # lookups name only that service and the username, and would match any
+  # entry under it. The test sync reads a one-off entry, and only a passing
+  # test stores the password for good, keyed by server and username.
   local in_keyring=0
   if command -v secret-tool >/dev/null; then
     SETUP_NONCE=$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
@@ -280,9 +281,9 @@ EOF
   }
   if [ "$in_keyring" = 1 ]; then
     printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
-      service omarchy-calendar-caldav url "$url" username "$username"
+      service omarchy-calendar-caldav-account url "$url" username "$username"
     write_caldav_config "$candidate" "$url" "$username" "$password" \
-      service omarchy-calendar-caldav url "$url" username "$username"
+      service omarchy-calendar-caldav-account url "$url" username "$username"
   fi
   mv -f "$candidate" "$CONFIG"
   echo "  backend set to caldav for $username in $CONFIG"

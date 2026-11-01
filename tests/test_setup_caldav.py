@@ -37,8 +37,15 @@ elif command == "clear":
         os.remove(item["path"])
 '''
 
-# Stands in for the test sync: passes or fails on demand.
-FAKE_SYNC = '#!/bin/sh\nexit "${FAKE_FAIL:-0}"\n'
+# Stands in for the test sync: passes or fails on demand. FAKE_LOCK makes
+# the config folder read-only, so the step after a passing test fails.
+FAKE_SYNC = """#!/bin/sh
+[ -z "$FAKE_LOCK" ] || chmod 555 "$(dirname "$2")"
+exit "${FAKE_FAIL:-0}"
+"""
+
+# What setups before 0.9.4 wrote: a lookup that names no server.
+LEGACY_LOOKUP = ["secret-tool", "lookup", "service", "omarchy-calendar-caldav", "username", "me"]
 
 
 def _executable(path, text):
@@ -69,14 +76,31 @@ class SetupCaldavTest(unittest.TestCase):
             FAKE_KEYRING=str(self.root / "keyring"),
         )
 
-    def setup(self, server, password, test_passes):
+    def setup(self, server, password, test_passes, commit_fails=False):
         answers = "https://%s/\nme\n%s\n" % (server, password)
         command = "%s --caldav --write" % (self.root / "sync" / "setup")
         env = dict(self.env, FAKE_FAIL="0" if test_passes else "1")
+        if commit_fails:
+            env["FAKE_LOCK"] = "1"
+            self.addCleanup((self.root / "home/.config/omarchy").chmod, 0o755)
         subprocess.run(
             ["script", "-qec", command, "/dev/null"],
             input=answers, text=True, env=env, capture_output=True, timeout=30,
         )
+
+    def setup_before_0_9_4(self, password):
+        """The config and keyring entry an older setup left for a.example."""
+        config_dir = self.root / "home/.config/omarchy"
+        config_dir.mkdir(parents=True)
+        account = {"url": "https://a.example/", "username": "me", "passwordCommand": LEGACY_LOOKUP}
+        (config_dir / "calendar-sync.json").write_text(json.dumps({"backend": "caldav", "caldav": account}))
+        subprocess.run(
+            ["secret-tool", "store", "--label=old", "service", "omarchy-calendar-caldav", "username", "me"],
+            input=password, text=True, env=self.env, check=True,
+        )
+
+    def legacy_lookup(self):
+        return subprocess.run(LEGACY_LOOKUP, env=self.env, capture_output=True, text=True).stdout.strip()
 
     def password_the_config_finds(self):
         config = json.loads((self.root / "home/.config/omarchy/calendar-sync.json").read_text())
@@ -98,6 +122,26 @@ class SetupCaldavTest(unittest.TestCase):
         self.setup("a.example", "password-a", test_passes=True)
         self.setup("b.example", "password-b", test_passes=True)
         self.assertEqual(self.password_the_config_finds(), ("https://b.example/", "password-b"))
+
+    # A sync that still runs on the old config, during or after the setup,
+    # must never find the new server's password.
+
+    def test_an_older_config_never_finds_the_password_of_a_failed_setup(self):
+        self.setup_before_0_9_4("password-a")
+        self.setup("b.example", "password-b", test_passes=False)
+        self.assertEqual(self.legacy_lookup(), "password-a")
+        self.assertEqual(self.password_the_config_finds(), ("https://a.example/", "password-a"))
+
+    def test_an_older_config_never_finds_the_password_of_a_passing_setup(self):
+        self.setup_before_0_9_4("password-a")
+        self.setup("b.example", "password-b", test_passes=True)
+        self.assertEqual(self.legacy_lookup(), "password-a")
+        self.assertEqual(self.password_the_config_finds(), ("https://b.example/", "password-b"))
+
+    def test_a_failure_after_a_passing_test_keeps_the_older_config_on_its_password(self):
+        self.setup_before_0_9_4("password-a")
+        self.setup("b.example", "password-b", test_passes=True, commit_fails=True)
+        self.assertEqual(self.password_the_config_finds(), ("https://a.example/", "password-a"))
 
 
 if __name__ == "__main__":
