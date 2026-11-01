@@ -34,7 +34,10 @@ class CaldirMissing(CaldirError):
 
 
 def _subprocess_runner(argv):
-    completed = subprocess.run(argv, capture_output=True, text=True, timeout=budget.HELPER_SECONDS)
+    completed = subprocess.run(
+        argv, capture_output=True, text=True, timeout=budget.HELPER_SECONDS,
+        preexec_fn=budget.uncap_memory,
+    )
     return completed.returncode, completed.stdout, completed.stderr
 
 

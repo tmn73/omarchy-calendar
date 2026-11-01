@@ -141,7 +141,8 @@ def _origin(url):
 def _run_password_command(argv):
     try:
         completed = subprocess.run(
-            argv, capture_output=True, text=True, timeout=PASSWORD_COMMAND_TIMEOUT_SECONDS
+            argv, capture_output=True, text=True, timeout=PASSWORD_COMMAND_TIMEOUT_SECONDS,
+            preexec_fn=budget.uncap_memory,
         )
     except FileNotFoundError as error:
         raise CaldavAuthError("passwordCommand %s is not installed" % argv[0]) from error

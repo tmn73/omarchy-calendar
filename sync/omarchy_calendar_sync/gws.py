@@ -77,7 +77,8 @@ def _write_params(send_updates):
 
 def _subprocess_runner(argv, env):
     completed = subprocess.run(
-        argv, env=env, capture_output=True, text=True, timeout=budget.HELPER_SECONDS
+        argv, env=env, capture_output=True, text=True, timeout=budget.HELPER_SECONDS,
+        preexec_fn=budget.uncap_memory,
     )
     return completed.returncode, completed.stdout, completed.stderr
 

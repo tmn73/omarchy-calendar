@@ -215,12 +215,17 @@ def main(argv=None):
         print(f"config error: {error}", file=sys.stderr)
         return EXIT_BAD_CONFIG
 
+    budget.cap_memory()
     try:
         with budget.deadline(budget.SYNC_SECONDS):
             return run(client, cfg, now, out_path, local_tz)
     except budget.TookTooLong as error:
         # Past the deadline in the write itself; the old file stays.
         print(f"sync failed: {error}", file=sys.stderr)
+        return EXIT_SYNC_FAILED
+    except MemoryError:
+        print(f"sync failed: it needed more than {budget.MAX_MEMORY_BYTES // (1024 * 1024)} MB",
+              file=sys.stderr)
         return EXIT_SYNC_FAILED
 
 

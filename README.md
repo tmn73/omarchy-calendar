@@ -593,12 +593,16 @@ whatever it sends:
   to 64 KB, for its message.
 - **10,000 events** and **20,000 rows** (one row per day an event covers).
   A calendar that would pass either is skipped with a line in the journal,
-  and the others still sync.
+  and the others still sync. So is one whose repeat rules could give more
+  than 10,000 events in a single day, checked before they are expanded.
+- **512 MB** of heap for the sync and for each change from the panel,
+  however they start: the timer, the setup's test, the panel or a
+  terminal. Helpers such as `gws` keep their own limits.
 - **120 s** per sync, 55 s per change from the panel, and 60 s for a helper
   such as `gws`, `caldir` or a `passwordCommand`. The systemd unit adds
   `TimeoutStartSec=180` and `MemoryMax=512M` in case the sync cannot stop
   itself. The setup copies the unit, so an install from before 0.9.5 gets
-  those two by running the setup again.
+  those two by running the setup again; the limits above apply either way.
 - The secret iCal address goes over https only, or plain http to this
   machine, because the address is the password.
 

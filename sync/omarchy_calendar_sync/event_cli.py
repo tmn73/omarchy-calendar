@@ -212,6 +212,7 @@ def main(argv=None, stdin=None):
     except config_module.ConfigError as error:
         return _emit(1, _fail(f"Config error: {error}"))
 
+    budget.cap_memory()
     try:
         with budget.deadline(budget.EVENT_SECONDS):
             code, reply = perform(
@@ -220,6 +221,8 @@ def main(argv=None, stdin=None):
             )
     except budget.TookTooLong as error:
         return _emit(1, _fail(f"The calendar did not answer: {error}."))
+    except MemoryError:
+        return _emit(1, _fail("The calendar sent more than this command can hold."))
     return _emit(code, reply)
 
 
