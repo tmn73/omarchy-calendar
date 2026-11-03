@@ -97,6 +97,35 @@ Rectangle {
         color: root.marksWords ? "transparent" : root.foreground
         Accessible.name: root.tr("quick.label")
 
+        // The field paints its own caret in the text colour, and the GPU
+        // scene graph paints a fully transparent rectangle opaque, so the
+        // caret went black while the text was transparent. This caret keeps
+        // the foreground colour; a delegate blinks by itself, like the kit's
+        // lock screen and Qt's own styles do.
+        cursorDelegate: Rectangle {
+          id: caret
+          width: 1
+          color: root.foreground
+          visible: field.activeFocus && !field.readOnly && field.selectionStart === field.selectionEnd
+
+          Connections {
+            target: field
+            function onCursorPositionChanged() {
+              caret.opacity = 1
+              caretBlink.restart()
+            }
+          }
+
+          Timer {
+            id: caretBlink
+            running: field.activeFocus && !field.readOnly && interval !== 0
+            repeat: true
+            interval: Application.styleHints.cursorFlashTime / 2
+            onTriggered: caret.opacity = caret.opacity ? 0 : 1
+            onRunningChanged: caret.opacity = 1
+          }
+        }
+
         Keys.onPressed: function(event) {
           if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.submitted((event.modifiers & Qt.ControlModifier) !== 0)
