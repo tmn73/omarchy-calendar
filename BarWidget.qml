@@ -338,10 +338,17 @@ BarWidget {
     }
   }
 
+  // Native text rendering puts glyphs on uneven baselines at a fractional
+  // scale (KDE bug 479891, QTBUG-126577), so the bar text switches to Qt's own
+  // renderer there and keeps native rendering, the sharpest, at whole-number
+  // scales. The window reports the real ratio; its screen reports a rounded one.
+  readonly property real windowScale: QsWindow.window ? QsWindow.window.devicePixelRatio : 1
+  readonly property bool fractionalScale: windowScale % 1 !== 0
+
   component BarText: Text {
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
     textFormat: Text.PlainText
-    renderType: Text.NativeRendering
+    renderType: root.fractionalScale ? Text.QtRendering : Text.NativeRendering
   }
 
   // A small filled pill: the Join button and the "+N" badge. Only an
@@ -370,7 +377,7 @@ BarWidget {
       font.family: chip.fontFamily
       font.pixelSize: Style.font.caption
       font.weight: Font.Bold
-      renderType: Text.NativeRendering
+      renderType: root.fractionalScale ? Text.QtRendering : Text.NativeRendering
     }
 
     MouseArea {
