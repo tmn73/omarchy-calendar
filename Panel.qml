@@ -82,7 +82,9 @@ Panel {
   // matches the rest of the desktop rather than a hardcoded convention.
   readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", null), Qt.locale().firstDayOfWeek)
   readonly property var weekdays: Model.weekdayOrder(weekStart)
-  readonly property var weeks: Model.monthGrid(viewYear, viewMonth, weekStart, todayKey, eventIndex)
+  readonly property bool showLunarDates: setting("showLunarDates", false) === true
+  readonly property string lunarCalendar: String(setting("lunarCalendar", "vietnamese"))
+  readonly property var weeks: Model.monthGrid(viewYear, viewMonth, weekStart, todayKey, eventIndex, showLunarDates, lunarCalendar)
   // Short day names trimmed of the trailing period some locales carry
   // ("ter." -> "TER"), so the header row stays a clean band of caps.
   readonly property var weekdayLabels: weekdays.map(function(day) {
@@ -1041,6 +1043,7 @@ Panel {
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 language: root.language
+                showLunarDates: root.showLunarDates
                 weeks: root.weeks
                 weekdayLabels: root.weekdayLabels
                 selectedDayKey: root.selectedDayKey
@@ -1076,6 +1079,8 @@ Panel {
                 showWorkingLocation: root.showWorkingLocation
                 hideDeclined: root.hideDeclined
                 weekStartsMonday: root.weekStart === 1
+                showLunarDates: root.showLunarDates
+                lunarCalendar: root.lunarCalendar
                 announceLeadMinutes: root.setting("announceLeadMinutes", 15)
                 announceTitleLimit: Model.announceTitleLimit(root.setting("announceTitleLimit", 28))
                 clickActions: Model.clickActions(root.setting("leftClick", "panel"), root.setting("middleClick", "join"), root.setting("rightClick", "format"))
@@ -1147,6 +1152,7 @@ Panel {
               showNextUp: root.layout.showNextUp
               showUpcomingDays: root.layout.showUpcomingDays
               dayHeading: root.dayHeading
+              lunarDateText: root.showLunarDates ? Model.lunarDateText(root.selectedDayKey, root.language, root.lunarCalendar) : ""
               daySummary: Model.daySummary(root.daySections, root.language)
               sections: root.daySections
               upcoming: root.upcomingDays

@@ -50,6 +50,8 @@ Item {
   // The stored setting ("auto" | "en" | "pt"), not the resolved language.
   property string languageSetting: "auto"
   property bool weekStartsMonday: true
+  property bool showLunarDates: false
+  property string lunarCalendar: "vietnamese"
   property bool canWrite: false
   property bool writeSetupCopied: false
   property string syncedAt: ""
@@ -279,6 +281,8 @@ Item {
         language: root.language
         languageSetting: root.languageSetting
         weekStartsMonday: root.weekStartsMonday
+        showLunarDates: root.showLunarDates
+        lunarCalendar: root.lunarCalendar
         canWrite: root.canWrite
         writeSetupCopied: root.writeSetupCopied
         syncState: root.syncState
@@ -289,6 +293,8 @@ Item {
         syncedAt: root.syncedAt
         onLanguagePicked: function(value) { root.languagePicked(value) }
         onWeekStartToggled: root.weekStartToggled()
+        onLunarDatesToggled: root.picked({ showLunarDates: !root.showLunarDates })
+        onLunarCalendarPicked: function(value) { root.picked({ lunarCalendar: value }) }
         onWriteSetupCopyRequested: root.writeSetupCopyRequested()
         onSetupCommandCopyRequested: root.setupCommandCopyRequested()
       }

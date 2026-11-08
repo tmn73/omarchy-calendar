@@ -15,6 +15,7 @@ Column {
   property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property string language: "en"
+  property bool showLunarDates: false
   property var weeks: []
   property var weekdayLabels: []
   property string selectedDayKey: ""
@@ -26,7 +27,7 @@ Column {
   signal monthStepped(int delta)
 
   readonly property int cellWidth: Style.space(52)
-  readonly property int cellHeight: Style.space(34)
+  readonly property int cellHeight: Style.space(root.showLunarDates ? 48 : 34)
   readonly property int cellSpacing: Style.space(2)
   readonly property int weekColumnWidth: Style.space(32)
   readonly property int gutterWidth: Style.space(14)
@@ -169,7 +170,8 @@ Column {
                 anchors.centerIn: parent
                 // Lifted just enough to clear the dots, and only on days
                 // that have any, so an empty month does not shift.
-                anchors.verticalCenterOffset: dayCell.modelData.hasEvent ? -Style.space(3) : 0
+                anchors.verticalCenterOffset: root.showLunarDates ? -Style.space(9)
+                  : dayCell.modelData.hasEvent ? -Style.space(3) : 0
                 text: dayCell.modelData.day
                 color: dayCell.modelData.inMonth
                   ? (dayCell.modelData.weekend ? Util.alpha(root.foreground, 0.70) : root.foreground)
@@ -179,10 +181,24 @@ Column {
                 font.bold: dayCell.modelData.today
               }
 
-              Row {
+              Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: dayNumber.bottom
                 anchors.topMargin: Style.space(1)
+                visible: root.showLunarDates
+                text: dayCell.modelData.lunarLabel || ""
+                textFormat: Text.PlainText
+                color: Util.alpha(root.foreground, dayCell.modelData.inMonth ? 0.55 : 0.30)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: root.showLunarDates ? undefined : dayNumber.bottom
+                anchors.topMargin: Style.space(1)
+                anchors.bottom: root.showLunarDates ? parent.bottom : undefined
+                anchors.bottomMargin: Style.space(3)
                 spacing: Style.space(1)
                 visible: dayCell.modelData.hasEvent
 

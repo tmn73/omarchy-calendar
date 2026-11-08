@@ -1,5 +1,6 @@
 .pragma library
 .import "Strings.js" as Strings
+.import "Lunar.js" as Lunar
 
 // Pure date, event and text logic for the calendar widget, its panel and its
 // bar label. Nothing here reads the clock or touches Qt: every caller passes
@@ -347,10 +348,17 @@ function adoptedCustomFormat(current, custom, alt, presets) {
 
 // ---- Month grid
 
+function lunarDateText(key, lang, calendar) {
+  var parts = partsOfKey(key)
+  var date = Lunar.fromGregorian(parts.year, parts.month + 1, parts.day, calendar)
+  return date ? Strings.tr(lang, date.leap ? "lunar.dateLeap" : "lunar.date",
+    [date.day, date.month, date.year]) : ""
+}
+
 // Always six rows of seven days. A fixed grid keeps the popup exactly the
 // same height in every month, so stepping through the year never makes the
 // panel jump under the pointer.
-function monthGrid(year, month, weekStart, todayKey, eventIndex) {
+function monthGrid(year, month, weekStart, todayKey, eventIndex, showLunarDates, lunarCalendar) {
   var start = normalizedWeekStart(weekStart, 1)
   var leading = (new Date(year, month, 1).getDay() - start + 7) % 7
   var cursor = new Date(year, month, 1 - leading)
@@ -367,7 +375,7 @@ function monthGrid(year, month, weekStart, todayKey, eventIndex) {
       var weekday = cursor.getDay()
       var key = dateKey(cellYear, cellMonth, cellDay)
       if (weekday === 4) thursday = { year: cellYear, month: cellMonth, day: cellDay }
-      days.push({
+      var cell = {
         key: key,
         year: cellYear,
         month: cellMonth,
@@ -378,7 +386,12 @@ function monthGrid(year, month, weekStart, todayKey, eventIndex) {
         today: key === today,
         hasEvent: eventIndex ? !!eventIndex[key] : false,
         dots: eventIndex ? eventColors(eventIndex, key, 3) : []
-      })
+      }
+      if (showLunarDates === true) {
+        cell.lunar = Lunar.fromGregorian(cellYear, cellMonth + 1, cellDay, lunarCalendar)
+        cell.lunarLabel = Lunar.dayLabel(cell.lunar)
+      }
+      days.push(cell)
       cursor.setDate(cursor.getDate() + 1)
     }
     // Number every row by the ISO week owning its Thursday. That is the
