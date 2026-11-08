@@ -67,6 +67,47 @@ function leapMonthOffset(start) {
   return 13
 }
 
+// One calendariale call searches the sky from scratch and costs several
+// milliseconds in the QML engine, so one call per grid cell stalls the panel.
+// All days of a lunar month share its year, month and leap flag. The cache
+// keeps the months already seen, and a day is its distance from the month start.
+// A month grid then needs at most 2 calls per lunar month it shows, and none
+// when it is built again for the same month.
+var MONTH_CACHE_SIZE = 48
+var monthCache = []
+
+function cachedMonth(calendar, jdn) {
+  for (var i = 0; i < monthCache.length; i++) {
+    var entry = monthCache[i]
+    if (entry.calendar === calendar && jdn >= entry.start && jdn < entry.end) return entry
+  }
+  return null
+}
+
+function engineDate(calendar, jdn) {
+  var entry = cachedMonth(calendar, jdn)
+  if (!entry) {
+    var korean = calendar === "korean"
+    var engine = korean ? Calendariale.api.KoreanCalendar : Calendariale.api.ChineseCalendar
+    var date = engine.fromJdn(jdn)
+    var start = jdn - date.day + 1
+    // A lunar month has 29 or 30 days. It is long only if its day 30 exists.
+    var longMonth = date.day === 30 || engine.fromJdn(start + 29).day === 30
+    entry = {
+      calendar: calendar,
+      start: start,
+      end: start + (longMonth ? 30 : 29),
+      // The library exposes a cycle and a year within that cycle, not a civil year.
+      year: (date.cycle - 1) * 60 + date.year - (korean ? 2333 : 2637),
+      month: date.month,
+      leap: date.monthLeap
+    }
+    monthCache.push(entry)
+    if (monthCache.length > MONTH_CACHE_SIZE) monthCache.shift()
+  }
+  return { year: entry.year, month: entry.month, day: jdn - entry.start + 1, leap: entry.leap }
+}
+
 function fromGregorian(year, month, day, calendar) {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)
       || year < FIRST_YEAR || year > LAST_YEAR || month < 1 || month > 12 || day < 1) return null
@@ -75,12 +116,7 @@ function fromGregorian(year, month, day, calendar) {
   if (day > lengths[month - 1]) return null
 
   if (calendar === "chinese" || calendar === "korean") {
-    var korean = calendar === "korean"
-    var engine = korean ? Calendariale.api.KoreanCalendar : Calendariale.api.ChineseCalendar
-    var date = engine.fromJdn(Calendariale.api.GregorianCalendar.toJdn(year, month, day))
-    // The library exposes a cycle and a year within that cycle, not a civil year.
-    var civilYear = (date.cycle - 1) * 60 + date.year - (korean ? 2333 : 2637)
-    return { year: civilYear, month: date.month, day: date.day, leap: date.monthLeap }
+    return engineDate(calendar, Calendariale.api.GregorianCalendar.toJdn(year, month, day))
   }
 
   var jd = julianDay(year, month, day)
