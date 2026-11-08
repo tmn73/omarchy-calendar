@@ -561,7 +561,7 @@ under it that says what it does.
 | Panel | A preset: Minimal or Standard. Where the agenda sits: beside or under the calendar. A switch for each block: year and life progress, shortcut legend, quick add, next event card, upcoming days |
 | Bar | Your own clock format, with a live preview, on one line or one per line of the clock on a vertical bar. It joins the formats the format button goes through (right click by default), and a format that is already one of them is pointed out. A format written by hand in `shell.json` is kept the same way on the first right click. How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How many characters of the title it shows before the ellipsis. How long "Now" stays on during an event, and whether the next event takes over. Desktop reminders, and whether they name the event. A preview puts your choices in words. What each mouse button does on the clock: open the panel, join the meeting or change the format, with at least one button on the panel |
 | Calendars | Show or hide each calendar, with its event count. The list comes from your own events, so it needs no configuration. Then working location events (Google's work-from-home markers, hidden by default) and declined invitations (struck through when shown) |
-| General | Language: Automatic follows your locale, or English, or Português. The first day of the week. Whether the panel can create and edit events. The sync state: event count, source and last sync time |
+| General | Language: Automatic follows your locale, or English, or Português. The first day of the week. Whether the panel can create and edit events. Lunar dates under each day, by Vietnamese, Chinese or Korean rules, from 1976 to 2050, off by default. The sync state: event count, source and last sync time |
 
 Event times follow `eventTimeFormat` in `shell.json`, a Qt date-time format
 such as `HH:mm` or `h:mm AP`.
@@ -667,3 +667,6 @@ Anything worth testing was deliberately pushed down into those two files.
 
 MIT. Derived from Omarchy's built-in clock plugin, whose copyright notice is
 kept in `LICENSE`.
+
+`vendor/Calendariale.js` is a bundle of calendariale 0.7.0 by Carlo Dapor. Its BSD
+license is in `vendor/calendariale.LICENSE`.

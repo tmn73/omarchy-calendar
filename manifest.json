@@ -28,6 +28,8 @@
       "customVerticalFormat": "",
       "eventTimeFormat": "HH:mm",
       "language": "auto",
+      "showLunarDates": false,
+      "lunarCalendar": "vietnamese",
       "reminders": true,
       "announceLeadMinutes": 15,
       "duringEvent": "untilEnd",
@@ -85,6 +87,21 @@
         ],
         "defaultValue": "auto",
         "description": "auto follows the system locale (Portuguese for pt_*, otherwise English)."
+      },
+      {
+        "key": "showLunarDates",
+        "type": "boolean",
+        "label": "Show lunar dates",
+        "defaultValue": false,
+        "description": "Lunar dates, 1976–2050."
+      },
+      {
+        "key": "lunarCalendar",
+        "type": "enum",
+        "label": "Lunar calendar",
+        "options": ["vietnamese", "chinese", "korean"],
+        "defaultValue": "vietnamese",
+        "description": "Calendar used for lunar dates, independent of the display language."
       },
       {
         "key": "reminders",

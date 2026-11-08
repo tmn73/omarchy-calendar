@@ -28,6 +28,7 @@ Item {
   property bool showUpcomingDays: true
 
   property string dayHeading: ""
+  property string lunarDateText: ""
   property string daySummary: ""
   // Model.daySections for the selected day.
   property var sections: ({ allDay: [], timed: [], nowIndex: -1 })
@@ -151,6 +152,17 @@ Item {
           text: root.dayHeading.toUpperCase()
           wrapMode: Text.Wrap
           color: Util.alpha(root.foreground, 0.85)
+        }
+
+        Text {
+          visible: text.length > 0
+          width: parent.width
+          textFormat: Text.PlainText
+          text: root.lunarDateText
+          wrapMode: Text.Wrap
+          color: Util.alpha(root.foreground, 0.68)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
         }
 
         Text {

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Commons as Commons
+import qs.Ui
 
 import "Strings.js" as Strings
 
@@ -17,6 +18,8 @@ Column {
   // The stored setting ("auto" | "en" | "pt"), not the resolved language.
   property string languageSetting: "auto"
   property bool weekStartsMonday: true
+  property bool showLunarDates: false
+  property string lunarCalendar: "vietnamese"
 
   // True when the events file lists a calendar the panel may write to.
   property bool canWrite: false
@@ -30,6 +33,8 @@ Column {
 
   signal languagePicked(string value)
   signal weekStartToggled()
+  signal lunarDatesToggled()
+  signal lunarCalendarPicked(string value)
   signal writeSetupCopyRequested()
   signal setupCommandCopyRequested()
 
@@ -60,6 +65,39 @@ Column {
     hint: root.tr("settings.weekMondayHint")
     checked: root.weekStartsMonday
     onActivated: root.weekStartToggled()
+  }
+
+  Item { width: 1; height: Style.space(8) }
+
+  ToggleRow {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    label: root.tr("settings.lunarDates")
+    hint: root.tr("settings.lunarDatesHint")
+    checked: root.showLunarDates
+    onActivated: root.lunarDatesToggled()
+  }
+
+  Dropdown {
+    id: lunarCalendarDropdown
+    width: parent.width
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    label: root.tr("settings.lunarCalendar")
+    options: [
+      { value: "vietnamese", label: root.tr("lunar.vietnamese") },
+      { value: "chinese", label: root.tr("lunar.chinese") },
+      { value: "korean", label: root.tr("lunar.korean") }
+    ]
+    value: root.lunarCalendar
+    enabled: root.showLunarDates
+    opacity: enabled ? 1 : 0.4
+    onEnabledChanged: if (!enabled && popupOpen) close()
+    onChanged: function(value) {
+      if (root.showLunarDates) root.lunarCalendarPicked(value)
+      // Dropdown assigns value on selection; restore the stored-setting binding.
+      lunarCalendarDropdown.value = Qt.binding(function() { return root.lunarCalendar })
+    }
   }
 
   Item { width: 1; height: Style.space(8) }
