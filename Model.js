@@ -768,6 +768,19 @@ function daySections(events, nowMs, isToday) {
   }
 }
 
+// The timed row the agenda opens on: the first event still under way, so a
+// meeting to join is in view, or else the row of the now line. -1 means the
+// top of the day: any day but today, and a today with no timed event.
+function openingRowIndex(sections) {
+  var timed = sections && sections.timed || []
+  var nowIndex = sections ? sections.nowIndex : -1
+  if (nowIndex < 0 || timed.length === 0) return -1
+  for (var i = 0; i < nowIndex && i < timed.length; i++) {
+    if (timed[i].phase === "now") return i
+  }
+  return nowIndex
+}
+
 // Far enough to reach past a holiday week; the sync rarely writes further.
 var UPCOMING_HORIZON_DAYS = 60
 

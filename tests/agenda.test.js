@@ -103,6 +103,25 @@ test('daySections has no now line on any day but today', () => {
   assert.equal(Model.daySections([timed('A', 9, 0, 10, 0)], NOW, false).nowIndex, -1)
 })
 
+const opening = (events, isToday = true) => Model.openingRowIndex(Model.daySections(events, NOW, isToday))
+
+test('openingRowIndex is the first event under way, so a meeting to join is in view', () => {
+  assert.equal(opening([timed('Morning', 9, 0, 9, 30), timed('Lunch', 12, 30, 13, 30), timed('Late', 16, 0, 17, 0)]), 1)
+  assert.equal(opening([timed('All day long', 8, 0, 18, 0), timed('Morning', 9, 0, 9, 30), timed('Lunch', 12, 30, 13, 30)]), 0)
+})
+
+test('openingRowIndex is the now line when nothing is under way', () => {
+  assert.equal(opening([timed('Morning', 9, 0, 9, 30), timed('Late', 16, 0, 17, 0)]), 1)
+  assert.equal(opening([timed('Morning', 9, 0, 9, 30)]), 1)
+})
+
+test('openingRowIndex is the top of the day when no now line is drawn', () => {
+  assert.equal(opening([timed('Lunch', 12, 30, 13, 30)], false), -1)
+  assert.equal(opening([allDay('Holiday')]), -1)
+  assert.equal(opening(null), -1)
+  assert.equal(Model.openingRowIndex(null), -1)
+})
+
 test('daySections keeps timed tasks in the timed section', () => {
   const sections = Model.daySections([timed('Regar as plantas', 8, 0, 8, 30, { calendarName: 'Todoist' })], NOW, true)
   assert.equal(sections.timed[0].kind, 'task')

@@ -3,6 +3,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 
+import "Model.js" as Model
 import "Strings.js" as Strings
 
 // The middle column: quick add and the next-up card at the top, then the
@@ -61,8 +62,6 @@ Item {
   signal setupCopyRequested()
   signal toastDismissed()
 
-  property bool followNow: false
-
   readonly property bool empty: sections.allDay.length === 0 && sections.timed.length === 0
   // The height that shows everything without scrolling. The panel uses it
   // when the agenda sits under the month.
@@ -77,11 +76,10 @@ Item {
     quickAdd.focusField()
   }
 
-  // Park the day on the now line, so the next event shows without a scroll.
-  // The rows are still settling when the panel opens, so the day stays
-  // parked there until the reader scrolls.
+  // Park the day on what happens now, so the next event shows without a
+  // scroll: the first event under way, or else the now line.
   function showNow() {
-    followNow = true
+    scroll.parked = true
     scroll.parkOnNow()
   }
 
@@ -147,19 +145,25 @@ Item {
     boundsBehavior: Flickable.StopAtBounds
     interactive: contentHeight > height
 
-    // The top of the day when the now line is not drawn: another day, or a
-    // day with no timed event.
+    // Set when the panel opens, cleared by the reader's first scroll. The
+    // rows are still settling at the open, so the park is done again each
+    // time the sizes change.
+    property bool parked: false
+
+    // The row comes from Model.openingRowIndex, which gives none for a day
+    // that draws no now line. A hidden line keeps the position of the last
+    // day that showed it, so a position is read only from a drawn row.
     function parkOnNow() {
-      var index = root.sections.nowIndex
-      var line = index < 0 ? null
+      var index = Model.openingRowIndex(root.sections)
+      var row = index < 0 ? null
         : index < timedRows.count ? timedRows.itemAt(index) : closingNowLine
-      var top = line ? line.mapToItem(dayColumn, 0, 0).y : 0
+      var top = row ? row.mapToItem(dayColumn, 0, 0).y : 0
       contentY = Math.max(0, Math.min(top, contentHeight - height))
     }
 
-    onContentHeightChanged: if (root.followNow) parkOnNow()
-    onHeightChanged: if (root.followNow) parkOnNow()
-    onMovementStarted: root.followNow = false
+    onContentHeightChanged: if (parked) parkOnNow()
+    onHeightChanged: if (parked) parkOnNow()
+    onMovementStarted: parked = false
 
     Column {
       id: dayColumn
