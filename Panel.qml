@@ -423,6 +423,7 @@ Panel {
     // shared flag. Deferring means the panel taking over always wins.
     Qt.callLater(function() {
       if (root.opened) setCenterHoverRevealSuppressed(true)
+      agenda.showNow()
     })
   }
 

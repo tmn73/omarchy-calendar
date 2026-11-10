@@ -61,6 +61,8 @@ Item {
   signal setupCopyRequested()
   signal toastDismissed()
 
+  property bool followNow: false
+
   readonly property bool empty: sections.allDay.length === 0 && sections.timed.length === 0
   // The height that shows everything without scrolling. The panel uses it
   // when the agenda sits under the month.
@@ -73,6 +75,14 @@ Item {
 
   function focusQuickAdd() {
     quickAdd.focusField()
+  }
+
+  // Park the day on the now line, so the next event shows without a scroll.
+  // The rows are still settling when the panel opens, so the day stays
+  // parked there until the reader scrolls.
+  function showNow() {
+    followNow = true
+    scroll.parkOnNow()
   }
 
   function clearQuickAdd() {
@@ -136,6 +146,20 @@ Item {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     interactive: contentHeight > height
+
+    // The top of the day when the now line is not drawn: another day, or a
+    // day with no timed event.
+    function parkOnNow() {
+      var index = root.sections.nowIndex
+      var line = index < 0 ? null
+        : index < timedRows.count ? timedRows.itemAt(index) : closingNowLine
+      var top = line ? line.mapToItem(dayColumn, 0, 0).y : 0
+      contentY = Math.max(0, Math.min(top, contentHeight - height))
+    }
+
+    onContentHeightChanged: if (root.followNow) parkOnNow()
+    onHeightChanged: if (root.followNow) parkOnNow()
+    onMovementStarted: root.followNow = false
 
     Column {
       id: dayColumn
@@ -259,6 +283,7 @@ Item {
         }
 
         Repeater {
+          id: timedRows
           model: root.sections.timed
 
           Column {
@@ -296,6 +321,7 @@ Item {
         }
 
         NowLine {
+          id: closingNowLine
           visible: root.sections.nowIndex === root.sections.timed.length
           width: parent.width
           timeText: root.nowText
