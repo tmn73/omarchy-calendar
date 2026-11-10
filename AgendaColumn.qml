@@ -3,6 +3,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 
+import "Model.js" as Model
 import "Strings.js" as Strings
 
 // The middle column: quick add and the next-up card at the top, then the
@@ -75,6 +76,12 @@ Item {
     quickAdd.focusField()
   }
 
+  // Park the day on the now line, so the next event shows without a scroll.
+  function showNow() {
+    scroll.parked = true
+    scroll.parkOnNow()
+  }
+
   function clearQuickAdd() {
     quickAdd.clear()
   }
@@ -136,6 +143,26 @@ Item {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     interactive: contentHeight > height
+
+    // Set when the panel opens, cleared by the reader's first scroll. The
+    // rows are still settling at the open, so the park is done again each
+    // time the sizes change.
+    property bool parked: false
+
+    // The row comes from Model.openingRowIndex, which gives none for a day
+    // that draws no now line. A hidden line keeps the position of the last
+    // day that showed it, so a position is read only from a drawn row.
+    function parkOnNow() {
+      var index = Model.openingRowIndex(root.sections)
+      var row = index < 0 ? null
+        : index < timedRows.count ? timedRows.itemAt(index) : closingNowLine
+      var top = row ? row.mapToItem(dayColumn, 0, 0).y : 0
+      contentY = Math.max(0, Math.min(top, contentHeight - height))
+    }
+
+    onContentHeightChanged: if (parked) parkOnNow()
+    onHeightChanged: if (parked) parkOnNow()
+    onMovementStarted: parked = false
 
     Column {
       id: dayColumn
@@ -259,6 +286,7 @@ Item {
         }
 
         Repeater {
+          id: timedRows
           model: root.sections.timed
 
           Column {
@@ -296,6 +324,7 @@ Item {
         }
 
         NowLine {
+          id: closingNowLine
           visible: root.sections.nowIndex === root.sections.timed.length
           width: parent.width
           timeText: root.nowText
