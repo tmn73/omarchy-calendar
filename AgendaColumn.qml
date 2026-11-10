@@ -76,8 +76,7 @@ Item {
     quickAdd.focusField()
   }
 
-  // Park the day on what happens now, so the next event shows without a
-  // scroll: the first event under way, or else the now line.
+  // Park the day on the now line, so the next event shows without a scroll.
   function showNow() {
     scroll.parked = true
     scroll.parkOnNow()

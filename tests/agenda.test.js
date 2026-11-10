@@ -105,13 +105,9 @@ test('daySections has no now line on any day but today', () => {
 
 const opening = (events, isToday = true) => Model.openingRowIndex(Model.daySections(events, NOW, isToday))
 
-test('openingRowIndex is the first event under way, so a meeting to join is in view', () => {
-  assert.equal(opening([timed('Morning', 9, 0, 9, 30), timed('Lunch', 12, 30, 13, 30), timed('Late', 16, 0, 17, 0)]), 1)
-  assert.equal(opening([timed('All day long', 8, 0, 18, 0), timed('Morning', 9, 0, 9, 30), timed('Lunch', 12, 30, 13, 30)]), 0)
-})
-
-test('openingRowIndex is the now line when nothing is under way', () => {
-  assert.equal(opening([timed('Morning', 9, 0, 9, 30), timed('Late', 16, 0, 17, 0)]), 1)
+test('openingRowIndex is the row of the now line', () => {
+  assert.equal(opening([timed('Morning', 9, 0, 9, 30), timed('Lunch', 12, 30, 13, 30), timed('Late', 16, 0, 17, 0)]), 2)
+  assert.equal(opening([timed('All day long', 8, 0, 18, 0), timed('Morning', 9, 0, 9, 30), timed('Late', 16, 0, 17, 0)]), 2)
   assert.equal(opening([timed('Morning', 9, 0, 9, 30)]), 1)
 })
 
