@@ -346,6 +346,12 @@ function adoptedCustomFormat(current, custom, alt, presets) {
   return presetClockFormat(current, presets) === "" ? text(current) : ""
 }
 
+// True when a Qt date format prints seconds. Text in single quotes is literal
+// and does not count: 'hrs' has an "s" but shows no seconds.
+function clockNeedsSeconds(format) {
+  return /s/.test(text(format).replace(/'[^']*'?/g, ""))
+}
+
 // ---- Month grid
 
 function lunarDateText(key, lang, calendar) {

@@ -21,13 +21,15 @@ BarWidget {
   moduleName: "tmn73.calendar"
 
   property date displayDate: clock.date
-  readonly property real nowMs: displayDate.getTime()
+  // Event state and countdowns use whole minutes, so a seconds format does not
+  // compute them again on each tick.
+  readonly property real nowMs: Math.floor(displayDate.getTime() / 60000) * 60000
 
   readonly property string language: Strings.resolveLanguage(setting("language", "auto"), Qt.locale().name)
 
   readonly property string configuredFormat: setting(vertical ? "verticalFormat" : "format", Model.defaultClockFormat(vertical))
   // A seconds format needs a tick every second; minute formats keep the cheap update.
-  readonly property bool showsSeconds: /s/.test(configuredFormat.replace(/'[^']*'?/g, ""))
+  readonly property bool showsSeconds: Model.clockNeedsSeconds(configuredFormat)
   readonly property string configuredAltFormat: setting(vertical ? "verticalFormatAlt" : "formatAlt", Model.defaultAltClockFormat(vertical))
   // The user's own format, from Settings › Bar, one per orientation.
   readonly property string customFormat: setting(vertical ? "customVerticalFormat" : "customFormat", "")
