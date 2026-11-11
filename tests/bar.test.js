@@ -224,6 +224,16 @@ test('customClockFormatValues stores a vertical format with its line breaks', ()
     { custom: 'ddd\nHH\nmm', format: 'ddd\nHH\nmm' })
 })
 
+test('clockNeedsSeconds is true only for a format that prints seconds', () => {
+  assert.equal(Model.clockNeedsSeconds('dddd, MMMM dd, yyyy hh:mm:ss a'), true)
+  assert.equal(Model.clockNeedsSeconds('HH:mm:s'), true)
+  for (const preset of PRESETS.concat(VERTICAL)) assert.equal(Model.clockNeedsSeconds(preset), false)
+  assert.equal(Model.clockNeedsSeconds("HH:mm 'hrs'"), false)
+  assert.equal(Model.clockNeedsSeconds("'it''s' HH:mm"), false)
+  assert.equal(Model.clockNeedsSeconds("HH:mm 'secs"), false)
+  assert.equal(Model.clockNeedsSeconds(''), false)
+})
+
 test('adoptedCustomFormat keeps a hand-written format that right click is about to leave', () => {
   const alt = "d MMMM 'W'ww yyyy"
   assert.equal(Model.adoptedCustomFormat('HH:mm:ss', '', alt, PRESETS), 'HH:mm:ss')
