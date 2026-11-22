@@ -199,7 +199,10 @@ Panel {
   // and are not what it opens on, so each is built the first time it shows,
   // and stays after that.
   onSettingsOpenChanged: if (settingsOpen) settingsLoader.active = true
-  onInspectorOpenChanged: if (inspectorOpen && !formOpen) detailsLoader.active = true
+  // The details show when the inspector is open and the form is not. Watch
+  // that exact condition: the form can close while the inspector stays open.
+  readonly property bool detailsShowing: inspectorOpen && !formOpen
+  onDetailsShowingChanged: if (detailsShowing) detailsLoader.active = true
 
   // Today's first timed event not yet over, shown above today's agenda.
   readonly property var nextUp: {
@@ -1212,7 +1215,7 @@ Panel {
                 width: root.inspectorWidth
 
                 // Built the first time an event's details show: see
-                // onInspectorOpenChanged.
+                // onDetailsShowingChanged.
                 Loader {
                   id: detailsLoader
                   active: false
