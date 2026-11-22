@@ -415,6 +415,41 @@ function monthGrid(year, month, weekStart, todayKey, eventIndex, showLunarDates,
 //      one row per day it covers, all sharing its id, so rows are told
 //      apart by id plus dateKey (or id plus start, for the event itself).
 
+// The events file as text, read into { doc, mismatch }. `doc` is the parsed
+// document, or null when there is nothing to show: no file, text that is not
+// JSON, or a version this widget does not read. `mismatch` says it was that
+// last one, a file written by a newer sync, so the panel can say so rather
+// than draw an empty month that reads as a quiet week. `doc.events` is always
+// a list.
+//
+// The last answer is kept, with the text it came from to compare against.
+// The bar has one widget per monitor and each reads the same file, so they
+// all get the one parsed document instead of a copy each. Nothing may change
+// a document or its rows in place.
+var lastEventsText = null
+var lastEventsDocument = null
+
+function parseEventsDocument(raw) {
+  var source = text(raw)
+  if (lastEventsDocument !== null && source === lastEventsText) return lastEventsDocument
+
+  var result = { doc: null, mismatch: false }
+  if (source !== "") {
+    try {
+      var parsed = JSON.parse(source)
+      if (parsed && parsed.version === 1) {
+        if (!Array.isArray(parsed.events)) parsed.events = []
+        result.doc = parsed
+      } else if (parsed && parsed.version !== undefined) {
+        result.mismatch = true
+      }
+    } catch (error) {}
+  }
+  lastEventsText = source
+  lastEventsDocument = result
+  return result
+}
+
 function indexEventsByDate(events) {
   var index = {}
   if (!events || !events.length) return index
@@ -465,9 +500,37 @@ function calendarsInDocument(doc) {
   return ordered
 }
 
+// Events per calendar id, hidden calendars included, for Settings. Counted
+// by event id: a multi-day event is one row per day.
+function calendarEventCounts(doc) {
+  var events = (doc && doc.events) || []
+  var seen = {}
+  var counts = {}
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!event) continue
+    var key = event.calendarId + "|" + event.id
+    if (seen[key]) continue
+    seen[key] = true
+    counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
+  }
+  return counts
+}
+
 function isCalendarHidden(hidden, calendarId) {
   if (!hidden || !hidden.length) return false
   return hidden.indexOf(String(calendarId)) !== -1
+}
+
+// True when two lists hold the same values in the same order, compared as
+// text the way isCalendarHidden reads them.
+function sameList(a, b) {
+  var first = a || []
+  var second = b || []
+  if (first.length !== second.length) return false
+  for (var i = 0; i < first.length; i++)
+    if (String(first[i]) !== String(second[i])) return false
+  return true
 }
 
 // Returns a new list rather than mutating, so the caller can hand the result

@@ -11,6 +11,43 @@ const EVENTS = [
   { id: 'd', dateKey: '2026-08-12', title: 'Dentist', color: '#ffad46', start: '2026-08-12T10:00:00-05:00' }
 ]
 
+test('parseEventsDocument reads a version 1 file', () => {
+  const read = Model.parseEventsDocument(JSON.stringify({ version: 1, syncedAt: 'now', events: EVENTS }))
+  assert.equal(read.mismatch, false)
+  assert.equal(read.doc.syncedAt, 'now')
+  assert.deepEqual(read.doc.events, EVENTS)
+})
+
+test('parseEventsDocument has no document for a missing or unreadable file', () => {
+  for (const raw of ['', null, undefined, 'not json', '[1, 2]', '"text"', '{}']) {
+    assert.deepEqual(Model.parseEventsDocument(raw), { doc: null, mismatch: false }, String(raw))
+  }
+})
+
+test('parseEventsDocument says when a newer sync wrote the file', () => {
+  assert.deepEqual(Model.parseEventsDocument('{"version": 2, "events": []}'), { doc: null, mismatch: true })
+})
+
+test('parseEventsDocument always gives the document a list of events', () => {
+  assert.deepEqual(Model.parseEventsDocument('{"version": 1}').doc.events, [])
+  assert.deepEqual(Model.parseEventsDocument('{"version": 1, "events": "none"}').doc.events, [])
+})
+
+test('parseEventsDocument hands every reader of the same text the same document', () => {
+  const raw = JSON.stringify({ version: 1, events: EVENTS })
+  const first = Model.parseEventsDocument(raw)
+  assert.equal(Model.parseEventsDocument(raw.slice()), first)
+  assert.equal(Model.parseEventsDocument(raw).doc.events, first.doc.events)
+})
+
+test('parseEventsDocument reads the file again once its text changes', () => {
+  const before = Model.parseEventsDocument(JSON.stringify({ version: 1, events: EVENTS }))
+  const after = Model.parseEventsDocument(JSON.stringify({ version: 1, events: EVENTS.slice(0, 1) }))
+  assert.notEqual(after, before)
+  assert.equal(after.doc.events.length, 1)
+  assert.equal(Model.parseEventsDocument('').doc, null)
+})
+
 test('indexEventsByDate groups by dateKey', () => {
   const index = Model.indexEventsByDate(EVENTS)
   assert.equal(index['2026-08-10'].length, 3)
@@ -138,6 +175,31 @@ test('calendarsInDocument lists each calendar once, sorted by name', () => {
 test('calendarsInDocument tolerates a null document', () => {
   assert.deepEqual(Model.calendarsInDocument(null), [])
   assert.deepEqual(Model.calendarsInDocument({}), [])
+})
+
+test('calendarEventCounts counts each event once, however many days it covers', () => {
+  const doc = { events: [
+    { id: 'trip', calendarId: 'me@x', dateKey: '2026-08-10' },
+    { id: 'trip', calendarId: 'me@x', dateKey: '2026-08-11' },
+    { id: 'lunch', calendarId: 'me@x', dateKey: '2026-08-10' },
+    { id: 'trip', calendarId: 'work@x', dateKey: '2026-08-10' }
+  ] }
+  assert.deepEqual(Model.calendarEventCounts(doc), { 'me@x': 2, 'work@x': 1 })
+})
+
+test('calendarEventCounts tolerates a null document', () => {
+  assert.deepEqual(Model.calendarEventCounts(null), {})
+  assert.deepEqual(Model.calendarEventCounts({}), {})
+})
+
+test('sameList compares two lists value by value, as text', () => {
+  assert.equal(Model.sameList(['a@x', 'b@x'], ['a@x', 'b@x']), true)
+  assert.equal(Model.sameList([1, 2], ['1', '2']), true)
+  assert.equal(Model.sameList(['a@x', 'b@x'], ['b@x', 'a@x']), false)
+  assert.equal(Model.sameList(['a@x'], ['a@x', 'b@x']), false)
+  assert.equal(Model.sameList([], []), true)
+  assert.equal(Model.sameList(null, []), true)
+  assert.equal(Model.sameList(undefined, ['a@x']), false)
 })
 
 test('toggleHiddenCalendar adds then removes', () => {
