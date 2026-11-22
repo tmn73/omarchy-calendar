@@ -57,8 +57,9 @@ Panel {
     return Qt.formatDateTime(new Date(ms), root.eventTimeFormat)
   }
 
-  // ---- Today. SystemClock keeps this honest across midnight so the
-  //      highlight rolls over without the panel being reopened.
+  // ---- Today. SystemClock keeps this honest across midnight while the
+  //      panel is open. open() resets it, so a closed panel catches up
+  //      when it shows.
   property date today: new Date()
   readonly property string todayKey: Model.keyForDate(today)
   // Ticks every minute, which is what a countdown needs; `today` only moves
@@ -91,11 +92,19 @@ Panel {
     return String(root.uiLocale.dayName(day, Locale.ShortFormat)).replace(/\.$/, "").toUpperCase()
   })
 
-  // ---- Events, read from whatever wrote the state file. Google, khal, an
-  //      ICS feed and a shell script all look identical from here.
-  property var eventDoc: null
-  property var eventIndex: ({})
-  property bool eventVersionMismatch: false
+  // ---- Events, from whatever wrote the state file. Google, khal, an ICS
+  //      feed and a shell script all look identical from here. The bar
+  //      widget reads and watches the file, since it is always loaded; this
+  //      panel shows the document it holds.
+  readonly property var eventDoc: (hostWidget && hostWidget.eventDoc) || null
+  readonly property bool eventVersionMismatch: !!hostWidget && hostWidget.eventVersionMismatch === true
+  // Hiding happens here rather than in the sync, so toggling a calendar back
+  // on is instant.
+  readonly property var eventIndex: Model.indexEventsByDate(Model.visibleEvents(
+    eventDoc ? eventDoc.events : [], hiddenCalendars, {
+      hideWorkingLocation: !showWorkingLocation,
+      hideDeclined: hideDeclined
+    }))
 
   // Matches the sync timer's interval. Model.syncState allows four of these
   // to elapse before calling the file stale, so one missed run stays quiet.
@@ -124,27 +133,10 @@ Panel {
   readonly property bool hideDeclined: setting("hideDeclined", false)
   readonly property string eventTimeFormat: String(setting("eventTimeFormat", "HH:mm") || "HH:mm")
 
-  // Hiding happens here rather than in the sync, so toggling a calendar back
-  // on is instant. Held as local state rather than read off `settings`:
-  // persisting round-trips through shell.json asynchronously, so a binding
-  // would still serve the old value when a second click arrives.
+  // Held as local state rather than read off `settings`: persisting
+  // round-trips through shell.json asynchronously, so a binding would still
+  // serve the old value when a second click arrives.
   property var hiddenCalendars: []
-  readonly property var knownCalendars: Model.calendarsInDocument(eventDoc)
-  // Events per calendar, hidden ones included, for Settings. By id: a
-  // multi-day event is one row per day.
-  readonly property var calendarCounts: {
-    var seen = {}
-    var counts = {}
-    var events = (root.eventDoc && root.eventDoc.events) || []
-    for (var i = 0; i < events.length; i++) {
-      var event = events[i]
-      var key = event.calendarId + "|" + event.id
-      if (seen[key]) continue
-      seen[key] = true
-      counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
-    }
-    return counts
-  }
 
   // ---- Writing. The sync lists the calendars the panel may change; with no
   //      list, quick add goes to Google Calendar in the browser instead,
@@ -203,6 +195,15 @@ Panel {
   }
   // Settings take the whole panel, so the details step aside while it is open.
   readonly property bool inspectorOpen: !settingsOpen && (formOpen || (detailsOpen && selectedItem !== null))
+
+  // The settings page and the details column are a large part of the panel
+  // and are not what it opens on, so each is built the first time it shows,
+  // and stays after that.
+  onSettingsOpenChanged: if (settingsOpen) settingsLoader.active = true
+  // The details show when the inspector is open and the form is not. Watch
+  // that exact condition: the form can close while the inspector stays open.
+  readonly property bool detailsShowing: inspectorOpen && !formOpen
+  onDetailsShowingChanged: if (detailsShowing) detailsLoader.active = true
 
   // Today's first timed event not yet over, shown above today's agenda.
   readonly property var nextUp: {
@@ -305,36 +306,13 @@ Panel {
   readonly property bool agendaBeside: !root.agendaBelow && !root.settingsOpen
   readonly property bool columnAfterMonth: root.agendaBeside || root.inspectorOpen
 
-  function applyEvents(raw) {
-    var doc = null
-    var mismatch = false
-    if (raw) {
-      try {
-        var parsed = JSON.parse(raw)
-        if (parsed && parsed.version === 1) doc = parsed
-        // Written by a newer sync than this widget understands. Say so
-        // rather than render an empty month that reads as a quiet week.
-        else if (parsed && parsed.version !== undefined) mismatch = true
-      } catch (error) {
-        doc = null
-      }
-    }
-    root.eventDoc = doc
-    root.eventVersionMismatch = mismatch
-    root.rebuildIndex()
-  }
-
-  function rebuildIndex() {
-    var all = root.eventDoc ? root.eventDoc.events : []
-    root.eventIndex = Model.indexEventsByDate(Model.visibleEvents(all, root.hiddenCalendars, {
-      hideWorkingLocation: !root.showWorkingLocation,
-      hideDeclined: root.hideDeclined
-    }))
-  }
-
+  // Every settings change comes through here, the clock format cycled from
+  // the bar included. The list is only replaced when it differs: a new one
+  // rebuilds the index, and with it the month and the agenda.
   function adoptSettings() {
     var stored = setting("hiddenCalendars", [])
-    root.hiddenCalendars = Array.isArray(stored) ? stored.slice() : []
+    var next = Array.isArray(stored) ? stored : []
+    if (!Model.sameList(root.hiddenCalendars, next)) root.hiddenCalendars = next.slice()
   }
 
   // Applied locally first so the panel redraws on the click itself; the
@@ -408,9 +386,6 @@ Panel {
     root.showToast(root.tr("toast.linkCopied"))
   }
 
-  onHiddenCalendarsChanged: root.rebuildIndex()
-  onShowWorkingLocationChanged: root.rebuildIndex()
-  onHideDeclinedChanged: root.rebuildIndex()
   onSettingsChanged: root.adoptSettings()
   Component.onCompleted: root.adoptSettings()
 
@@ -820,20 +795,6 @@ Panel {
     if (root.formOpen) root.closeForm()
   }
 
-  // watchChanges is the point of this whole widget: the sync rewrites the
-  // file every few minutes and the popup has to follow it. There is
-  // deliberately no "already loaded" guard; one is exactly what made an
-  // externally written file impossible to pick up upstream.
-  FileView {
-    id: eventsFile
-    path: (Quickshell.env("HOME") || "") + "/.local/state/omarchy/calendar-events.json"
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.applyEvents(text())
-    onLoadFailed: root.applyEvents("")
-    onFileChanged: reload()
-  }
-
   // Closing stdin right after the text is the end of input wl-copy reads up to.
   Process {
     id: textCopier
@@ -902,8 +863,11 @@ Panel {
     }
   }
 
+  // Only while the panel shows: open() sets the time itself, so a closed
+  // panel has no minute to keep, and does not redraw its day every minute.
   SystemClock {
     id: clock
+    enabled: root.opened
     precision: SystemClock.Minutes
     onDateChanged: {
       root.nowTick = clock.date
@@ -1065,55 +1029,61 @@ Panel {
               }
 
               // Everything settings changes is owned by this panel and
-              // persisted here, so the view stays read-and-emit.
-              SettingsView {
+              // persisted here, so the view stays read-and-emit. Built the
+              // first time settings open: see onSettingsOpenChanged.
+              Loader {
+                id: settingsLoader
+                active: false
                 visible: root.settingsOpen
                 width: parent.width
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                language: root.language
-                languageSetting: String(root.setting("language", "auto"))
-                calendars: root.knownCalendars
-                hiddenCalendars: root.hiddenCalendars
-                calendarCounts: root.calendarCounts
-                layout: root.layout
-                showWorkingLocation: root.showWorkingLocation
-                hideDeclined: root.hideDeclined
-                weekStartsMonday: root.weekStart === 1
-                showLunarDates: root.showLunarDates
-                lunarCalendar: root.lunarCalendar
-                announceLeadMinutes: root.setting("announceLeadMinutes", 15)
-                announceTitleLimit: Model.announceTitleLimit(root.setting("announceTitleLimit", 28))
-                clickActions: Model.clickActions(root.setting("leftClick", "panel"), root.setting("middleClick", "join"), root.setting("rightClick", "format"))
-                duringEvent: String(root.setting("duringEvent", "untilEnd"))
-                nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
-                reminders: root.setting("reminders", true) !== false
-                reminderDetails: root.setting("reminderDetails", false) === true
-                barVertical: root.barVertical
-                clockFormat: String(root.setting(root.barVertical ? "verticalFormat" : "format", Model.defaultClockFormat(root.barVertical)))
-                clockAltFormat: String(root.setting(root.barVertical ? "verticalFormatAlt" : "formatAlt", Model.defaultAltClockFormat(root.barVertical)))
-                now: root.nowTick
-                customFormat: String(root.setting(root.barVertical ? "customVerticalFormat" : "customFormat", ""))
-                syncState: root.syncState
-                setupCommand: root.setupCommand
-                setupCommandCopied: root.setupCommandCopied
-                canWrite: root.canWrite
-                writeSetupCopied: root.writeSetupCommandCopied
-                eventCount: root.eventDoc && root.eventDoc.events ? root.eventDoc.events.length : 0
-                sourceLabel: root.eventDoc ? String(root.eventDoc.source || "") : ""
-                syncedAt: root.eventDoc && root.eventDoc.syncedAt
-                  ? root.uiLocale.toString(new Date(root.eventDoc.syncedAt), "d MMM HH:mm")
-                  : ""
-                onSetupCommandCopyRequested: root.copySetupCommand()
-                onWriteSetupCopyRequested: root.copyWriteSetupCommand()
-                onCloseRequested: root.settingsOpen = false
-                onPicked: function(values) { root.persistSettings(values) }
-                onEditingFinished: root.focusKeys()
-                onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
-                onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
-                onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
-                onWeekStartToggled: root.toggleWeekStart()
-                onLanguagePicked: function(value) { root.persistSettings({ language: value }) }
+
+                sourceComponent: SettingsView {
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  language: root.language
+                  languageSetting: String(root.setting("language", "auto"))
+                  calendars: Model.calendarsInDocument(root.eventDoc)
+                  hiddenCalendars: root.hiddenCalendars
+                  calendarCounts: Model.calendarEventCounts(root.eventDoc)
+                  layout: root.layout
+                  showWorkingLocation: root.showWorkingLocation
+                  hideDeclined: root.hideDeclined
+                  weekStartsMonday: root.weekStart === 1
+                  showLunarDates: root.showLunarDates
+                  lunarCalendar: root.lunarCalendar
+                  announceLeadMinutes: root.setting("announceLeadMinutes", 15)
+                  announceTitleLimit: Model.announceTitleLimit(root.setting("announceTitleLimit", 28))
+                  clickActions: Model.clickActions(root.setting("leftClick", "panel"), root.setting("middleClick", "join"), root.setting("rightClick", "format"))
+                  duringEvent: String(root.setting("duringEvent", "untilEnd"))
+                  nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
+                  reminders: root.setting("reminders", true) !== false
+                  reminderDetails: root.setting("reminderDetails", false) === true
+                  barVertical: root.barVertical
+                  clockFormat: String(root.setting(root.barVertical ? "verticalFormat" : "format", Model.defaultClockFormat(root.barVertical)))
+                  clockAltFormat: String(root.setting(root.barVertical ? "verticalFormatAlt" : "formatAlt", Model.defaultAltClockFormat(root.barVertical)))
+                  now: root.nowTick
+                  customFormat: String(root.setting(root.barVertical ? "customVerticalFormat" : "customFormat", ""))
+                  syncState: root.syncState
+                  setupCommand: root.setupCommand
+                  setupCommandCopied: root.setupCommandCopied
+                  canWrite: root.canWrite
+                  writeSetupCopied: root.writeSetupCommandCopied
+                  eventCount: root.eventDoc && root.eventDoc.events ? root.eventDoc.events.length : 0
+                  sourceLabel: root.eventDoc ? String(root.eventDoc.source || "") : ""
+                  syncedAt: root.eventDoc && root.eventDoc.syncedAt
+                    ? root.uiLocale.toString(new Date(root.eventDoc.syncedAt), "d MMM HH:mm")
+                    : ""
+                  onSetupCommandCopyRequested: root.copySetupCommand()
+                  onWriteSetupCopyRequested: root.copyWriteSetupCommand()
+                  onCloseRequested: root.settingsOpen = false
+                  onPicked: function(values) { root.persistSettings(values) }
+                  onEditingFinished: root.focusKeys()
+                  onCalendarToggled: function(calendarId) { root.toggleCalendar(calendarId) }
+                  onWorkingLocationToggled: root.persistSettings({ showWorkingLocation: !root.showWorkingLocation })
+                  onHideDeclinedToggled: root.persistSettings({ hideDeclined: !root.hideDeclined })
+                  onWeekStartToggled: root.toggleWeekStart()
+                  onLanguagePicked: function(value) { root.persistSettings({ language: value }) }
+                }
               }
             }
           }
@@ -1245,27 +1215,34 @@ Panel {
                 y: Style.spacing.hairline
                 width: root.inspectorWidth
 
-                EventDetails {
+                // Built the first time an event's details show: see
+                // onDetailsShowingChanged.
+                Loader {
+                  id: detailsLoader
+                  active: false
                   visible: !root.formOpen && root.selectedItem !== null
                   width: parent.width
-                  item: root.selectedItem || ({})
-                  whenText: root.whenText(root.selectedItem)
-                  nowMs: root.nowMs
-                  editable: root.isEditable(root.selectedItem)
-                  deletable: root.isEditable(root.selectedItem)
-                  busy: root.writeBusy
-                  snoozable: root.selectedSnoozable
-                  snoozeText: root.snoozeText
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  language: root.language
-                  onCloseRequested: root.detailsOpen = false
-                  onEditRequested: root.editEvent(root.selectedItem)
-                  onDeleteRequested: root.deleteEvent(root.selectedItem)
-                  onJoinRequested: root.joinItem(root.selectedItem)
-                  onSnoozeRequested: root.snooze(root.selectedItem)
-                  onLinkOpened: function(url) { root.openExternally(url) }
-                  onLinkCopied: function(url) { root.copyLink(url) }
+
+                  sourceComponent: EventDetails {
+                    item: root.selectedItem || ({})
+                    whenText: root.whenText(root.selectedItem)
+                    nowMs: root.nowMs
+                    editable: root.isEditable(root.selectedItem)
+                    deletable: root.isEditable(root.selectedItem)
+                    busy: root.writeBusy
+                    snoozable: root.selectedSnoozable
+                    snoozeText: root.snoozeText
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    language: root.language
+                    onCloseRequested: root.detailsOpen = false
+                    onEditRequested: root.editEvent(root.selectedItem)
+                    onDeleteRequested: root.deleteEvent(root.selectedItem)
+                    onJoinRequested: root.joinItem(root.selectedItem)
+                    onSnoozeRequested: root.snooze(root.selectedItem)
+                    onLinkOpened: function(url) { root.openExternally(url) }
+                    onLinkCopied: function(url) { root.copyLink(url) }
+                  }
                 }
 
                 // A Loader, so every open gets a fresh form: the shell's menus

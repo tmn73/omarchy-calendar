@@ -35,9 +35,13 @@ BarWidget {
   readonly property string customFormat: setting(vertical ? "customVerticalFormat" : "customFormat", "")
   readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical), customFormat)
 
-  // ---- Events. Read here rather than off the panel so the label and the
-  //      reminders keep working whether or not the panel was ever opened.
-  property var allEvents: []
+  // ---- Events. Read here, for the label, the reminders and the panel. The
+  //      panel is only built when it is first opened, and shows the document
+  //      this widget holds rather than reading the file a second time.
+  property var eventDoc: null
+  // The file was written by a newer sync than this widget reads.
+  property bool eventVersionMismatch: false
+  readonly property var allEvents: eventDoc ? eventDoc.events : []
   readonly property var hiddenCalendars: {
     var stored = setting("hiddenCalendars", [])
     return Array.isArray(stored) ? stored : []
@@ -66,12 +70,9 @@ BarWidget {
   readonly property var verticalLines: clockText.split("\n")
 
   function applyEvents(raw) {
-    var events = []
-    try {
-      var doc = JSON.parse(raw)
-      if (doc && doc.version === 1 && Array.isArray(doc.events)) events = doc.events
-    } catch (error) {}
-    root.allEvents = events
+    var read = Model.parseEventsDocument(raw)
+    root.eventDoc = read.doc
+    root.eventVersionMismatch = read.mismatch
   }
 
   function refresh() {
@@ -141,10 +142,29 @@ BarWidget {
   // ---- Calendar popup. Shape contract for shell.summon/hide/toggle
   //      routing: Bar.findPanelWidget requires open/close/opened on the
   //      bar-widget root.
+  //
+  //      The panel is most of this plugin's memory, and the bar has a widget
+  //      on every monitor, so it is not built with the widget: it is built
+  //      the first time something asks for it, and stays from then on.
+  //      Dropping it again once closed gives the memory back to nobody: the
+  //      process keeps it, and building the panel again takes more.
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
+  // The panel, built now if it has not been. The loader is synchronous, so
+  // it is there on return; null only if Panel.qml failed to load. It is born
+  // with what injectPanel() keeps current, so nothing in it is worked out
+  // twice.
+  function panel() {
+    if (panelLoader.status === Loader.Null)
+      panelLoader.setSource(Qt.resolvedUrl("Panel.qml"), {
+        bar: root.bar, settings: root.settings, anchorItem: button, hostWidget: root
+      })
+    return panelLoader.item
+  }
+
   function open() {
-    if (panelLoader.item) panelLoader.item.open()
+    var target = panel()
+    if (target) target.open()
   }
 
   function close() {
@@ -152,11 +172,13 @@ BarWidget {
   }
 
   function togglePanel() {
-    if (panelLoader.item) panelLoader.item.toggle()
+    var target = panel()
+    if (target) target.toggle()
   }
 
   function toggleWeekStart() {
-    if (panelLoader.item) panelLoader.item.toggleWeekStart()
+    var target = panel()
+    if (target) target.toggleWeekStart()
   }
 
   // The open-panel dot lines up with what the widget paints, the
@@ -196,6 +218,10 @@ BarWidget {
     onDateChanged: root.displayDate = date
   }
 
+  // watchChanges is the point of this whole widget: the sync rewrites the
+  // file every few minutes and the bar and the popup have to follow it. There
+  // is deliberately no "already loaded" guard; one is exactly what made an
+  // externally written file impossible to pick up upstream.
   FileView {
     id: eventsFile
     path: (Quickshell.env("HOME") || "") + "/.local/state/omarchy/calendar-events.json"
@@ -216,10 +242,9 @@ BarWidget {
     isLeader: function() { return root.primaryWidget() === root }
   }
 
+  // No source until panel() gives it one.
   Loader {
     id: panelLoader
-    active: true
-    source: Qt.resolvedUrl("Panel.qml")
     visible: false
     onLoaded: {
       root.injectPanel()
