@@ -445,8 +445,10 @@ class TestWrites(unittest.TestCase):
             self.assertEqual(cli.run(make_client(self.server), self.cfg, NOW, self.out, SAO_PAULO), 0)
 
     def call(self, request):
+        # The clock is pinned like the sync's: a write is spliced into the
+        # window around `now`, and the fixtures are dated around NOW.
         return event_cli.perform(request, self.cfg, make_client(self.server), self.out, SAO_PAULO,
-                                 start_sync=lambda: None, sync_now=self.sync)
+                                 start_sync=lambda: None, sync_now=self.sync, now=NOW)
 
     def rows(self):
         return json.loads(self.out.read_text())["events"]
