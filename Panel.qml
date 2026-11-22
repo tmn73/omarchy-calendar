@@ -57,8 +57,9 @@ Panel {
     return Qt.formatDateTime(new Date(ms), root.eventTimeFormat)
   }
 
-  // ---- Today. SystemClock keeps this honest across midnight so the
-  //      highlight rolls over without the panel being reopened.
+  // ---- Today. SystemClock keeps this honest across midnight while the
+  //      panel is open. open() resets it, so a closed panel catches up
+  //      when it shows.
   property date today: new Date()
   readonly property string todayKey: Model.keyForDate(today)
   // Ticks every minute, which is what a countdown needs; `today` only moves
