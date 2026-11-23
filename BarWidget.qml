@@ -65,6 +65,20 @@ BarWidget {
   readonly property bool emphasized: barState.phase === "imminent" || urgent
   readonly property string barMeetingUrl: emphasized ? Model.meetingUrlFor(barState.event) : ""
   readonly property color phaseColor: urgent ? (bar ? bar.urgent : Commons.Color.urgent) : Commons.Color.accent
+  // "off" | "line" | "left" | "ends": a line under "Now" that fills as the
+  // event goes, optionally with the time left or the end time after it.
+  // It moves with nowMs, so once a minute like the countdowns.
+  readonly property string liveProgress: String(setting("liveProgress", "left"))
+  readonly property bool progressShown: announcing && urgent && liveProgress !== "off"
+  readonly property var progress: progressShown ? Model.eventProgress(barState.event, nowMs) : null
+  readonly property string progressSuffix: {
+    if (!progress) return ""
+    if (liveProgress === "left")
+      return " · " + Strings.trn(language, "bar.left", Model.spanCount(progress.leftMinutes), [Model.spanText(progress.leftMinutes, language)])
+    if (liveProgress === "ends")
+      return " · " + Strings.tr(language, "bar.ends", [Qt.formatDateTime(new Date(progress.endMs), String(setting("eventTimeFormat", "HH:mm") || "HH:mm"))])
+    return ""
+  }
 
   readonly property string clockText: formatted(displayDate)
   readonly property var verticalLines: clockText.split("\n")
@@ -318,12 +332,32 @@ BarWidget {
 
       BarText {
         visible: root.announcing
-        text: Model.barLabel(root.barState, root.language, root.announceTitleLimit)
+        text: Model.barLabel(root.barState, root.language, root.announceTitleLimit) + root.progressSuffix
         color: root.emphasized ? root.phaseColor : button.foreground
         opacity: root.emphasized ? 1 : 0.78
         font.family: button.fontFamily
         font.pixelSize: button.fontSize
         font.weight: root.emphasized ? Font.DemiBold : Font.Normal
+
+        // The progress line: a faint track the width of the label, filled
+        // up to how far the event has gone.
+        Rectangle {
+          visible: root.progressShown
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.top: parent.bottom
+          anchors.topMargin: Math.max(1, Math.round(button.fontSize * 0.15))
+          height: Math.max(2, Math.round(button.fontSize * 0.14))
+          radius: height / 2
+          color: Qt.rgba(root.phaseColor.r, root.phaseColor.g, root.phaseColor.b, 0.25)
+
+          Rectangle {
+            width: Math.round(parent.width * (root.progress ? root.progress.done : 0))
+            height: parent.height
+            radius: parent.radius
+            color: root.phaseColor
+          }
+        }
       }
 
       Chip {

@@ -43,7 +43,8 @@ time away for an event title would be a downgrade you pay for all day.
   filled **Join** from 15 minutes before the start. Links are found in
   Google's conference data, and also in the location or description of an
   invitation forwarded by email (Meet, Zoom, Teams, Webex, Jitsi, Whereby)
-- **Next up card**: what is next today, with a countdown and Join
+- **Next up card**: what is next today, with a countdown and Join. While
+  it is under way, a bar shows how far it has gone and when it ends
 - **Upcoming days** under the selected day, so the week is one glance away
 - **Quick add** in plain English or Portuguese: `call with Ana tomorrow 2pm
   for 45m`, `dentista sexta às 15h`, `gym every monday 6pm`, `trip friday to
@@ -65,7 +66,9 @@ time away for an event title would be a downgrade you pay for all day.
   [Create and edit events](#create-and-edit-events)
 - **The bar escalates** as a meeting nears: a quiet title, then the accent
   colour and a Join chip, then "Now" in the urgent colour until it ends, or
-  for its first 2 minutes if you prefer. When the next event is due, it
+  for its first 2 minutes if you prefer. While it is on, a line under "Now"
+  fills as the event goes, with the time left or the end time beside the
+  title if you like. When the next event is due, it
   takes over, unless you keep the current one. A `+1` shows when two things
   start at once. Middle click joins a Google Meet, Zoom, Teams, Webex,
   meet.jit.si or Whereby link. The sender of an invitation sets its link,
@@ -558,8 +561,8 @@ under it that says what it does.
 
 | Section | What it holds |
 |---|---|
-| Panel | A preset: Minimal or Standard. Where the agenda sits: beside or under the calendar. A switch for each block: year and life progress, shortcut legend, quick add, next event card, upcoming days |
-| Bar | Your own clock format, with a live preview, on one line or one per line of the clock on a vertical bar. It joins the formats the format button goes through (right click by default), and a format that is already one of them is pointed out. A format written by hand in `shell.json` is kept the same way on the first right click. How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How many characters of the title it shows before the ellipsis. How long "Now" stays on during an event, and whether the next event takes over. Desktop reminders, and whether they name the event. A preview puts your choices in words. What each mouse button does on the clock: open the panel, join the meeting or change the format, with at least one button on the panel |
+| Panel | A preset: Minimal or Standard. Where the agenda sits: beside or under the calendar. A switch for each block: year and life progress, shortcut legend, quick add, next event card and its progress bar, upcoming days |
+| Bar | Your own clock format, with a live preview, on one line or one per line of the clock on a vertical bar. It joins the formats the format button goes through (right click by default), and a format that is already one of them is pointed out. A format written by hand in `shell.json` is kept the same way on the first right click. How early the bar announces what is next: never, 5, 15, 30 or 60 minutes. How many characters of the title it shows before the ellipsis. How long "Now" stays on during an event, and whether the next event takes over. A progress line under "Now": off, the line alone, or with the time left or the end time. Desktop reminders, and whether they name the event. A preview puts your choices in words. What each mouse button does on the clock: open the panel, join the meeting or change the format, with at least one button on the panel |
 | Calendars | Show or hide each calendar, with its event count. The list comes from your own events, so it needs no configuration. Then working location events (Google's work-from-home markers, hidden by default) and declined invitations (struck through when shown) |
 | General | Language: Automatic follows your locale, or English, or Português. The first day of the week. Whether the panel can create and edit events. Lunar dates under each day, by Vietnamese, Chinese or Korean rules, from 1976 to 2050, off by default. The sync state: event count, source and last sync time |
 

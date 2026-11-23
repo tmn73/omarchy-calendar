@@ -1056,6 +1056,7 @@ Panel {
                   clickActions: Model.clickActions(root.setting("leftClick", "panel"), root.setting("middleClick", "join"), root.setting("rightClick", "format"))
                   duringEvent: String(root.setting("duringEvent", "untilEnd"))
                   nextDuringEvent: String(root.setting("nextDuringEvent", "announce"))
+                  liveProgress: String(root.setting("liveProgress", "left"))
                   reminders: root.setting("reminders", true) !== false
                   reminderDetails: root.setting("reminderDetails", false) === true
                   barVertical: root.barVertical
@@ -1121,6 +1122,7 @@ Panel {
               busy: root.writeBusy && !root.formOpen
               showQuickAdd: root.layout.showQuickAdd
               showNextUp: root.layout.showNextUp
+              showNowProgress: root.layout.showNowProgress
               showUpcomingDays: root.layout.showUpcomingDays
               dayHeading: root.dayHeading
               lunarDateText: root.showLunarDates ? Model.lunarDateText(root.selectedDayKey, root.language, root.lunarCalendar) : ""

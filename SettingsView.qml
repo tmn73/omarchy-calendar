@@ -30,6 +30,7 @@ Item {
   property var clickActions: ({ left: "panel", middle: "join", right: "format" })
   property string duringEvent: "untilEnd"
   property string nextDuringEvent: "announce"
+  property string liveProgress: "left"
   property bool reminders: true
   property bool reminderDetails: false
   property bool barVertical: false
@@ -246,6 +247,7 @@ Item {
         clickActions: root.clickActions
         duringEvent: root.duringEvent
         nextDuringEvent: root.nextDuringEvent
+        liveProgress: root.liveProgress
         reminders: root.reminders
         reminderDetails: root.reminderDetails
         vertical: root.barVertical

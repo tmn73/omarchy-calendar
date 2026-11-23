@@ -48,6 +48,7 @@ test('layoutPreset: the standard preset is the panel as it was before layouts', 
     showShortcutLegend: true,
     showQuickAdd: true,
     showNextUp: true,
+    showNowProgress: true,
     showUpcomingDays: true
   })
 })
