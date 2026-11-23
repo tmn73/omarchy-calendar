@@ -1058,6 +1058,18 @@ function barLabel(state, lang, limit) {
   return Strings.tr(lang, "bar.soon", [title, spanText(Math.max(1, Math.ceil(state.countdownMs / MINUTE_MS)), lang)])
 }
 
+// How far through an event nowMs is: `done` from 0 to 1, the whole minutes
+// left (rounded up, at least 1, like the countdowns) and when it ends.
+function eventProgress(event, nowMs) {
+  var range = timeRange(event)
+  var length = range.end - range.start
+  return {
+    done: length > 0 ? Math.min(1, Math.max(0, (nowMs - range.start) / length)) : 0,
+    leftMinutes: Math.max(1, Math.ceil((range.end - nowMs) / MINUTE_MS)),
+    endMs: range.end
+  }
+}
+
 // ---- Mouse buttons
 
 var CLICK_BUTTONS = ["left", "middle", "right"]
@@ -1350,11 +1362,11 @@ var LAYOUT_PRESET_NAMES = ["minimal", "standard"]
 var LAYOUT_PRESETS = {
   minimal: {
     agendaPlacement: "below", showYearProgress: false,
-    showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showUpcomingDays: false
+    showShortcutLegend: false, showQuickAdd: false, showNextUp: false, showNowProgress: false, showUpcomingDays: false
   },
   standard: {
     agendaPlacement: "beside", showYearProgress: false,
-    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showUpcomingDays: true
+    showShortcutLegend: true, showQuickAdd: true, showNextUp: true, showNowProgress: true, showUpcomingDays: true
   }
 }
 

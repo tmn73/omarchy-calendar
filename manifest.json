@@ -34,6 +34,7 @@
       "announceLeadMinutes": 15,
       "duringEvent": "untilEnd",
       "nextDuringEvent": "announce",
+      "liveProgress": "left",
       "announceTitleLimit": 28,
       "leftClick": "panel",
       "middleClick": "join",
@@ -187,6 +188,19 @@
         ],
         "defaultValue": "announce",
         "description": "announce shows the next event once it is due. keep stays on the current event until it ends."
+      },
+      {
+        "key": "liveProgress",
+        "type": "enum",
+        "label": "Progress while an event is on",
+        "options": [
+          "off",
+          "line",
+          "left",
+          "ends"
+        ],
+        "defaultValue": "left",
+        "description": "line draws a bar under \"Now\" that fills as the event goes; left adds the time left, ends adds when it ends."
       },
       {
         "key": "birthYear",

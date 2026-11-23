@@ -26,6 +26,7 @@ Item {
   // The blocks the layout can hide.
   property bool showQuickAdd: true
   property bool showNextUp: true
+  property bool showNowProgress: true
   property bool showUpcomingDays: true
 
   property string dayHeading: ""
@@ -120,6 +121,7 @@ Item {
       item: root.showNextUp ? root.nextUp : null
       nowMs: root.nowMs
       timeFormat: root.timeFormat
+      showProgress: root.showNowProgress
       snoozable: root.nextUpSnoozable
       snoozeText: root.snoozeText
       foreground: root.foreground
