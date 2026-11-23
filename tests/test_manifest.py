@@ -35,7 +35,7 @@ class TestManifest(unittest.TestCase):
             self.assertEqual(schema[key]["options"], ["panel", "join", "format"])
             self.assertEqual(schema[key]["defaultValue"], default)
         for key, value in (("language", "auto"), ("reminders", True), ("announceLeadMinutes", 15),
-                           ("duringEvent", "untilEnd"), ("nextDuringEvent", "announce")):
+                           ("duringEvent", "untilEnd"), ("nextDuringEvent", "announce"), ("liveProgress", "left")):
             self.assertEqual(schema[key]["defaultValue"], value)
             self.assertEqual(widget["defaults"][key], value)
 

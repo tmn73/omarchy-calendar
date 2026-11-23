@@ -26,6 +26,8 @@ Column {
   property string duringEvent: "untilEnd"
   // "announce" | "keep"
   property string nextDuringEvent: "announce"
+  // "off" | "line" | "left" | "ends"
+  property string liveProgress: "left"
   property bool reminders: true
   property bool reminderDetails: false
   // The bar's current format and the user's own one ("" when unset), both
@@ -464,6 +466,23 @@ Column {
     ]
     value: root.nextDuringEvent
     onChosen: function(value) { root.pick("nextDuringEvent", value) }
+  }
+
+  Gap {}
+
+  ChoiceGroup {
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    label: root.tr("settings.liveProgress")
+    hint: root.tr("settings.liveProgressHint")
+    options: [
+      { value: "off", label: root.tr("settings.progressOff") },
+      { value: "line", label: root.tr("settings.progressLine") },
+      { value: "left", label: root.tr("settings.progressLeft") },
+      { value: "ends", label: root.tr("settings.progressEnds") }
+    ]
+    value: root.liveProgress
+    onChosen: function(value) { root.pick("liveProgress", value) }
   }
 
   Gap {}

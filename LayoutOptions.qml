@@ -89,5 +89,6 @@ Column {
 
   BlockSwitch { key: "showQuickAdd"; label: root.tr("quick.label"); hint: root.tr("layout.quickAddHint") }
   BlockSwitch { key: "showNextUp"; label: root.tr("layout.nextUp"); hint: root.tr("layout.nextUpHint") }
+  BlockSwitch { key: "showNowProgress"; label: root.tr("layout.nowProgress"); hint: root.tr("layout.nowProgressHint") }
   BlockSwitch { key: "showUpcomingDays"; label: root.tr("agenda.upcoming"); hint: root.tr("layout.upcomingHint") }
 }

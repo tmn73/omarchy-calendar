@@ -15,6 +15,7 @@ Rectangle {
   property var item: null
   property real nowMs: 0
   property string timeFormat: "HH:mm"
+  property bool showProgress: true
   property bool snoozable: false
   property string snoozeText: ""
   property color foreground: Commons.Color.foreground
@@ -39,6 +40,17 @@ Rectangle {
     var text = Qt.formatDateTime(new Date(root.item.startMs), root.timeFormat)
       + "–" + Qt.formatDateTime(new Date(root.item.endMs), root.timeFormat)
     return root.meetingHost !== "" ? text + " · " + root.meetingHost : text
+  }
+  // While the event is on: how far it has gone, and the time left. It moves
+  // with the panel's minute tick.
+  readonly property bool progressShown: root.showProgress && root.live && root.item.endMs > root.item.startMs
+  readonly property var progress: progressShown ? Model.eventProgress(root.item, root.nowMs) : null
+  readonly property real done: progress ? progress.done : 0
+  readonly property string leftText: {
+    if (!progress) return ""
+    var left = progress.leftMinutes
+    return Strings.trn(root.language, "next.left", Model.spanCount(left),
+      [Model.spanText(left, root.language), Qt.formatDateTime(new Date(progress.endMs), root.timeFormat)])
   }
 
   visible: item !== null
@@ -91,6 +103,33 @@ Rectangle {
       color: Util.alpha(root.foreground, 0.6)
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
+    }
+
+    // Same look as the year bar in ProgressRails.
+    Rectangle {
+      visible: root.progressShown
+      width: parent.width
+      height: Style.space(6)
+      radius: Style.cornerRadius > 0 ? height / 2 : 0
+      color: Util.alpha(root.foreground, 0.12)
+
+      Rectangle {
+        width: Math.round(parent.width * root.done)
+        height: parent.height
+        radius: parent.radius
+        color: Style.selectedStateColor(root.foreground, Commons.Color.accent)
+
+        Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      }
+    }
+
+    Text {
+      visible: root.progressShown
+      text: root.leftText
+      textFormat: Text.PlainText
+      color: Util.alpha(root.foreground, 0.6)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 

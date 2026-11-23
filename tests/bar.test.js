@@ -303,3 +303,12 @@ test('titleLimitChoices adds a hand-written length in its place', () => {
   assert.deepEqual(Model.titleLimitChoices(33), [12, 16, 20, 28, 33, 40])
   assert.deepEqual(Model.titleLimitChoices(8), [8, 12, 16, 20, 28, 40])
 })
+
+test('eventProgress: how far through the event, minutes left rounded up, and the end', () => {
+  const event = EVENTS[0]  // 13:00 to 13:45
+  assert.deepEqual(Model.eventProgress(event, START + 15 * MIN), { done: 1 / 3, leftMinutes: 30, endMs: START + 45 * MIN })
+  assert.equal(Model.eventProgress(event, START + 44 * MIN + 30000).leftMinutes, 1)
+  assert.equal(Model.eventProgress(event, START - 5 * MIN).done, 0)
+  assert.equal(Model.eventProgress(event, START + 60 * MIN).done, 1)
+  assert.equal(Model.eventProgress({ ...event, end: event.start }, START).done, 0)
+})
