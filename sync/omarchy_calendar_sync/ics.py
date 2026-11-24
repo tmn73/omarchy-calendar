@@ -35,7 +35,7 @@ FETCH_TIMEOUT = 30
 # A feed carries no colour of its own, so each one takes the next of
 # Google's calendar colours, keeping two feeds apart on the grid.
 FEED_COLORS = ("#4285f4", "#f6bf26", "#33b679", "#e67c73", "#8e24aa", "#f4511e", "#039be5", "#7986cb")
-USER_AGENT = "omarchy-calendar-sync"
+USER_AGENT = "Mozilla/5.0"
 
 
 class IcsError(SyncError):
