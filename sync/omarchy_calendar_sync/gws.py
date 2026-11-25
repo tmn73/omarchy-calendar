@@ -11,9 +11,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
+from pathlib import Path
 
 from . import budget
 from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
@@ -23,6 +26,8 @@ MINIMUM_VERSION = (0, 13, 2)
 FALLBACK_COLOR = "#9e9e9e"
 MAX_PAGES = 50
 
+READ_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SIGN_IN_EXPIRED = "Your Google sign-in expired. Run sync/setup --write."
 NO_SIGN_IN = "No Google sign-in to write with. Run sync/setup --write."
@@ -111,18 +116,30 @@ class Gws:
     # can write. A backend without create/update/delete sets this to False.
     can_write = True
 
-    def __init__(self, profile, runner=None, binary="gws", http=None):
-        self.profile = str(profile)
+    def __init__(self, profile, runner=None, binary="gws", http=None, isolated=False):
+        self.profile = str(Path(str(profile)).expanduser())
         self.binary = str(binary or "gws")
+        self.isolated = isolated
         self._runner = runner or _subprocess_runner
         self._http = http or _https
         self._access_token = None
 
-    def _run(self, args):
+    def environment(self):
         env = dict(os.environ)
         env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = self.profile
+        if self.isolated:
+            for suffix in ("TOKEN", "CREDENTIALS_FILE", "CLIENT_ID", "CLIENT_SECRET", "ACCOUNT"):
+                env.pop("GOOGLE_WORKSPACE_CLI_" + suffix, None)
+            env["GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"] = "file"
+            # Fail closed if gws cannot decrypt this profile and tries ADC.
+            env["GOOGLE_APPLICATION_CREDENTIALS"] = os.devnull
+        return env
+
+    def _run(self, args):
+        if self.isolated and not (Path(self.profile) / "credentials.enc").is_file():
+            raise GwsSignInError(self._signin_message(NO_SIGN_IN))
         try:
-            code, stdout, stderr = self._runner([self.binary, *args], env)
+            code, stdout, stderr = self._runner([self.binary, *args], self.environment())
         except subprocess.TimeoutExpired as error:
             raise GwsError(f"{self.binary} did not answer in {budget.HELPER_SECONDS} s") from error
         except FileNotFoundError as error:
@@ -152,6 +169,9 @@ class Gws:
             wanted = ".".join(str(p) for p in MINIMUM_VERSION)
             have = ".".join(str(p) for p in found)
             raise GwsTooOld(f"gws {wanted} or newer is required, found {have}")
+
+    def auth_status(self):
+        return self._json(["auth", "status"])
 
     def calendars(self):
         payload = self._json(["calendar", "calendarList", "list"])
@@ -260,10 +280,10 @@ class Gws:
         except json.JSONDecodeError:
             credentials = None
         if exit_code != 0 or not isinstance(credentials, dict):
-            raise GwsSignInError(NO_SIGN_IN)
+            raise GwsSignInError(self._signin_message(NO_SIGN_IN))
         fields = {key: credentials.get(key) for key in ("client_id", "client_secret", "refresh_token")}
         if not all(isinstance(value, str) and value for value in fields.values()):
-            raise GwsSignInError(NO_SIGN_IN)
+            raise GwsSignInError(self._signin_message(NO_SIGN_IN))
         # A masked export reads "GOCS...jmye".
         if "..." in fields["client_secret"] or "..." in fields["refresh_token"]:
             raise GwsSignInError(MASKED_SIGN_IN)
@@ -279,14 +299,24 @@ class Gws:
             reason = reply.get("error") if isinstance(reply, dict) else None
             # invalid_grant: the refresh token expired or was revoked.
             if status in (400, 401) or reason == "invalid_grant":
-                raise GwsSignInError(SIGN_IN_EXPIRED)
+                raise GwsSignInError(self._signin_message(SIGN_IN_EXPIRED))
             raise GwsApiError(f"Google answered the token request with HTTP {status}")
         self._access_token = token
         return token
 
+    def _signin_message(self, primary_message):
+        if self.isolated:
+            return "Reconnect this Google account in Calendar settings."
+        return primary_message
+
     def _json(self, args):
         """Run gws and parse stdout."""
-        return self._parse(*self._run(args))
+        try:
+            return self._parse(*self._run(args))
+        except GwsAuthError as error:
+            if self.isolated and str(error).startswith("401:"):
+                raise GwsSignInError(self._signin_message(SIGN_IN_EXPIRED)) from error
+            raise
 
     def _parse(self, exit_code, stdout, stderr):
         """Parse one gws reply, or raise the error it carries.
@@ -323,6 +353,97 @@ class Gws:
             "gws auth login --scopes "
             "https://www.googleapis.com/auth/calendar.readonly"
         )
+
+
+class GwsAccounts:
+    """Keep calendar IDs stable and route each operation to its own sign-in."""
+
+    SOURCE_NAME = Gws.SOURCE_NAME
+    can_write = Gws.can_write
+    PREFIX = "gws:"
+
+    def __init__(self, profile, binary, accounts):
+        self.primary = Gws(profile, binary=binary)
+        self.additional = {
+            _quote(account["email"].casefold()): (
+                account, Gws(account["profile"], binary=binary, isolated=True)
+            )
+            for account in accounts
+        }
+
+    def check(self):
+        self.primary.check()
+
+    def version(self):
+        return self.primary.version()
+
+    def calendars(self):
+        calendars = []
+        failures = []
+        sources = [("", {}, self.primary)]
+        sources.extend((key, account, client) for key, (account, client) in self.additional.items())
+        for key, account, client in sources:
+            try:
+                found = client.calendars()
+            except SyncError as error:
+                label = account.get("email", "the original account")
+                print(f"skipping Google calendars for {label}: {error}", file=sys.stderr)
+                failures.append(error)
+                continue
+            for calendar in found:
+                if key:
+                    calendar = {
+                        **calendar,
+                        "id": f"{self.PREFIX}{key}:{calendar['id']}",
+                        "originalId": calendar["id"],
+                        "account": account["email"],
+                        "writable": calendar["writable"] and account.get("write") is True,
+                    }
+                calendars.append(calendar)
+        if len(failures) == len(sources):
+            raise failures[0]
+        names = Counter(calendar["name"].casefold() for calendar in calendars)
+        for calendar in calendars:
+            name = calendar["name"]
+            if calendar.get("account") and names[name.casefold()] > 1:
+                calendar["originalName"] = name
+                calendar["name"] = f"{name} ({calendar['account']})"
+        return sorted(calendars, key=lambda calendar: calendar["name"])
+
+    def _route(self, calendar_id):
+        if not calendar_id.startswith(self.PREFIX):
+            return self.primary, calendar_id
+        key, _, original_id = calendar_id[len(self.PREFIX):].partition(":")
+        if not original_id or key not in self.additional:
+            raise GwsNotFound("This Google calendar is no longer connected.")
+        return self.additional[key][1], original_id
+
+    def events(self, calendar_id, time_min, time_max):
+        client, original_id = self._route(calendar_id)
+        return client.events(original_id, time_min, time_max)
+
+    def get(self, calendar_id, event_id):
+        client, original_id = self._route(calendar_id)
+        return client.get(original_id, event_id)
+
+    def create(self, calendar_id, body, send_updates="none"):
+        client, original_id = self._route(calendar_id)
+        return client.create(original_id, body, send_updates=send_updates)
+
+    def update(self, calendar_id, event_id, body, send_updates="none"):
+        client, original_id = self._route(calendar_id)
+        return client.update(original_id, event_id, body, send_updates=send_updates)
+
+    def replace(self, calendar_id, event_id, resource, send_updates="none"):
+        client, original_id = self._route(calendar_id)
+        return client.replace(original_id, event_id, resource, send_updates=send_updates)
+
+    def delete(self, calendar_id, event_id, send_updates="none"):
+        client, original_id = self._route(calendar_id)
+        return client.delete(original_id, event_id, send_updates=send_updates)
+
+    def auth_hint(self, cfg):
+        return "For an added Google account, reconnect it in Calendar settings. " + self.primary.auth_hint(cfg)
 
 
 def _events_path(calendar_id, event_id=None):

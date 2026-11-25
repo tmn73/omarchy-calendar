@@ -156,7 +156,8 @@ The script automates what has an API:
 
 It stops and waits for the four things Google exposes no API for: the consent
 screen, declaring the calendar scope, publishing the app, and creating the
-Desktop OAuth client. Each one prints the exact URL and the exact values.
+Desktop OAuth client. Each page opens in your default browser. The terminal
+also shows a link and the values to enter.
 
 Two of those steps are traps, and the script says so at the time:
 
@@ -170,6 +171,17 @@ Two of those steps are traps, and the script says so at the time:
 
 When it finishes, events land in `~/.local/state/omarchy/calendar-events.json`
 every five minutes and the widget picks them up without a restart.
+
+### Add another Google account
+
+Open the calendar panel, click its gear, and choose **Calendars → Add Google
+account**. Pick the account in your browser and grant calendar access. The
+plugin reuses the OAuth client from setup, then syncs calendars from both
+accounts. If you enabled event editing, grant that permission too.
+
+To reconnect an added account, use the same button and select that account
+again. If your OAuth app is still in Testing, add the account as a test user
+in Google Cloud first.
 
 ## Create and edit events
 

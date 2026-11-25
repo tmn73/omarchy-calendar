@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Executable wrapper for Google account setup."""
+
+import sys
+
+# The shell watches the plugin directory for changes.
+sys.dont_write_bytecode = True
+
+from omarchy_calendar_sync.google_setup import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

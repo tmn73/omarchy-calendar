@@ -121,9 +121,6 @@ Column {
     onActivated: if (!root.canWrite) root.writeSetupCopyRequested()
   }
 
-  // Read-only on purpose: changing the Google account is an OAuth browser
-  // flow, which belongs to sync/setup and not to a popup in a status bar.
-  // What belongs here is knowing whether it is working.
   Column {
     width: parent.width
     leftPadding: Style.space(4)

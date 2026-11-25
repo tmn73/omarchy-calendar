@@ -49,6 +49,18 @@ WRITE_SCOPE="https://www.googleapis.com/auth/calendar.events"
 
 step() { printf '\n==> %s\n' "$1"; }
 
+open_setup_page() {
+  local url=$1
+  if [ -t 1 ]; then
+    printf '  \033]8;;%s\033\\%s\033]8;;\033\\\n\n' "$url" "$url"
+  else
+    printf '  %s\n\n' "$url"
+  fi
+  if [ -t 0 ] && command -v xdg-open >/dev/null; then
+    xdg-open "$url" >/dev/null 2>&1 </dev/null &
+  fi
+}
+
 install_timer_and_sync() {
   step "Installing the systemd timer"
   mkdir -p "$HOME/.config/systemd/user"
@@ -433,10 +445,8 @@ step "Enabling the Calendar API"
 gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID"
 
 step "Manual step 1 of 4: configure the OAuth consent screen"
+open_setup_page "https://console.cloud.google.com/auth/overview?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/overview?project=$PROJECT_ID
-
   If you land on a "Get started" form, fill it in:
     App name:            Omarchy Calendar
     User support email:  your own address
@@ -449,10 +459,8 @@ EOF
 pause
 
 step "Manual step 2 of 4: declare the calendar scope"
+open_setup_page "https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID
-
   Click "Add or remove scopes"
   Filter for:  calendar.readonly
   Tick:        $SCOPE
@@ -480,10 +488,8 @@ EOF
 pause
 
 step "Manual step 3 of 4: publish the app"
+open_setup_page "https://console.cloud.google.com/auth/audience?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/audience?project=$PROJECT_ID
-
   Under "Publishing status", click "Publish app"
 
   If it already reads "In production" there is nothing to do. The button
@@ -496,10 +502,8 @@ EOF
 pause
 
 step "Manual step 4 of 4: create a Desktop OAuth client"
+open_setup_page "https://console.cloud.google.com/auth/clients?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/clients?project=$PROJECT_ID
-
   Create client
   Application type:  Desktop app
   Name:              Omarchy Calendar Sync
@@ -540,7 +544,7 @@ fi
 # the calendar scope was granted keeps being served afterwards, and every
 # call fails with 403 insufficient scopes until it is cleared.
 rm -f "$PROFILE/token_cache.json"
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth login --scopes "$SCOPES"
+"$SCRIPT_DIR/omarchy-calendar-google" login "$GWS" "$PROFILE" "$SCOPES"
 
 step "Checking the calendar scope was actually granted"
 granted=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null || true)
@@ -615,8 +619,11 @@ EOF
   fi
 fi
 mkdir -p "$(dirname "$CONFIG")"
-python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" <<'PYEOF'
-import json, pathlib, sys
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" \
+  python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" 3<<<"$granted" <<'PYEOF'
+import json, os, pathlib, sys
+from omarchy_calendar_sync.cli import write_atomic
+from omarchy_calendar_sync.google_setup import account_email
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 write = sys.argv[4] == "1"
@@ -632,7 +639,12 @@ config["backend"] = "gws"
 config["gwsPath"] = gws_path
 config["profile"] = profile
 config["write"] = write
-path.write_text(json.dumps(config, indent=2) + "\n")
+with os.fdopen(3) as stream:
+    try:
+        config["googlePrimaryEmail"] = account_email(json.load(stream))
+    except ValueError:
+        config.pop("googlePrimaryEmail", None)
+write_atomic(path, config)
 print("  backend set to gws")
 print("  gwsPath set to", gws_path)
 print("  profile set to", profile)

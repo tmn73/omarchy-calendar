@@ -34,6 +34,14 @@ Column {
 
   spacing: Style.space(8)
 
+  GoogleAccountSettings {
+    width: parent.width
+    active: root.visible
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    language: root.language
+  }
+
   SettingsCaption {
     foreground: root.foreground
     fontFamily: root.fontFamily

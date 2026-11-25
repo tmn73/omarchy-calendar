@@ -14,7 +14,7 @@ from .caldav import Caldav
 from .caldir import Caldir
 from .eds import Eds
 from .errors import SyncError
-from .gws import Gws
+from .gws import Gws, GwsAccounts
 from .ics import Ics
 from .localzone import resolve_local_timezone
 
@@ -103,8 +103,9 @@ def run(client, cfg, now, out_path, local_tz):
         # Your own copy of a shared event carries your title, colour and
         # answer. A colleague's copy can carry none of them (a calendar shared
         # as free/busy has no titles), so the primary calendar wins the
-        # dedup. The sort is stable, so the rest keep their name order.
-        calendars.sort(key=lambda calendar: not calendar.get("primary"))
+        # dedup. Where two accounts have their own copy, prefer the original
+        # sign-in so adding an account keeps the events already on display.
+        calendars.sort(key=lambda c: (not c.get("primary"), bool(c.get("account"))))
         time_min, time_max = config_module.window_bounds(cfg, now)
         window = config_module.window_dates(cfg, now, local_tz)
 
@@ -158,7 +159,7 @@ def run(client, cfg, now, out_path, local_tz):
     # Only for the event form, so only when writing is on.
     guests = []
     if writable:
-        guests = suggestions.guest_suggestions(fetched, [c["id"] for c in calendars])
+        guests = suggestions.guest_suggestions(fetched, [c.get("originalId", c["id"]) for c in calendars])
     doc = contract.build_document(rows, now.isoformat(), source, writable, guests)
 
     problems = contract.validate(doc)
@@ -176,6 +177,8 @@ def build_client(cfg, local_tz=None):
     """The calendar source named by the config."""
     backend = str(cfg.get("backend") or "gws").strip().lower()
     if backend == "gws":
+        if cfg.get("googleAccounts"):
+            return GwsAccounts(cfg["profile"], cfg["gwsPath"], cfg["googleAccounts"])
         return Gws(cfg["profile"], binary=cfg["gwsPath"])
     if backend == "eds":
         return Eds(identity=cfg.get("identity", ""))

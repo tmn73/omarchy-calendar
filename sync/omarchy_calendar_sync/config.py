@@ -32,6 +32,9 @@ DEFAULTS = {
     # Blank means responseStatus is left unset rather than guessed.
     "identity": "",
     "profile": str(Path.home() / ".config" / "gws-omarchy-calendar"),
+    # Additional Google sign-ins, each with its own gws profile.
+    "googleAccounts": [],
+    "googlePrimaryEmail": "",
     # Resolved to an absolute path by sync/setup. A systemd user service
     # does not inherit an interactive shell PATH, so relying on the bare
     # name works from a terminal and fails from the timer.
@@ -68,6 +71,7 @@ def load(path=None):
     merged = _merge(copy.deepcopy(DEFAULTS), raw)
 
     _validate_calendars(merged.get("calendars"))
+    _validate_google_accounts(merged)
 
     window = merged.get("window")
     if isinstance(window, dict):
@@ -104,6 +108,29 @@ def _validate_calendars(calendars):
             raise ConfigError(f"calendars.{key} must be a list")
 
 
+def _validate_google_accounts(config):
+    accounts = config["googleAccounts"]
+    if not isinstance(accounts, list):
+        raise ConfigError("googleAccounts must be a list")
+    if not isinstance(config["googlePrimaryEmail"], str):
+        raise ConfigError("googlePrimaryEmail must be a string")
+    if not accounts:
+        return
+    emails = set()
+    profiles = {Path(str(config["profile"])).expanduser().resolve()}
+    for account in accounts:
+        if not isinstance(account, dict):
+            raise ConfigError("each Google account must have an email and a profile")
+        email, profile = account.get("email"), account.get("profile")
+        if not isinstance(email, str) or "@" not in email or not isinstance(profile, str) or not profile:
+            raise ConfigError("each Google account must have an email and a profile")
+        path = Path(profile).expanduser().resolve()
+        if email.casefold() in emails or path in profiles:
+            raise ConfigError("Google accounts must have distinct emails and profiles")
+        emails.add(email.casefold())
+        profiles.add(path)
+
+
 def _coerce_days(value, key):
     """Turn a window day count into an int, or fail loudly naming the key."""
     if isinstance(value, bool):
@@ -126,7 +153,9 @@ def select_calendars(calendars, config):
 
     selected = []
     for calendar in calendars:
-        keys = {calendar["id"], calendar["name"]}
+        keys = {calendar["id"], calendar["name"],
+                calendar.get("originalId", calendar["id"]),
+                calendar.get("originalName", calendar["name"])}
         if keys & exclude:
             continue
         if include and not (keys & include):
