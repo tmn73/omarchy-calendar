@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 
+import "Model.js" as Model
 import "Strings.js" as Strings
 
 // The Calendars section of Settings: one switch per calendar, with how many
@@ -25,7 +26,7 @@ Column {
   signal hideDeclinedToggled()
 
   readonly property int hiddenCount: calendars.filter(function(calendar) {
-    return hiddenCalendars.indexOf(String(calendar.id)) !== -1
+    return Model.isCalendarHidden(hiddenCalendars, calendar.id)
   }).length
 
   function tr(key, args) {
@@ -72,7 +73,7 @@ Column {
       label: modelData.name
       swatch: modelData.color
       note: String(root.counts[modelData.id] || 0)
-      checked: root.hiddenCalendars.indexOf(modelData.id) === -1
+      checked: !Model.isCalendarHidden(root.hiddenCalendars, modelData.id)
       onActivated: root.calendarToggled(modelData.id)
     }
   }

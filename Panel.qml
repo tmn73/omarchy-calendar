@@ -310,9 +310,8 @@ Panel {
   // the bar included. The list is only replaced when it differs: a new one
   // rebuilds the index, and with it the month and the agenda.
   function adoptSettings() {
-    var stored = setting("hiddenCalendars", [])
-    var next = Array.isArray(stored) ? stored : []
-    if (!Model.sameList(root.hiddenCalendars, next)) root.hiddenCalendars = next.slice()
+    var next = Model.hiddenCalendarIds(setting("hiddenCalendars", []))
+    if (!Model.sameList(root.hiddenCalendars, next)) root.hiddenCalendars = next
   }
 
   // Applied locally first so the panel redraws on the click itself; the

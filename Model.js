@@ -490,7 +490,7 @@ function calendarsInDocument(doc) {
 
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    var id = event && event.calendarId
+    var id = calendarIdentity(event && event.calendarId)
     if (!id || byId[id]) continue
     byId[id] = true
     ordered.push({ id: id, name: event.calendarName || id, color: event.color || "" })
@@ -512,18 +512,28 @@ function calendarEventCounts(doc) {
     var key = eventIdentity(event)
     if (seen[key]) continue
     seen[key] = true
-    counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
+    var calendar = calendarIdentity(event.calendarId)
+    counts[calendar] = (counts[calendar] || 0) + 1
   }
   return counts
 }
 
+// An account-qualified Google ID is a route to the same physical calendar.
+function calendarIdentity(calendarId) {
+  return text(calendarId).replace(/^gws:[^:]+%40[^:]+:/, "")
+}
+
 function eventIdentity(event) {
-  return JSON.stringify([text(event && event.calendarId), text(event && event.id)])
+  return JSON.stringify([calendarIdentity(event && event.calendarId), text(event && event.id)])
+}
+
+function hiddenCalendarIds(hidden) {
+  if (!Array.isArray(hidden)) return []
+  return Array.from(new Set(hidden.map(calendarIdentity)))
 }
 
 function isCalendarHidden(hidden, calendarId) {
-  if (!hidden || !hidden.length) return false
-  return hidden.indexOf(String(calendarId)) !== -1
+  return hiddenCalendarIds(hidden).indexOf(calendarIdentity(calendarId)) !== -1
 }
 
 // True when two lists hold the same values in the same order, compared as
@@ -540,16 +550,11 @@ function sameList(a, b) {
 // Returns a new list rather than mutating, so the caller can hand the result
 // straight to persistSettings without touching the settings object in place.
 function toggleHiddenCalendar(hidden, calendarId) {
-  var id = String(calendarId)
-  var next = []
-  var found = false
-
-  for (var i = 0; i < (hidden || []).length; i++) {
-    if (String(hidden[i]) === id) { found = true; continue }
-    next.push(hidden[i])
-  }
-
-  if (!found) next.push(id)
+  var id = calendarIdentity(calendarId)
+  var next = hiddenCalendarIds(hidden)
+  var index = next.indexOf(id)
+  if (index >= 0) next.splice(index, 1)
+  else next.push(id)
   return next
 }
 
@@ -578,11 +583,12 @@ function visibleEvents(events, hidden, options) {
   var opts = options || {}
   var dropNoisy = opts.hideWorkingLocation !== false
   var dropDeclined = opts.hideDeclined === true
+  var hiddenIds = hiddenCalendarIds(hidden)
 
   var visible = []
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    if (isCalendarHidden(hidden, event.calendarId)) continue
+    if (hiddenIds.indexOf(calendarIdentity(event.calendarId)) !== -1) continue
     if (dropNoisy && isNoisyEventType(event)) continue
     if (dropDeclined && isDeclined(event)) continue
     visible.push(event)
@@ -1268,14 +1274,12 @@ function reminderEventKey(event) {
 // that today's bar can see, using the former first-match rule for fired
 // reminders and the saved details to identify a pending snooze.
 function migrateReminderKeys(store, events) {
-  var groups = [store.fired, store.recent, store.snoozed]
-  if (!groups.some(function(group) {
-    return Object.keys(group).some(function(key) { return key.substring(0, 2) !== '["' })
-  })) return
+  var legacy = store.legacy
+  if (!legacy) return
 
   function move(group, oldKey, newKey) {
-    if (!isFired(group, newKey)) group[newKey] = group[oldKey]
-    delete group[oldKey]
+    if (!isFired(store[group], newKey)) store[group][newKey] = legacy[group][oldKey]
+    delete legacy[group][oldKey]
   }
 
   for (var i = 0; i < events.length; i++) {
@@ -1283,22 +1287,24 @@ function migrateReminderKeys(store, events) {
     if (!event || !event.calendarId || !event.id || !event.start) continue
     var oldKey = text(event.id) + "|" + text(event.start)
     var newKey = reminderEventKey(event)
-    var snoozed = store.snoozed[oldKey]
+    var snoozed = legacy.snoozed[oldKey]
     var saved = snoozed && snoozed.event
     if (saved && saved.title === event.title && saved.end === event.end &&
         text(saved.eventUrl) === text(event.eventUrl)) {
       saved.calendarId = event.calendarId
-      move(store.snoozed, oldKey, newKey)
+      move("snoozed", oldKey, newKey)
     }
     if (isDeclined(event) || isNoisyEventType(event) || classifyEvent(event).done) continue
-    if (isFired(store.recent, oldKey)) move(store.recent, oldKey, newKey)
+    if (isFired(legacy.recent, oldKey)) move("recent", oldKey, newKey)
     var minutes = reminderMinutesFor(event)
     for (var m = 0; m < minutes.length; m++) {
       var oldReminder = oldKey + "|" + minutes[m]
-      if (isFired(store.fired, oldReminder))
-        move(store.fired, oldReminder, reminderKey(event, minutes[m]))
+      if (isFired(legacy.fired, oldReminder))
+        move("fired", oldReminder, reminderKey(event, minutes[m]))
     }
   }
+  if (!["fired", "recent", "snoozed"].some(function(group) { return Object.keys(legacy[group]).length }))
+    delete store.legacy
 }
 
 // `recent` maps reminderEventKey → when its reminder was sent.
@@ -1549,10 +1555,7 @@ function isValidEmail(address) {
 // An attendee with no address cannot get one: an iCalendar source can
 // report only your own answer, with no email beside it.
 function otherGuests(form) {
-  // Added Google accounts qualify the calendar ID for routing. Google
-  // still uses the original ID for the calendar's address.
-  var calendarId = text(form.calendarId).replace(/^gws:[^:]+:/, "")
-  var me = normalizeEmail(calendarId)
+  var me = normalizeEmail(calendarIdentity(form.calendarId))
   var out = []
   var guests = form.guests || []
   for (var i = 0; i < guests.length; i++) {

@@ -10,7 +10,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import Mock
 
-from omarchy_calendar_sync import budget, cli, config, gws
+from omarchy_calendar_sync import budget, cli, config, google_setup, gws
 
 GOOGLE_COMMAND = Path(__file__).resolve().parents[1] / "sync" / "omarchy-calendar-google"
 
@@ -150,6 +150,7 @@ class TestGoogleAccounts(unittest.TestCase):
             doc = json.loads(out.read_text())
             saved, = doc["events"]
             self.assertEqual(saved["calendarId"], doc["writableCalendars"][0]["id"])
+            client.primary.events.assert_not_called()
 
 
 class TestGoogleSignIn(unittest.TestCase):
@@ -294,11 +295,29 @@ else:
 
     def test_selecting_the_original_account_reconciles_an_existing_duplicate(self):
         self.assertEqual(self.command("add")[-1]["result"], "added")
+        previous, = json.loads(self.config_path.read_text())["googleAccounts"]
         reply = self.command("add", TEST_PRIMARY_USER="work@example.com")[-1]
         self.assertEqual(reply["result"], "existing")
         current = json.loads(self.config_path.read_text())
         self.assertEqual(current["googlePrimaryEmail"], "work@example.com")
         self.assertEqual(current["googleAccounts"], [])
+        self.assertFalse(Path(previous["profile"]).exists())
+
+    def test_retiring_accounts_preserves_any_active_or_custom_profile(self):
+        accounts = self.profile / "accounts"
+        promoted = accounts / "account-aaaaaaaa"
+        retained = accounts / "account-bbbbbbbb"
+        custom = self.root / "account-cccccccc"
+        retired = accounts / "account-dddddddd"
+        for path in (promoted, retained, custom, retired):
+            path.mkdir(parents=True)
+            (path / "credentials.enc").touch()
+
+        previous = [{"profile": str(path)} for path in (promoted, retained, custom, retired)]
+        google_setup.retire_profiles(previous, [{"profile": str(retained)}], promoted, self.profile)
+        self.assertFalse(retired.exists())
+        for path in (promoted, retained, custom):
+            self.assertTrue((path / "credentials.enc").exists())
 
     def test_add_does_not_overwrite_an_original_account_changed_by_setup(self):
         before = json.loads(self.config_path.read_text())

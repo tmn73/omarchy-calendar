@@ -647,7 +647,7 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" \
 import json, os, pathlib, sys
 from omarchy_calendar_sync import config
 from omarchy_calendar_sync.cli import write_atomic
-from omarchy_calendar_sync.google_setup import account_email, without_primary
+from omarchy_calendar_sync.google_setup import account_email, retire_profiles, without_primary
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 write = sys.argv[4] == "1"
@@ -658,10 +658,14 @@ with os.fdopen(3) as stream:
         primary = ""
 with config.locked_path(path) as destination:
     current = config.read(destination, recover_invalid_json=True)
+    former_profile = current.get("profile") or config.DEFAULTS["profile"]
+    previous_accounts = current.get("googleAccounts")
     current.update(backend="gws", gwsPath=gws_path, profile=profile, write=write, googlePrimaryEmail=primary)
-    if primary and isinstance(current.get("googleAccounts"), list):
-        current["googleAccounts"] = without_primary(current["googleAccounts"], primary)
+    if primary and isinstance(previous_accounts, list):
+        current["googleAccounts"] = without_primary(previous_accounts, primary)
     write_atomic(destination, current)
+    if isinstance(previous_accounts, list) and current["googleAccounts"] != previous_accounts:
+        retire_profiles(previous_accounts, current["googleAccounts"], profile, former_profile)
 print("  backend set to gws")
 print("  gwsPath set to", gws_path)
 print("  profile set to", profile)

@@ -5,6 +5,7 @@ import contextlib
 import fcntl
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -127,6 +128,35 @@ def without_primary(accounts, email):
     ]
 
 
+def retire_profiles(previous, kept, primary, former_primary=None):
+    """Delete only unreferenced profiles created under a managed Google profile."""
+    def profile_paths(entries):
+        return [
+            Path(entry["profile"]).expanduser() for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("profile"), str)
+        ]
+
+    try:
+        primary_path = Path(primary).expanduser().resolve()
+        roots = {primary_path / "accounts"}
+        if former_primary:
+            roots.add(Path(former_primary).expanduser().resolve() / "accounts")
+        retained = [primary_path, *(path.resolve() for path in profile_paths(kept))]
+        retired = profile_paths(previous)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        # The configuration is saved. An unresolved path must not be removed.
+        return
+    for path in retired:
+        with contextlib.suppress(OSError, RuntimeError, ValueError):
+            if (not path.is_absolute() or not re.fullmatch(r"account-[a-z0-9_]{8}", path.name)
+                    or path.parent.resolve() not in roots or path.is_symlink()):
+                continue
+            resolved = path.resolve()
+            if any(resolved == used or resolved in used.parents for used in retained):
+                continue
+            shutil.rmtree(path, ignore_errors=True)
+
+
 def profile_revision(profile):
     """Detect a concurrent manual gws login while the identity is checked."""
     revision = []
@@ -188,15 +218,11 @@ def connect(cfg, base_profile, profiles):
         primary = verified_primary_email(cfg, base_profile)
         # Keep cancellation from deleting a profile after the config points to it.
         with on_cancel(signal.SIG_IGN):
-            result, previous, changed = record_account(cfg, base_profile, revision, primary, email, profile)
+            result, changed = record_account(cfg, base_profile, revision, primary, email, profile)
             saved = result != "existing"
             reply = {"result": result, "email": email}
             if changed:
                 reply["syncing"] = request_sync()
-            if previous:
-                old_profile = Path(previous["profile"]).expanduser()
-                if old_profile.parent == profiles and old_profile.name.startswith("account-"):
-                    shutil.rmtree(old_profile, ignore_errors=True)
             emit(**reply)
     finally:
         if not saved:
@@ -214,15 +240,15 @@ def record_account(cfg, base_profile, revision, primary, email, profile):
         known_primary = current["googlePrimaryEmail"]
         if not primary and known_primary.casefold() == email.casefold():
             raise SignInError("Could not verify the original Google account. Try again or reconnect it with sync/setup.")
-        accounts = current["googleAccounts"]
-        if primary:
-            accounts = without_primary(accounts, primary)
+        previous_accounts = current["googleAccounts"]
+        accounts = without_primary(previous_accounts, primary)
         if primary.casefold() == email.casefold():
-            changed = accounts != current["googleAccounts"]
+            changed = accounts != previous_accounts
             if changed or primary != known_primary:
                 raw.update(googleAccounts=accounts, googlePrimaryEmail=primary)
                 cli.write_atomic(path, raw)
-            return "existing", None, changed
+                retire_profiles(previous_accounts, accounts, base_profile)
+            return "existing", changed
 
         previous = next((a for a in accounts if a["email"].casefold() == email.casefold()), None)
         entry = {"email": email, "profile": str(profile), "write": bool(cfg["write"])}
@@ -232,7 +258,8 @@ def record_account(cfg, base_profile, revision, primary, email, profile):
             accounts.append(entry)
         raw.update(googleAccounts=accounts, googlePrimaryEmail=primary or known_primary)
         cli.write_atomic(path, raw)
-        return "reconnected" if previous else "added", previous, True
+        retire_profiles(previous_accounts, accounts, base_profile)
+        return ("reconnected" if previous else "added"), True
 
 
 def main(argv=None):

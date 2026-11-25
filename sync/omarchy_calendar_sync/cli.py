@@ -141,7 +141,11 @@ def run(client, cfg, now, out_path, local_tz):
         seen = set()
         fetched = []
         unavailable = {}
+        synced_routes = {}
         for calendar in calendars:
+            original_id = calendar.get("originalId", calendar["id"])
+            if original_id in synced_routes:
+                continue
             # A calendar past the budget is skipped, like a broken feed, so
             # one hostile source costs its own events and not the sync.
             try:
@@ -163,6 +167,7 @@ def run(client, cfg, now, out_path, local_tz):
                       f"{budget.MAX_EVENTS} events or {budget.MAX_ROWS} rows")
                 continue
             seen = calendar_seen
+            synced_routes[original_id] = calendar["id"]
             fetched.extend(fresh)
             rows.extend(calendar_rows)
 
@@ -183,9 +188,14 @@ def run(client, cfg, now, out_path, local_tz):
     # writing on and the backend can write; otherwise the key is absent.
     writable = []
     if cfg.get("write") and getattr(client, "can_write", False):
+        offered = set()
         for c in calendars:
-            if not c.get("writable") or c["id"] in unavailable:
+            calendar_id = c["id"]
+            original_id = c.get("originalId", calendar_id)
+            if (not c.get("writable") or calendar_id in unavailable or original_id in offered
+                    or synced_routes.get(original_id, calendar_id) != calendar_id):
                 continue
+            offered.add(original_id)
             entry = {"id": c["id"], "name": c["name"], "color": c["color"]}
             # What the form offers that this calendar cannot store.
             if c.get("lacks"):

@@ -175,28 +175,39 @@ test('reminderEventKey is one key per occurrence', () => {
 })
 
 test('legacy reminders migrate once and a pending snooze keeps its calendar', () => {
-  const personal = event({ reminders: [10] })
-  const work = event({ calendarId: 'work@example.com', reminders: [10], title: 'Work review' })
-  const oldKey = `easy|${START_ISO}`
+  const personal = event({ id: '["opaque"]', reminders: [10] })
+  const work = { ...personal, calendarId: 'work@example.com', title: 'Work review' }
+  const oldKey = `${personal.id}|${START_ISO}`
   const saved = { ...Model.slimReminderEvent(work) }
   delete saved.calendarId
   const store = {
-    fired: { [oldKey + '|10']: START },
-    recent: { [oldKey]: START - 10 * MIN },
-    snoozed: { [oldKey]: { fireAtMs: START - 5 * MIN, event: saved } },
+    fired: {}, recent: {}, snoozed: {},
+    legacy: {
+      fired: { [oldKey + '|10']: START },
+      recent: { [oldKey]: START - 10 * MIN },
+      snoozed: { [oldKey]: { fireAtMs: START - 5 * MIN, event: saved } },
+    },
   }
   Model.migrateReminderKeys(store, [])
-  assert.equal(store.fired[oldKey + '|10'], START)
+  assert.equal(store.legacy.fired[oldKey + '|10'], START)
 
   Model.migrateReminderKeys(store, [personal, work])
   assert.deepEqual(store.fired, { [Model.reminderKey(personal, 10)]: START })
   assert.deepEqual(store.recent, { [Model.reminderEventKey(personal)]: START - 10 * MIN })
   assert.equal(store.snoozed[Model.reminderEventKey(work)].event.calendarId, work.calendarId)
-  assert.equal(store.snoozed[oldKey], undefined)
+  assert.equal(store.legacy, undefined)
   assert.deepEqual(
     Model.dueReminders([personal, work], START - 8 * MIN, store.fired).map(reminder => reminder.event.calendarId),
     [work.calendarId],
   )
+})
+
+test('a reminder stays fired when a shared calendar changes account routes', () => {
+  const original = event({ reminders: [10] })
+  const qualified = { ...original, calendarId: 'gws:work%40example.com:personal@example.com' }
+  const fired = { [Model.reminderKey(qualified, 10)]: START }
+  assert.equal(Model.reminderEventKey(original), Model.reminderEventKey(qualified))
+  assert.deepEqual(Model.dueReminders([original], START - 8 * MIN, fired), [])
 })
 
 test('canSnoozeReminder holds for 15 minutes after the reminder', () => {

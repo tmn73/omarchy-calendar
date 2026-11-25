@@ -585,9 +585,19 @@ test('otherGuests excludes the owner of a calendar from an added Google account'
 
 test('eventIdentity distinguishes calendars and survives across days', () => {
   const original = { id: 'shared-id', calendarId: 'shared@example.com', dateKey: '2026-08-10' }
-  const added = { ...original, calendarId: 'gws:work%40example.com:shared@example.com' }
+  const added = { ...original, calendarId: 'gws:work%40example.com:work@example.com' }
   assert.notEqual(Model.eventIdentity(original), Model.eventIdentity(added))
   assert.equal(Model.eventIdentity(original), Model.eventIdentity({ ...original, dateKey: '2026-08-11' }))
+})
+
+test('hidden shared calendars stay hidden when the account route changes', () => {
+  const original = { id: 'shared-id', calendarId: 'shared@example.com' }
+  const qualified = { ...original, calendarId: 'gws:work%40example.com:shared@example.com' }
+  assert.equal(Model.calendarIdentity(qualified.calendarId), original.calendarId)
+  assert.equal(Model.eventIdentity(original), Model.eventIdentity(qualified))
+  assert.deepEqual(Model.visibleEvents([original, qualified], [qualified.calendarId]), [])
+  assert.deepEqual(Model.toggleHiddenCalendar([qualified.calendarId], original.calendarId), [])
+  assert.deepEqual(Model.calendarsInDocument({ events: [qualified, original] }).map(c => c.id), [original.calendarId])
 })
 
 test('otherGuests leaves out an attendee with no address', () => {
