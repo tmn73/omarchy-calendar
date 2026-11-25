@@ -117,6 +117,7 @@ Scope {
   function tick(nowMs) {
     if (!enabled || !store || !isLeader()) return
     var next = copyStore(store)
+    Model.migrateReminderKeys(next, events)
     next.fired = Model.pruneFired(next.fired, nowMs)
 
     var due = Model.dueReminders(events, nowMs, next.fired, { notBeforeMs: next.since })

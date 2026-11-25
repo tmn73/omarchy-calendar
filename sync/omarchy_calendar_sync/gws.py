@@ -362,6 +362,7 @@ class GwsAccounts:
 
     def __init__(self, profile, binary, accounts):
         self.primary = Gws(profile, binary=binary)
+        self.calendar_discovery_error = None
         self.additional = {
             _quote(account["email"].casefold()): (
                 account, Gws(account["profile"], binary=binary, isolated=True)
@@ -400,8 +401,9 @@ class GwsAccounts:
                         "writable": calendar["writable"] and account.get("write") is True,
                     }
                 calendars.append(calendar)
+        self.calendar_discovery_error = failures[0] if failures else None
         if len(failures) == len(sources):
-            raise failures[0]
+            raise self.calendar_discovery_error
         names = Counter(calendar["name"].casefold() for calendar in calendars)
         for calendar in calendars:
             name = calendar["name"]
@@ -410,13 +412,16 @@ class GwsAccounts:
                 calendar["name"] = calendar["qualifiedName"]
         return sorted(calendars, key=lambda calendar: calendar["name"])
 
-    def _route(self, calendar_id):
+    def _route(self, calendar_id, *, write=False):
         if not calendar_id.startswith(self.PREFIX):
             return self.primary, calendar_id
         key, _, original_id = calendar_id[len(self.PREFIX):].partition(":")
         if not original_id or key not in self.additional:
             raise GwsNotFound("This Google calendar is no longer connected.")
-        return self.additional[key][1], original_id
+        account, client = self.additional[key]
+        if write and account.get("write") is not True:
+            raise GwsError("Writing is turned off for this Google account. Reconnect it in Calendar settings to enable editing.")
+        return client, original_id
 
     def events(self, calendar_id, time_min, time_max):
         client, original_id = self._route(calendar_id)
@@ -432,19 +437,19 @@ class GwsAccounts:
         return client.get(original_id, event_id)
 
     def create(self, calendar_id, body, send_updates="none"):
-        client, original_id = self._route(calendar_id)
+        client, original_id = self._route(calendar_id, write=True)
         return client.create(original_id, body, send_updates=send_updates)
 
     def update(self, calendar_id, event_id, body, send_updates="none"):
-        client, original_id = self._route(calendar_id)
+        client, original_id = self._route(calendar_id, write=True)
         return client.update(original_id, event_id, body, send_updates=send_updates)
 
     def replace(self, calendar_id, event_id, resource, send_updates="none"):
-        client, original_id = self._route(calendar_id)
+        client, original_id = self._route(calendar_id, write=True)
         return client.replace(original_id, event_id, resource, send_updates=send_updates)
 
     def delete(self, calendar_id, event_id, send_updates="none"):
-        client, original_id = self._route(calendar_id)
+        client, original_id = self._route(calendar_id, write=True)
         return client.delete(original_id, event_id, send_updates=send_updates)
 
     def auth_hint(self, cfg):

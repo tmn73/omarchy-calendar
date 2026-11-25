@@ -104,17 +104,36 @@ def _rows_within_budget(gevents, calendar, tz, window, rows_so_far):
     return rows
 
 
+def _prefer_writable_copies(calendars):
+    """Swap a writable copy into the first position for the same calendar."""
+    writers = {}
+    for i, calendar in enumerate(calendars):
+        if calendar.get("writable"):
+            writers.setdefault(calendar.get("originalId", calendar["id"]), i)
+    for i, calendar in enumerate(calendars):
+        original_id = calendar.get("originalId", calendar["id"])
+        writer = writers.get(original_id, -1)
+        if writer > i:
+            calendars[i], calendars[writer] = calendars[writer], calendar
+            writers[original_id] = i
+
+
 def run(client, cfg, now, out_path, local_tz):
     """Fetch, normalize, write. Returns a process exit code."""
     try:
         client.check()
         calendars = config_module.select_calendars(client.calendars(), cfg)
+        discovery_error = getattr(client, "calendar_discovery_error", None)
+        if not calendars and discovery_error is not None:
+            raise discovery_error
         # Your own copy of a shared event carries your title, colour and
         # answer. A colleague's copy can carry none of them (a calendar shared
         # as free/busy has no titles), so the primary calendar wins the
         # dedup. Where two accounts have their own copy, prefer the original
         # sign-in so adding an account keeps the events already on display.
         calendars.sort(key=lambda c: (not c.get("primary"), bool(c.get("qualifiedName"))))
+        if cfg.get("write"):
+            _prefer_writable_copies(calendars)
         time_min, time_max = config_module.window_bounds(cfg, now)
         window = config_module.window_dates(cfg, now, local_tz)
 

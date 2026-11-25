@@ -534,7 +534,9 @@ that dialog.
 EOF
 pause
 
-mkdir -p "$PROFILE"
+mkdir -p -m 700 "$PROFILE/accounts"
+exec {calendar_sign_in_lock}>"$PROFILE/accounts/.sign-in.lock"
+flock -n "$calendar_sign_in_lock" || { echo "A Google sign-in is already in progress."; exit 1; }
 if [ -f "$PROFILE/client_secret.json" ]; then
   step "Client secret is already installed at $PROFILE/client_secret.json, skipping"
 else
@@ -666,4 +668,5 @@ print("  profile set to", profile)
 print("  write set to", write)
 PYEOF
 
+exec {calendar_sign_in_lock}>&-
 install_timer_and_sync

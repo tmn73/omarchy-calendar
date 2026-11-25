@@ -9,7 +9,8 @@ const MIN = 60 * 1000
 const START = localMs(2026, 9, 6, 13, 0)
 const START_ISO = localIso(2026, 9, 6, 13, 0)
 const event = (extra = {}) => ({
-  id: 'easy', title: 'Design review', allDay: false, dateKey: '2026-10-06',
+  id: 'easy', calendarId: 'personal@example.com',
+  title: 'Design review', allDay: false, dateKey: '2026-10-06',
   start: START_ISO, end: localIso(2026, 9, 6, 13, 45), ...extra
 })
 
@@ -43,7 +44,7 @@ test('reminderMinutesFor ignores junk and the form-shaped reminders object', () 
 })
 
 test('reminderKey includes the start, so a moved event reminds again', () => {
-  assert.equal(Model.reminderKey(event(), 10), `easy|${START_ISO}|10`)
+  assert.equal(Model.reminderKey(event(), 10), `["personal@example.com","easy"]|${START_ISO}|10`)
   assert.notEqual(Model.reminderKey(event(), 10), Model.reminderKey(event({ start: localIso(2026, 9, 6, 14, 0) }), 10))
 })
 
@@ -52,9 +53,22 @@ test('dueReminders fires at the reminder time and not before', () => {
   assert.deepEqual(Model.dueReminders(events, START - 10 * MIN - 1, {}), [])
   const due = Model.dueReminders(events, START - 10 * MIN, {})
   assert.equal(due.length, 1)
+  const key = Model.reminderKey(events[0], 10)
   assert.deepEqual(
     { key: due[0].key, keys: due[0].keys, id: due[0].event.id, minutes: due[0].minutes, fireAtMs: due[0].fireAtMs, startMs: due[0].startMs },
-    { key: `easy|${START_ISO}|10`, keys: [`easy|${START_ISO}|10`], id: 'easy', minutes: 10, fireAtMs: START - 10 * MIN, startMs: START })
+    { key, keys: [key], id: 'easy', minutes: 10, fireAtMs: START - 10 * MIN, startMs: START })
+})
+
+test('reminders and snooze keys distinguish events with the same ID and start across accounts', () => {
+  const original = event({ reminders: [10] })
+  const added = event({ calendarId: 'gws:work%40example.com:work@example.com', reminders: [10] })
+  const due = Model.dueReminders([original, added], START - 10 * MIN, {})
+  assert.equal(due.length, 2)
+  assert.notEqual(due[0].key, due[1].key)
+  assert.notEqual(Model.reminderEventKey(original), Model.reminderEventKey(added))
+  const recent = { [Model.reminderEventKey(added)]: START - 10 * MIN }
+  assert.equal(Model.canSnoozeReminder(recent, original, START - 10 * MIN), false)
+  assert.equal(Model.canSnoozeReminder(recent, added, START - 10 * MIN), true)
 })
 
 test('dueReminders skips fired keys, as a map or a list', () => {
@@ -156,8 +170,33 @@ test('reminderSummary is the inspector line', () => {
 })
 
 test('reminderEventKey is one key per occurrence', () => {
-  assert.equal(Model.reminderEventKey(event()), 'easy|' + START_ISO)
-  assert.equal(Model.reminderEventKey(null), '|')
+  assert.equal(Model.reminderEventKey(event()), '["personal@example.com","easy"]|' + START_ISO)
+  assert.notEqual(Model.reminderEventKey(event()), Model.reminderEventKey(null))
+})
+
+test('legacy reminders migrate once and a pending snooze keeps its calendar', () => {
+  const personal = event({ reminders: [10] })
+  const work = event({ calendarId: 'work@example.com', reminders: [10], title: 'Work review' })
+  const oldKey = `easy|${START_ISO}`
+  const saved = { ...Model.slimReminderEvent(work) }
+  delete saved.calendarId
+  const store = {
+    fired: { [oldKey + '|10']: START },
+    recent: { [oldKey]: START - 10 * MIN },
+    snoozed: { [oldKey]: { fireAtMs: START - 5 * MIN, event: saved } },
+  }
+  Model.migrateReminderKeys(store, [])
+  assert.equal(store.fired[oldKey + '|10'], START)
+
+  Model.migrateReminderKeys(store, [personal, work])
+  assert.deepEqual(store.fired, { [Model.reminderKey(personal, 10)]: START })
+  assert.deepEqual(store.recent, { [Model.reminderEventKey(personal)]: START - 10 * MIN })
+  assert.equal(store.snoozed[Model.reminderEventKey(work)].event.calendarId, work.calendarId)
+  assert.equal(store.snoozed[oldKey], undefined)
+  assert.deepEqual(
+    Model.dueReminders([personal, work], START - 8 * MIN, store.fired).map(reminder => reminder.event.calendarId),
+    [work.calendarId],
+  )
 })
 
 test('canSnoozeReminder holds for 15 minutes after the reminder', () => {
@@ -179,7 +218,7 @@ test('pruneRecentReminders keeps only what can still be snoozed, without mutatin
 test('slimReminderEvent keeps what a snoozed reminder needs', () => {
   const slim = Model.slimReminderEvent(event({ description: 'long', reminders: [10], meetingUrl: 'https://meet.google.com/x' }))
   assert.deepEqual(Object.keys(slim).sort(),
-    ['allDay', 'dateKey', 'end', 'eventUrl', 'id', 'location', 'meetingUrl', 'start', 'title'])
+    ['allDay', 'calendarId', 'dateKey', 'end', 'eventUrl', 'id', 'location', 'meetingUrl', 'start', 'title'])
   assert.equal(slim.allDay, false)
   assert.equal(slim.meetingUrl, 'https://meet.google.com/x')
 })

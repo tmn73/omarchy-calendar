@@ -518,7 +518,7 @@ function calendarEventCounts(doc) {
 }
 
 function eventIdentity(event) {
-  return JSON.stringify([text(event.calendarId), text(event.id)])
+  return JSON.stringify([text(event && event.calendarId), text(event && event.id)])
 }
 
 function isCalendarHidden(hidden, calendarId) {
@@ -997,7 +997,7 @@ function announceableEvents(events) {
     if (!event || event.allDay || isDeclined(event) || isNoisyEventType(event)) continue
     if (classifyEvent(event).done) continue
     var range = timeRange(event)
-    var key = text(event.id) + "|" + range.start
+    var key = eventIdentity(event) + "|" + range.start
     if (isNaN(range.start) || seen[key]) continue
     seen[key] = true
     out.push({ event: event, start: range.start, end: range.end })
@@ -1162,7 +1162,7 @@ function reminderMinutesFor(event, fallbackMinutes) {
 
 // The start is part of the key, so a rescheduled event reminds again.
 function reminderKey(event, minutes) {
-  return text(event && event.id) + "|" + text(event && event.start) + "|" + minutes
+  return reminderEventKey(event) + "|" + minutes
 }
 
 function isFired(fired, key) {
@@ -1259,9 +1259,46 @@ function reminderSummary(event, lang, fallbackMinutes) {
 // How long after a reminder the panel offers to snooze it.
 var SNOOZE_WINDOW_MS = 15 * MINUTE_MS
 
-// One key per occurrence ("id|start"), whichever of its reminders fired.
+// One key per occurrence, whichever of its reminders fired.
 function reminderEventKey(event) {
-  return text(event && event.id) + "|" + text(event && event.start)
+  return eventIdentity(event) + "|" + text(event && event.start)
+}
+
+// Older reminder state omitted the calendar. Resolve it from the events
+// that today's bar can see, using the former first-match rule for fired
+// reminders and the saved details to identify a pending snooze.
+function migrateReminderKeys(store, events) {
+  var groups = [store.fired, store.recent, store.snoozed]
+  if (!groups.some(function(group) {
+    return Object.keys(group).some(function(key) { return key.substring(0, 2) !== '["' })
+  })) return
+
+  function move(group, oldKey, newKey) {
+    if (!isFired(group, newKey)) group[newKey] = group[oldKey]
+    delete group[oldKey]
+  }
+
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!event || !event.calendarId || !event.id || !event.start) continue
+    var oldKey = text(event.id) + "|" + text(event.start)
+    var newKey = reminderEventKey(event)
+    var snoozed = store.snoozed[oldKey]
+    var saved = snoozed && snoozed.event
+    if (saved && saved.title === event.title && saved.end === event.end &&
+        text(saved.eventUrl) === text(event.eventUrl)) {
+      saved.calendarId = event.calendarId
+      move(store.snoozed, oldKey, newKey)
+    }
+    if (isDeclined(event) || isNoisyEventType(event) || classifyEvent(event).done) continue
+    if (isFired(store.recent, oldKey)) move(store.recent, oldKey, newKey)
+    var minutes = reminderMinutesFor(event)
+    for (var m = 0; m < minutes.length; m++) {
+      var oldReminder = oldKey + "|" + minutes[m]
+      if (isFired(store.fired, oldReminder))
+        move(store.fired, oldReminder, reminderKey(event, minutes[m]))
+    }
+  }
 }
 
 // `recent` maps reminderEventKey → when its reminder was sent.
@@ -1281,7 +1318,8 @@ function pruneRecentReminders(recent, nowMs) {
 // Only what a snoozed reminder needs to be rebuilt after a shell reload.
 function slimReminderEvent(event) {
   return {
-    id: event.id, start: event.start, end: event.end, allDay: event.allDay === true,
+    id: event.id, calendarId: event.calendarId,
+    start: event.start, end: event.end, allDay: event.allDay === true,
     dateKey: event.dateKey, title: event.title, location: event.location,
     meetingUrl: event.meetingUrl, eventUrl: event.eventUrl
   }

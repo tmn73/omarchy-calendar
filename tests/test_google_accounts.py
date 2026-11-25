@@ -49,6 +49,13 @@ class TestGoogleAccounts(unittest.TestCase):
         with self.assertRaises(gws.GwsNotFound):
             client.delete("gws:unknown:shared@example.com", "event")
 
+        account["write"] = False
+        with self.assertRaisesRegex(gws.GwsError, "Writing is turned off for this Google account"):
+            client.delete(work_calendar["id"], "another-event")
+        work.delete.assert_called_once()
+        client.get(work_calendar["id"], "another-event")
+        work.get.assert_called_with(shared["id"], "another-event")
+
         work.calendars.side_effect = gws.GwsAuthError("expired")
         self.assertEqual(client.calendars(), [shared])
 
@@ -102,6 +109,11 @@ class TestGoogleAccounts(unittest.TestCase):
             self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_SYNC_FAILED)
             self.assertEqual(out.read_bytes(), snapshot)
 
+            work.calendars.side_effect = gws.GwsAuthError("401: expired")
+            cfg["calendars"] = {"include": ["Work"]}
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_SYNC_FAILED)
+            self.assertEqual(out.read_bytes(), snapshot)
+
     def test_added_account_write_errors_suggest_reconnecting_that_account(self):
         client = gws.Gws("/work", http=Mock(), isolated=True)
         client._access_token = "test"
@@ -113,6 +125,31 @@ class TestGoogleAccounts(unittest.TestCase):
         client._http.return_value = (403, json.dumps({"error": {"code": 403, "message": "Forbidden"}}))
         with self.assertRaisesRegex(gws.GwsAuthError, "403: Forbidden"):
             client.delete("work@example.com", "event")
+
+    def test_sync_keeps_the_editable_copy_of_a_shared_google_calendar(self):
+        account = {"email": "work@example.com", "profile": "/work", "write": True}
+        client = gws.GwsAccounts("/personal", "gws", [account])
+        client.primary = Mock()
+        work = Mock()
+        client.additional["work%40example.com"] = (account, work)
+        client.primary.version.return_value = (0, 22, 5)
+        shared = {"id": "shared", "name": "Projects", "color": "#123456"}
+        client.primary.calendars.return_value = [{**shared, "writable": False}]
+        work.calendars.return_value = [{**shared, "writable": True}]
+        event = {
+            "id": "event", "iCalUID": "event@example.com", "summary": "Shared project",
+            "start": {"date": "2026-08-10"}, "end": {"date": "2026-08-11"},
+        }
+        client.primary.events.return_value = work.events.return_value = [event]
+        now = datetime(2026, 8, 10, tzinfo=timezone.utc)
+        cfg = {**config.DEFAULTS, "write": True}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "events.json"
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_OK)
+            doc = json.loads(out.read_text())
+            saved, = doc["events"]
+            self.assertEqual(saved["calendarId"], doc["writableCalendars"][0]["id"])
 
 
 class TestGoogleSignIn(unittest.TestCase):
@@ -128,7 +165,7 @@ class TestGoogleSignIn(unittest.TestCase):
         self.config_path.parent.mkdir(parents=True)
         fake_gws = self.root / "gws"
         fake_gws.write_text("""#!/usr/bin/env python3
-import json, os, sys
+import json, os, sys, time
 from pathlib import Path
 
 env = os.environ
@@ -136,6 +173,14 @@ profile = Path(env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"])
 args = sys.argv[1:]
 if profile.name == "gws-omarchy-calendar":
     assert args == ["auth", "status"]
+    if env.get("TEST_WAIT_FOR_SETUP"):
+        root = Path.home()
+        (root / "checking-primary").touch()
+        deadline = time.monotonic() + 5
+        while not (root / "setup-finished").exists():
+            if time.monotonic() >= deadline:
+                raise SystemExit(1)
+            time.sleep(0.02)
     print(json.dumps({"user": env.get("TEST_PRIMARY_USER", "original@example.com")}))
 else:
     assert env["GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"] == "file"
@@ -237,6 +282,45 @@ else:
             {"result": "added", "email": "original@example.com", "syncing": True},
         )
         self.assertEqual(json.loads(self.config_path.read_text())["googlePrimaryEmail"], "work@example.com")
+
+    def test_inconclusive_primary_verification_does_not_add_a_duplicate(self):
+        current = json.loads(self.config_path.read_text())
+        current["googlePrimaryEmail"] = "work@example.com"
+        self.config_path.write_text(json.dumps(current))
+        before = self.config_path.read_bytes()
+        reply = self.command("add", expected=1, TEST_PRIMARY_USER="")[-1]
+        self.assertIn("Could not verify the original", reply["error"])
+        self.assertEqual(self.config_path.read_bytes(), before)
+
+    def test_selecting_the_original_account_reconciles_an_existing_duplicate(self):
+        self.assertEqual(self.command("add")[-1]["result"], "added")
+        reply = self.command("add", TEST_PRIMARY_USER="work@example.com")[-1]
+        self.assertEqual(reply["result"], "existing")
+        current = json.loads(self.config_path.read_text())
+        self.assertEqual(current["googlePrimaryEmail"], "work@example.com")
+        self.assertEqual(current["googleAccounts"], [])
+
+    def test_add_does_not_overwrite_an_original_account_changed_by_setup(self):
+        before = json.loads(self.config_path.read_text())
+        before["googlePrimaryEmail"] = "original@example.com"
+        self.config_path.write_text(json.dumps(before))
+        with subprocess.Popen(
+            [GOOGLE_COMMAND, "add"], env={**self.env, "TEST_WAIT_FOR_SETUP": "1"},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        ) as process:
+            deadline = time.monotonic() + 5
+            while not (self.root / "checking-primary").exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertTrue((self.root / "checking-primary").exists())
+            with config.locked_path(self.config_path) as path:
+                updated = {**before, "googlePrimaryEmail": "work@example.com"}
+                cli.write_atomic(path, updated)
+                (self.root / "setup-finished").touch()
+            stdout, stderr = process.communicate(timeout=10)
+            self.assertEqual(process.returncode, 1, stdout + stderr)
+            self.assertIn("Calendar setup changed during sign-in", json.loads(stdout.splitlines()[-1])["error"])
+        self.assertEqual(json.loads(self.config_path.read_text()), updated)
+        self.assertEqual(list((self.profile / "accounts").glob("account-*")), [])
 
     @unittest.skipUnless(shutil.which("script") and find_spec("icalendar"), "needs script and iCalendar")
     def test_ics_setup_keeps_a_google_account_added_while_testing_the_feed(self):
