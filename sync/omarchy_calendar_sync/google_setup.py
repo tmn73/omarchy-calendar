@@ -5,7 +5,6 @@ import contextlib
 import fcntl
 import json
 import os
-import re
 import shutil
 import signal
 import subprocess
@@ -20,6 +19,7 @@ from .gws import Gws, READ_SCOPE, WRITE_SCOPE
 
 SIGN_IN_SECONDS = 300
 SYNC_UNIT = "omarchy-calendar-sync.service"
+PROFILE_MARKER = ".omarchy-calendar-profile"
 
 
 class SignInError(Exception):
@@ -138,9 +138,9 @@ def retire_profiles(previous, kept, primary, former_primary=None):
 
     try:
         primary_path = Path(primary).expanduser().resolve()
-        roots = {primary_path / "accounts"}
+        roots = {(primary_path / "accounts").resolve()}
         if former_primary:
-            roots.add(Path(former_primary).expanduser().resolve() / "accounts")
+            roots.add((Path(former_primary).expanduser() / "accounts").resolve())
         retained = [primary_path, *(path.resolve() for path in profile_paths(kept))]
         retired = profile_paths(previous)
     except (OSError, RuntimeError, TypeError, ValueError):
@@ -148,8 +148,11 @@ def retire_profiles(previous, kept, primary, former_primary=None):
         return
     for path in retired:
         with contextlib.suppress(OSError, RuntimeError, ValueError):
-            if (not path.is_absolute() or not re.fullmatch(r"account-[a-z0-9_]{8}", path.name)
+            if (not path.is_absolute() or not path.name.startswith("account-")
                     or path.parent.resolve() not in roots or path.is_symlink()):
+                continue
+            marker = path / PROFILE_MARKER
+            if marker.is_symlink() or not marker.is_file():
                 continue
             resolved = path.resolve()
             if any(resolved == used or resolved in used.parents for used in retained):
@@ -200,6 +203,7 @@ def connect(cfg, base_profile, profiles):
     profile = Path(tempfile.mkdtemp(prefix="account-", dir=profiles))
     saved = False
     try:
+        (profile / PROFILE_MARKER).touch(mode=0o600, exist_ok=False)
         secret = profile / "client_secret.json"
         shutil.copyfile(base_profile / secret.name, secret)
         secret.chmod(0o600)

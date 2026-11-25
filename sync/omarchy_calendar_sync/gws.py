@@ -187,6 +187,7 @@ class Gws:
                 or item["id"],
                 "color": item.get("backgroundColor") or FALLBACK_COLOR,
                 "primary": item.get("primary") is True,
+                "accessRole": item.get("accessRole"),
                 "writable": item.get("accessRole") in ("owner", "writer"),
                 # An event with reminders.useDefault names no minutes of its
                 # own; these are what it means.

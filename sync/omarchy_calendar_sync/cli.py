@@ -104,18 +104,22 @@ def _rows_within_budget(gevents, calendar, tz, window, rows_so_far):
     return rows
 
 
-def _prefer_writable_copies(calendars):
-    """Swap a writable copy into the first position for the same calendar."""
-    writers = {}
+def _prefer_calendar_routes(calendars, write):
+    """Order routes to each shared calendar without reordering other calendars."""
+    roles = {"freeBusyReader": 1, "reader": 2, "writerWithoutPrivateAccess": 2, "writer": 3, "owner": 3}
+    groups = {}
     for i, calendar in enumerate(calendars):
-        if calendar.get("writable"):
-            writers.setdefault(calendar.get("originalId", calendar["id"]), i)
-    for i, calendar in enumerate(calendars):
-        original_id = calendar.get("originalId", calendar["id"])
-        writer = writers.get(original_id, -1)
-        if writer > i:
-            calendars[i], calendars[writer] = calendars[writer], calendar
-            writers[original_id] = i
+        groups.setdefault(calendar.get("originalId", calendar["id"]), []).append(i)
+    for slots in groups.values():
+        if len(slots) < 2:
+            continue
+        routes = sorted(
+            (calendars[i] for i in slots),
+            key=lambda c: (bool(write and c.get("writable")), roles.get(c.get("accessRole"), 0)),
+            reverse=True,
+        )
+        for i, calendar in zip(slots, routes):
+            calendars[i] = calendar
 
 
 def run(client, cfg, now, out_path, local_tz):
@@ -132,8 +136,7 @@ def run(client, cfg, now, out_path, local_tz):
         # dedup. Where two accounts have their own copy, prefer the original
         # sign-in so adding an account keeps the events already on display.
         calendars.sort(key=lambda c: (not c.get("primary"), bool(c.get("qualifiedName"))))
-        if cfg.get("write"):
-            _prefer_writable_copies(calendars)
+        _prefer_calendar_routes(calendars, cfg.get("write"))
         time_min, time_max = config_module.window_bounds(cfg, now)
         window = config_module.window_dates(cfg, now, local_tz)
 

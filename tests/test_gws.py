@@ -90,9 +90,9 @@ class TestCalendars(unittest.TestCase):
             calendars,
             [
                 {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True, "writable": False,
-                 "defaultReminders": [{"method": "popup", "minutes": 10}, {"method": "email", "minutes": 1440}]},
+                 "accessRole": None, "defaultReminders": [{"method": "popup", "minutes": 10}, {"method": "email", "minutes": 1440}]},
                 {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False, "writable": False,
-                 "defaultReminders": []},
+                 "accessRole": None, "defaultReminders": []},
             ],
         )
 
@@ -419,8 +419,10 @@ class TestWrites(unittest.TestCase):
             {"id": "d", "summary": "D"},
         ]})
         client = gws.Gws("/tmp/profile", runner=FakeRunner({"calendarList": (0, body, "")}))
-        writable = {c["id"]: c["writable"] for c in client.calendars()}
+        calendars = client.calendars()
+        writable = {c["id"]: c["writable"] for c in calendars}
         self.assertEqual(writable, {"a": True, "b": True, "c": False, "d": False})
+        self.assertEqual([c["accessRole"] for c in calendars], ["owner", "writer", "reader", None])
 
 
 class TestWriteSignIn(unittest.TestCase):

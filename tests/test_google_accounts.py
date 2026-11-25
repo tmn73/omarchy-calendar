@@ -126,7 +126,7 @@ class TestGoogleAccounts(unittest.TestCase):
         with self.assertRaisesRegex(gws.GwsAuthError, "403: Forbidden"):
             client.delete("work@example.com", "event")
 
-    def test_sync_keeps_the_editable_copy_of_a_shared_google_calendar(self):
+    def test_sync_prefers_full_access_to_a_shared_google_calendar_and_can_fall_back(self):
         account = {"email": "work@example.com", "profile": "/work", "write": True}
         client = gws.GwsAccounts("/personal", "gws", [account])
         client.primary = Mock()
@@ -134,13 +134,14 @@ class TestGoogleAccounts(unittest.TestCase):
         client.additional["work%40example.com"] = (account, work)
         client.primary.version.return_value = (0, 22, 5)
         shared = {"id": "shared", "name": "Projects", "color": "#123456"}
-        client.primary.calendars.return_value = [{**shared, "writable": False}]
-        work.calendars.return_value = [{**shared, "writable": True}]
+        client.primary.calendars.return_value = [{**shared, "accessRole": "reader", "writable": False}]
+        work.calendars.return_value = [{**shared, "accessRole": "owner", "writable": True}]
         event = {
             "id": "event", "iCalUID": "event@example.com", "summary": "Shared project",
             "start": {"date": "2026-08-10"}, "end": {"date": "2026-08-11"},
         }
-        client.primary.events.return_value = work.events.return_value = [event]
+        client.primary.events.return_value = [{**event, "summary": "Busy"}]
+        work.events.return_value = [event]
         now = datetime(2026, 8, 10, tzinfo=timezone.utc)
         cfg = {**config.DEFAULTS, "write": True}
 
@@ -151,6 +152,18 @@ class TestGoogleAccounts(unittest.TestCase):
             saved, = doc["events"]
             self.assertEqual(saved["calendarId"], doc["writableCalendars"][0]["id"])
             client.primary.events.assert_not_called()
+
+            cfg["write"] = False
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_OK)
+            saved, = json.loads(out.read_text())["events"]
+            self.assertEqual(saved["title"], "Shared project")
+            client.primary.events.assert_not_called()
+
+            work.events.side_effect = gws.GwsApiError("temporarily unavailable")
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_OK)
+            saved, = json.loads(out.read_text())["events"]
+            self.assertEqual(saved["title"], "Busy")
+            self.assertEqual(saved["calendarId"], shared["id"])
 
 
 class TestGoogleSignIn(unittest.TestCase):
@@ -309,15 +322,28 @@ else:
         retained = accounts / "account-bbbbbbbb"
         custom = self.root / "account-cccccccc"
         retired = accounts / "account-dddddddd"
-        for path in (promoted, retained, custom, retired):
+        unmarked = accounts / "account-personal"
+        for path in (promoted, retained, custom, retired, unmarked):
             path.mkdir(parents=True)
             (path / "credentials.enc").touch()
+            if path != unmarked:
+                (path / google_setup.PROFILE_MARKER).touch()
 
-        previous = [{"profile": str(path)} for path in (promoted, retained, custom, retired)]
+        previous = [{"profile": str(path)} for path in (promoted, retained, custom, retired, unmarked)]
         google_setup.retire_profiles(previous, [{"profile": str(retained)}], promoted, self.profile)
         self.assertFalse(retired.exists())
-        for path in (promoted, retained, custom):
+        for path in (promoted, retained, custom, unmarked):
             self.assertTrue((path / "credentials.enc").exists())
+
+    def test_reconnecting_retires_a_managed_profile_in_a_symlinked_accounts_directory(self):
+        managed = self.root / "managed-profiles"
+        managed.mkdir()
+        (self.profile / "accounts").symlink_to(managed, target_is_directory=True)
+        self.assertEqual(self.command("add")[-1]["result"], "added")
+        first, = json.loads(self.config_path.read_text())["googleAccounts"]
+        self.assertEqual(self.command("add")[-1]["result"], "reconnected")
+        self.assertFalse(Path(first["profile"]).exists())
+        self.assertEqual(len(list(managed.glob("account-*"))), 1)
 
     def test_add_does_not_overwrite_an_original_account_changed_by_setup(self):
         before = json.loads(self.config_path.read_text())
