@@ -30,6 +30,7 @@ EVENT_FIELDS = (
 # Validated for type when present, never demanded.
 OPTIONAL_EVENT_FIELDS = (
     "meetingUrl",
+    "googleAccount",
     "eventUrl",
     "eventType",
     "responseStatus",
@@ -133,6 +134,8 @@ def _validate_writable(writable):
             value = calendar.get(field)
             if not isinstance(value, str) or not value:
                 problems.append(f"{where}.{field} must be a non-empty string")
+        if "googleAccount" in calendar and not isinstance(calendar["googleAccount"], str):
+            problems.append(f"{where}.googleAccount must be a string when present")
         lacks = calendar.get("lacks", [])
         if not isinstance(lacks, list) or not all(isinstance(item, str) for item in lacks):
             problems.append(f"{where}.lacks must be a list of strings when present")

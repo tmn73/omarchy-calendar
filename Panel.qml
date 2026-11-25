@@ -184,13 +184,13 @@ Panel {
     return relative !== "" ? relative + " · " + date : date
   }
 
-  // A row is told apart by id within its day: a multi-day event shares its
-  // id across days, never within one.
-  property string selectedEventId: ""
+  // Event IDs are unique within their calendar. The selected day picks the
+  // row when a multi-day event shows up on more than one day.
+  property string selectedEventKey: ""
   property bool detailsOpen: false
   readonly property var selectedItem: {
     for (var i = 0; i < root.dayItems.length; i++)
-      if (String(root.dayItems[i].id) === root.selectedEventId) return root.dayItems[i]
+      if (Model.eventIdentity(root.dayItems[i]) === root.selectedEventKey) return root.dayItems[i]
     return null
   }
   // Settings take the whole panel, so the details step aside while it is open.
@@ -310,9 +310,8 @@ Panel {
   // the bar included. The list is only replaced when it differs: a new one
   // rebuilds the index, and with it the month and the agenda.
   function adoptSettings() {
-    var stored = setting("hiddenCalendars", [])
-    var next = Array.isArray(stored) ? stored : []
-    if (!Model.sameList(root.hiddenCalendars, next)) root.hiddenCalendars = next.slice()
+    var next = Model.hiddenCalendarIds(setting("hiddenCalendars", []))
+    if (!Model.sameList(root.hiddenCalendars, next)) root.hiddenCalendars = next
   }
 
   // Applied locally first so the panel redraws on the click itself; the
@@ -471,7 +470,7 @@ Panel {
 
   function selectDay(key) {
     root.selectedDayKey = String(key)
-    root.selectedEventId = ""
+    root.selectedEventKey = ""
     root.detailsOpen = false
     root.showMonthOf(key)
   }
@@ -484,7 +483,7 @@ Panel {
     if (!item) return
     if (root.formOpen && !root.writeBusy) root.closeForm()
     if (item.dateKey !== root.selectedDayKey) root.selectDay(item.dateKey)
-    root.selectedEventId = String(item.id)
+    root.selectedEventKey = Model.eventIdentity(item)
     root.detailsOpen = true
   }
 
@@ -494,17 +493,17 @@ Panel {
     if (items.length === 0) return
     var index = -1
     for (var i = 0; i < items.length; i++)
-      if (String(items[i].id) === root.selectedEventId) index = i
+      if (Model.eventIdentity(items[i]) === root.selectedEventKey) index = i
     var next = index < 0 ? (direction > 0 ? 0 : items.length - 1)
       : Math.max(0, Math.min(items.length - 1, index + direction))
-    root.selectedEventId = String(items[next].id)
+    root.selectedEventKey = Model.eventIdentity(items[next])
   }
 
   function toggleDetails() {
     if (root.selectedItem) {
       root.detailsOpen = !root.detailsOpen
     } else if (root.dayItems.length > 0) {
-      root.selectedEventId = String(root.dayItems[0].id)
+      root.selectedEventKey = Model.eventIdentity(root.dayItems[0])
       root.detailsOpen = true
     }
   }
@@ -517,7 +516,7 @@ Panel {
     else if (root.pendingDelete !== null) root.pendingDelete = null
     else if (root.formOpen) root.closeForm()
     else if (root.detailsOpen && root.selectedItem) root.detailsOpen = false
-    else if (root.selectedEventId !== "") root.selectedEventId = ""
+    else if (root.selectedEventKey !== "") root.selectedEventKey = ""
     else if (root.settingsOpen) root.settingsOpen = false
     else root.close()
   }
@@ -552,7 +551,7 @@ Panel {
   }
 
   function joinItem(item) {
-    root.openExternally(Model.meetingUrlFor(item))
+    root.openExternally(Model.meetingJoinUrlFor(item))
   }
 
   // The selected event's meeting, else the next one today with a link.
@@ -1128,7 +1127,7 @@ Panel {
               sections: root.daySections
               upcoming: root.upcomingDays
               nextUp: root.nextUp
-              selectedId: root.selectedEventId
+              selectedKey: root.selectedEventKey
               selectedSnoozable: root.selectedSnoozable
               nextUpSnoozable: root.nextUpSnoozable
               snoozeText: root.snoozeText

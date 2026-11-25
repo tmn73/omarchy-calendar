@@ -79,7 +79,7 @@ Scope {
   // ---- Store
 
   function emptyStore(nowMs) {
-    return { since: nowMs, fired: {}, recent: {}, snoozed: {} }
+    return { version: 2, since: nowMs, fired: {}, recent: {}, snoozed: {} }
   }
 
   function copyStore(s) {
@@ -90,12 +90,26 @@ Scope {
     try {
       var parsed = JSON.parse(raw)
       if (!parsed || !isFinite(Number(parsed.since))) return null
-      return {
+      var maps = {
+        version: 2,
         since: Number(parsed.since),
         fired: parsed.fired || {},
         recent: parsed.recent || {},
         snoozed: parsed.snoozed || {}
       }
+      if (parsed.version === 2) {
+        if (parsed.legacy) {
+          maps.legacy = {
+            fired: parsed.legacy.fired || {},
+            recent: parsed.legacy.recent || {},
+            snoozed: parsed.legacy.snoozed || {}
+          }
+        }
+        return maps
+      }
+      var upgraded = emptyStore(maps.since)
+      upgraded.legacy = { fired: maps.fired, recent: maps.recent, snoozed: maps.snoozed }
+      return upgraded
     } catch (error) {
       return null
     }
@@ -117,6 +131,7 @@ Scope {
   function tick(nowMs) {
     if (!enabled || !store || !isLeader()) return
     var next = copyStore(store)
+    Model.migrateReminderKeys(next, events)
     next.fired = Model.pruneFired(next.fired, nowMs)
 
     var due = Model.dueReminders(events, nowMs, next.fired, { notBeforeMs: next.since })
@@ -126,22 +141,29 @@ Scope {
     }
     next.fired = Model.markFired(next.fired, due)
 
-    for (var key in next.snoozed) {
-      var snoozed = next.snoozed[key]
-      if (!snoozed || Number(snoozed.fireAtMs) > nowMs) continue
-      if (Model.timeRange(snoozed.event).end > nowMs) {
-        notify(snoozed.event, nowMs)
-        next.recent[key] = nowMs
-      }
-      delete next.snoozed[key]
+    deliverSnoozes(next, nowMs)
+    if (next.legacy) {
+      next.legacy.fired = Model.pruneFired(next.legacy.fired, nowMs)
+      deliverSnoozes(next.legacy, nowMs)
     }
-
-    next.recent = Model.pruneRecentReminders(next.recent, nowMs)
     commit(next)
   }
 
+  function deliverSnoozes(state, nowMs) {
+    for (var key in state.snoozed) {
+      var snoozed = state.snoozed[key]
+      if (!snoozed || Number(snoozed.fireAtMs) > nowMs) continue
+      if (Model.timeRange(snoozed.event).end > nowMs) {
+        notify(snoozed.event, nowMs)
+        state.recent[key] = nowMs
+      }
+      delete state.snoozed[key]
+    }
+    state.recent = Model.pruneRecentReminders(state.recent, nowMs)
+  }
+
   function notify(event, nowMs) {
-    var url = details ? (Model.meetingUrlFor(event) || Model.eventUrlFor(event)) : ""
+    var url = details ? (Model.meetingJoinUrlFor(event) || Model.eventUrlFor(event)) : ""
     var locale = Qt.locale(Strings.localeName(language))
     var body = Model.reminderBody(event, nowMs, language,
       function(ms) { return Qt.formatDateTime(new Date(ms), timeFormat) },

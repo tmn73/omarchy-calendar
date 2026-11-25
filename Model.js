@@ -412,8 +412,8 @@ function monthGrid(year, month, weekStart, todayKey, eventIndex, showLunarDates,
 
 // ---- Events and calendars. The widget renders whatever the sync wrote;
 //      none of this knows where the events came from. A multi-day event is
-//      one row per day it covers, all sharing its id, so rows are told
-//      apart by id plus dateKey (or id plus start, for the event itself).
+//      one row per day it covers. The event shares a calendar ID and event
+//      ID across rows, and each row has its own dateKey.
 
 // The events file as text, read into { doc, mismatch }. `doc` is the parsed
 // document, or null when there is nothing to show: no file, text that is not
@@ -490,7 +490,7 @@ function calendarsInDocument(doc) {
 
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    var id = event && event.calendarId
+    var id = calendarIdentity(event && event.calendarId)
     if (!id || byId[id]) continue
     byId[id] = true
     ordered.push({ id: id, name: event.calendarName || id, color: event.color || "" })
@@ -509,17 +509,31 @@ function calendarEventCounts(doc) {
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
     if (!event) continue
-    var key = event.calendarId + "|" + event.id
+    var key = eventIdentity(event)
     if (seen[key]) continue
     seen[key] = true
-    counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
+    var calendar = calendarIdentity(event.calendarId)
+    counts[calendar] = (counts[calendar] || 0) + 1
   }
   return counts
 }
 
+// An account-qualified Google ID is a route to the same physical calendar.
+function calendarIdentity(calendarId) {
+  return text(calendarId).replace(/^gws:[^:]+%40[^:]+:/, "")
+}
+
+function eventIdentity(event) {
+  return JSON.stringify([calendarIdentity(event && event.calendarId), text(event && event.id)])
+}
+
+function hiddenCalendarIds(hidden) {
+  if (!Array.isArray(hidden)) return []
+  return Array.from(new Set(hidden.map(calendarIdentity)))
+}
+
 function isCalendarHidden(hidden, calendarId) {
-  if (!hidden || !hidden.length) return false
-  return hidden.indexOf(String(calendarId)) !== -1
+  return hiddenCalendarIds(hidden).indexOf(calendarIdentity(calendarId)) !== -1
 }
 
 // True when two lists hold the same values in the same order, compared as
@@ -536,16 +550,11 @@ function sameList(a, b) {
 // Returns a new list rather than mutating, so the caller can hand the result
 // straight to persistSettings without touching the settings object in place.
 function toggleHiddenCalendar(hidden, calendarId) {
-  var id = String(calendarId)
-  var next = []
-  var found = false
-
-  for (var i = 0; i < (hidden || []).length; i++) {
-    if (String(hidden[i]) === id) { found = true; continue }
-    next.push(hidden[i])
-  }
-
-  if (!found) next.push(id)
+  var id = calendarIdentity(calendarId)
+  var next = hiddenCalendarIds(hidden)
+  var index = next.indexOf(id)
+  if (index >= 0) next.splice(index, 1)
+  else next.push(id)
   return next
 }
 
@@ -574,11 +583,12 @@ function visibleEvents(events, hidden, options) {
   var opts = options || {}
   var dropNoisy = opts.hideWorkingLocation !== false
   var dropDeclined = opts.hideDeclined === true
+  var hiddenIds = hiddenCalendarIds(hidden)
 
   var visible = []
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
-    if (isCalendarHidden(hidden, event.calendarId)) continue
+    if (hiddenIds.indexOf(calendarIdentity(event.calendarId)) !== -1) continue
     if (dropNoisy && isNoisyEventType(event)) continue
     if (dropDeclined && isDeclined(event)) continue
     visible.push(event)
@@ -599,6 +609,23 @@ function safeUrl(url) {
 
 function meetingUrlFor(event) {
   return event ? safeUrl(event.meetingUrl) : ""
+}
+
+// Give Meet the account that supplied this event, including for shared
+// calendars. Keep the invitation link itself available for copying.
+function meetingJoinUrlFor(event) {
+  var url = meetingUrlFor(event)
+  var account = text(event && event.googleAccount).trim()
+  var meet = url.match(/^(https:\/\/meet\.google\.com(?::443)?(?:\/[^?#]*)?)(?:\?([^#]*))?(#.*)?$/i)
+  if (!meet || !isValidEmail(account)) return url
+
+  var params = (meet[2] || "").split("&").filter(function(param) {
+    var name = param.split("=", 1)[0]
+    try { return name !== "" && decodeURIComponent(name).toLowerCase() !== "authuser" }
+    catch (error) { return true }
+  })
+  params.push("authuser=" + encodeQuery(account))
+  return meet[1] + "?" + params.join("&") + (meet[3] || "")
 }
 
 // The event's own page, used when there is nothing to join. Older files and
@@ -639,7 +666,7 @@ function meetingService(url) {
 // clock, or a keybinding. Whoever sends an invitation sets its link, so only
 // a known video service opens blind; any other link is shown in the panel.
 function blindJoinUrl(event) {
-  var url = meetingUrlFor(event)
+  var url = meetingJoinUrlFor(event)
   var service = meetingService(url)
   return service && !service.anyoneCanHost ? url : ""
 }
@@ -993,7 +1020,7 @@ function announceableEvents(events) {
     if (!event || event.allDay || isDeclined(event) || isNoisyEventType(event)) continue
     if (classifyEvent(event).done) continue
     var range = timeRange(event)
-    var key = text(event.id) + "|" + range.start
+    var key = eventIdentity(event) + "|" + range.start
     if (isNaN(range.start) || seen[key]) continue
     seen[key] = true
     out.push({ event: event, start: range.start, end: range.end })
@@ -1158,7 +1185,7 @@ function reminderMinutesFor(event, fallbackMinutes) {
 
 // The start is part of the key, so a rescheduled event reminds again.
 function reminderKey(event, minutes) {
-  return text(event && event.id) + "|" + text(event && event.start) + "|" + minutes
+  return reminderEventKey(event) + "|" + minutes
 }
 
 function isFired(fired, key) {
@@ -1255,9 +1282,46 @@ function reminderSummary(event, lang, fallbackMinutes) {
 // How long after a reminder the panel offers to snooze it.
 var SNOOZE_WINDOW_MS = 15 * MINUTE_MS
 
-// One key per occurrence ("id|start"), whichever of its reminders fired.
+// One key per occurrence, whichever of its reminders fired.
 function reminderEventKey(event) {
-  return text(event && event.id) + "|" + text(event && event.start)
+  return eventIdentity(event) + "|" + text(event && event.start)
+}
+
+// Older reminder state omitted the calendar. Resolve it from the events
+// that today's bar can see, using the former first-match rule for fired
+// reminders and the saved details to identify a pending snooze.
+function migrateReminderKeys(store, events) {
+  var legacy = store.legacy
+  if (!legacy) return
+
+  function move(group, oldKey, newKey) {
+    if (!isFired(store[group], newKey)) store[group][newKey] = legacy[group][oldKey]
+    delete legacy[group][oldKey]
+  }
+
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i]
+    if (!event || !event.calendarId || !event.id || !event.start) continue
+    var oldKey = text(event.id) + "|" + text(event.start)
+    var newKey = reminderEventKey(event)
+    var snoozed = legacy.snoozed[oldKey]
+    var saved = snoozed && snoozed.event
+    if (saved && saved.title === event.title && saved.end === event.end &&
+        text(saved.eventUrl) === text(event.eventUrl)) {
+      saved.calendarId = event.calendarId
+      move("snoozed", oldKey, newKey)
+    }
+    if (isDeclined(event) || isNoisyEventType(event) || classifyEvent(event).done) continue
+    if (isFired(legacy.recent, oldKey)) move("recent", oldKey, newKey)
+    var minutes = reminderMinutesFor(event)
+    for (var m = 0; m < minutes.length; m++) {
+      var oldReminder = oldKey + "|" + minutes[m]
+      if (isFired(legacy.fired, oldReminder))
+        move("fired", oldReminder, reminderKey(event, minutes[m]))
+    }
+  }
+  if (!["fired", "recent", "snoozed"].some(function(group) { return Object.keys(legacy[group]).length }))
+    delete store.legacy
 }
 
 // `recent` maps reminderEventKey → when its reminder was sent.
@@ -1276,11 +1340,14 @@ function pruneRecentReminders(recent, nowMs) {
 
 // Only what a snoozed reminder needs to be rebuilt after a shell reload.
 function slimReminderEvent(event) {
-  return {
-    id: event.id, start: event.start, end: event.end, allDay: event.allDay === true,
+  var saved = {
+    id: event.id, calendarId: event.calendarId,
+    start: event.start, end: event.end, allDay: event.allDay === true,
     dateKey: event.dateKey, title: event.title, location: event.location,
     meetingUrl: event.meetingUrl, eventUrl: event.eventUrl
   }
+  if (event.googleAccount) saved.googleAccount = event.googleAccount
+  return saved
 }
 
 function capitalized(value) {
@@ -1507,7 +1574,7 @@ function isValidEmail(address) {
 // An attendee with no address cannot get one: an iCalendar source can
 // report only your own answer, with no email beside it.
 function otherGuests(form) {
-  var me = normalizeEmail(form.calendarId)
+  var me = normalizeEmail(calendarIdentity(form.calendarId))
   var out = []
   var guests = form.guests || []
   for (var i = 0; i < guests.length; i++) {

@@ -35,7 +35,7 @@ Item {
   property var sections: ({ allDay: [], timed: [], nowIndex: -1 })
   property var upcoming: []
   property var nextUp: null
-  property string selectedId: ""
+  property string selectedKey: ""
   property bool selectedSnoozable: false
   property bool nextUpSnoozable: false
   property string snoozeText: ""
@@ -263,7 +263,7 @@ Item {
             required property var modelData
             width: parent.width
             item: modelData
-            selected: modelData.id === root.selectedId
+            selected: Model.eventIdentity(modelData) === root.selectedKey
             snoozable: selected && root.selectedSnoozable
             snoozeText: root.snoozeText
             foreground: root.foreground
@@ -306,7 +306,7 @@ Item {
             TimedRow {
               width: parent.width
               item: timedEntry.modelData
-              selected: timedEntry.modelData.id === root.selectedId
+              selected: Model.eventIdentity(timedEntry.modelData) === root.selectedKey
               snoozable: selected && root.selectedSnoozable
               snoozeText: root.snoozeText
               isToday: root.isToday

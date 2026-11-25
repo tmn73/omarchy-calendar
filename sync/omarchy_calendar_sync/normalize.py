@@ -146,8 +146,8 @@ def normalize_all(gevents, calendar, tz, window=None):
 def normalize_event(gevent, calendar, tz, window=None):
     """Return one contract row per local day this event covers.
 
-    Rows produced from a single Google event share its id, so consumers must
-    key on id plus dateKey, never on id alone.
+    Consumers can identify an event by calendarId and id, and an individual
+    row by including dateKey for events that span days.
 
     `window` is the (first, last) local dates the sync fetched. Days outside
     it get no row: the widget never shows them, and an event that ends in the
@@ -182,6 +182,8 @@ def normalize_event(gevent, calendar, tz, window=None):
     end_iso = end_dt.isoformat()
 
     meeting_url = _meeting_url(gevent)
+    account = calendar.get("googleAccount")
+    meeting_account = {"googleAccount": account} if meeting_url and account else {}
     event_url = _https_only(gevent.get("htmlLink"))
     event_type = str(gevent.get("eventType") or "")
     response_status = _response_status(gevent)
@@ -201,6 +203,7 @@ def normalize_event(gevent, calendar, tz, window=None):
             "title": title,
             "location": location,
             "meetingUrl": meeting_url,
+            **meeting_account,
             "eventUrl": event_url,
             "eventType": event_type,
             "responseStatus": response_status,

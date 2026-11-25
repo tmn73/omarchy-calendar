@@ -13,8 +13,8 @@ from . import budget, contract, normalize, suggestions
 from .caldav import Caldav
 from .caldir import Caldir
 from .eds import Eds
-from .errors import SyncError
-from .gws import Gws
+from .errors import CalendarUnavailable, SyncError
+from .gws import Gws, GwsAccounts
 from .ics import Ics
 from .localzone import resolve_local_timezone
 
@@ -63,7 +63,16 @@ def occurrence_key(gevent):
         return None
 
     start = gevent.get("start") or {}
-    return (uid, start.get("dateTime") or start.get("date"))
+    timed_start = start.get("dateTime")
+    if timed_start:
+        # The same occurrence can arrive in different calendar time zones.
+        try:
+            instant = datetime.fromisoformat(timed_start)
+            if instant.tzinfo is not None:
+                timed_start = instant.astimezone(timezone.utc).isoformat()
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return (uid, timed_start or start.get("date"))
 
 
 def _drop_duplicates(gevents, seen):
@@ -95,29 +104,61 @@ def _rows_within_budget(gevents, calendar, tz, window, rows_so_far):
     return rows
 
 
+def _prefer_calendar_routes(calendars, write):
+    """Order routes to each shared calendar without reordering other calendars."""
+    roles = {"freeBusyReader": 1, "reader": 2, "writerWithoutPrivateAccess": 2, "writer": 3, "owner": 3}
+    groups = {}
+    for i, calendar in enumerate(calendars):
+        groups.setdefault(calendar.get("originalId", calendar["id"]), []).append(i)
+    for slots in groups.values():
+        if len(slots) < 2:
+            continue
+        routes = sorted(
+            (calendars[i] for i in slots),
+            key=lambda c: (bool(write and c.get("writable")), roles.get(c.get("accessRole"), 0)),
+            reverse=True,
+        )
+        for i, calendar in zip(slots, routes):
+            calendars[i] = calendar
+
+
 def run(client, cfg, now, out_path, local_tz):
     """Fetch, normalize, write. Returns a process exit code."""
     try:
         client.check()
         calendars = config_module.select_calendars(client.calendars(), cfg)
+        discovery_error = getattr(client, "calendar_discovery_error", None)
+        if not calendars and discovery_error is not None:
+            raise discovery_error
         # Your own copy of a shared event carries your title, colour and
         # answer. A colleague's copy can carry none of them (a calendar shared
         # as free/busy has no titles), so the primary calendar wins the
-        # dedup. The sort is stable, so the rest keep their name order.
-        calendars.sort(key=lambda calendar: not calendar.get("primary"))
+        # dedup. Where two accounts have their own copy, prefer the original
+        # sign-in so adding an account keeps the events already on display.
+        calendars.sort(key=lambda c: (not c.get("primary"), bool(c.get("qualifiedName"))))
+        _prefer_calendar_routes(calendars, cfg.get("write"))
         time_min, time_max = config_module.window_bounds(cfg, now)
         window = config_module.window_dates(cfg, now, local_tz)
 
         rows = []
         seen = set()
         fetched = []
+        unavailable = {}
+        synced_routes = {}
         for calendar in calendars:
+            original_id = calendar.get("originalId", calendar["id"])
+            if original_id in synced_routes:
+                continue
             # A calendar past the budget is skipped, like a broken feed, so
             # one hostile source costs its own events and not the sync.
             try:
                 raw = client.events(calendar["id"], time_min, time_max)
             except budget.TooManyEvents as error:
                 print(f"skipping {calendar['name']}: {error}")
+                continue
+            except CalendarUnavailable as error:
+                print(f"skipping {calendar['name']}: {error}", file=sys.stderr)
+                unavailable[calendar["id"]] = error
                 continue
             calendar_seen = set(seen)
             fresh = _drop_duplicates(raw, calendar_seen)
@@ -129,9 +170,12 @@ def run(client, cfg, now, out_path, local_tz):
                       f"{budget.MAX_EVENTS} events or {budget.MAX_ROWS} rows")
                 continue
             seen = calendar_seen
+            synced_routes[original_id] = calendar["id"]
             fetched.extend(fresh)
             rows.extend(calendar_rows)
 
+        if unavailable and len(unavailable) == len(calendars):
+            raise next(iter(unavailable.values()))
         source = client.SOURCE_NAME + "/" + ".".join(
             str(part) for part in client.version()
         )
@@ -147,10 +191,17 @@ def run(client, cfg, now, out_path, local_tz):
     # writing on and the backend can write; otherwise the key is absent.
     writable = []
     if cfg.get("write") and getattr(client, "can_write", False):
+        offered = set()
         for c in calendars:
-            if not c.get("writable"):
+            calendar_id = c["id"]
+            original_id = c.get("originalId", calendar_id)
+            if (not c.get("writable") or calendar_id in unavailable or original_id in offered
+                    or synced_routes.get(original_id, calendar_id) != calendar_id):
                 continue
+            offered.add(original_id)
             entry = {"id": c["id"], "name": c["name"], "color": c["color"]}
+            if c.get("googleAccount"):
+                entry["googleAccount"] = c["googleAccount"]
             # What the form offers that this calendar cannot store.
             if c.get("lacks"):
                 entry["lacks"] = list(c["lacks"])
@@ -158,7 +209,7 @@ def run(client, cfg, now, out_path, local_tz):
     # Only for the event form, so only when writing is on.
     guests = []
     if writable:
-        guests = suggestions.guest_suggestions(fetched, [c["id"] for c in calendars])
+        guests = suggestions.guest_suggestions(fetched, [c.get("originalId", c["id"]) for c in calendars])
     doc = contract.build_document(rows, now.isoformat(), source, writable, guests)
 
     problems = contract.validate(doc)
@@ -176,6 +227,8 @@ def build_client(cfg, local_tz=None):
     """The calendar source named by the config."""
     backend = str(cfg.get("backend") or "gws").strip().lower()
     if backend == "gws":
+        if cfg.get("googleAccounts"):
+            return GwsAccounts(cfg["profile"], cfg["gwsPath"], cfg["googleAccounts"])
         return Gws(cfg["profile"], binary=cfg["gwsPath"])
     if backend == "eds":
         return Eds(identity=cfg.get("identity", ""))

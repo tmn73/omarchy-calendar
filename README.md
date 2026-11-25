@@ -156,7 +156,8 @@ The script automates what has an API:
 
 It stops and waits for the four things Google exposes no API for: the consent
 screen, declaring the calendar scope, publishing the app, and creating the
-Desktop OAuth client. Each one prints the exact URL and the exact values.
+Desktop OAuth client. Each page opens in your default browser. The terminal
+also shows a link and the values to enter.
 
 Two of those steps are traps, and the script says so at the time:
 
@@ -170,6 +171,20 @@ Two of those steps are traps, and the script says so at the time:
 
 When it finishes, events land in `~/.local/state/omarchy/calendar-events.json`
 every five minutes and the widget picks them up without a restart.
+
+### Add another Google account
+
+Open the calendar panel, click its gear, and choose **Calendars → Add Google
+account**. Pick the account in your browser and grant calendar access. The
+plugin reuses the OAuth client from setup, then syncs calendars from both
+accounts. If you enabled event editing, grant that permission too.
+
+Google Meet opens with an account hint for the Google account that synced
+the event. Sign into that account in your browser to join as that account.
+
+To reconnect an added account, use the same button and select that account
+again. If your OAuth app is still in Testing, add the account as a test user
+in Google Cloud first.
 
 ## Create and edit events
 
@@ -470,6 +485,7 @@ These extra fields are optional. Omit them and everything still works:
 | Field | Effect |
 |---|---|
 | `meetingUrl` | Shows the **Join** button around the event's time. Must be `https`, anything else is dropped |
+| `googleAccount` | Email address to use as the browser account hint when opening a Google Meet link |
 | `eventUrl` | Opens the event in its calendar. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |
@@ -486,7 +502,7 @@ Rules a writer has to follow:
 - `dateKey` is `YYYY-MM-DD` in local time, and it is what the grid keys on.
 - A multi-day event is emitted **once per day it covers**, each row with its own
   `dateKey`. Those rows share an `id`, so the unique key for a row is
-  `id + dateKey`.
+  `calendarId + id + dateKey`.
 - `allDay` events are excluded from the countdown, since counting down to
   midnight tells you nothing.
 - Write the file atomically, temp file then rename. The widget watches it.

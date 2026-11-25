@@ -317,6 +317,31 @@ test('meetingUrlFor is empty rather than undefined when absent', () => {
   assert.equal(Model.meetingUrlFor({ meetingUrl: 'https://z.com/1' }), 'https://z.com/1')
 })
 
+test('joining Google Meet uses the connected account and keeps the original invitation link', () => {
+  const meetingUrl = 'https://meet.google.com/abc-defg-hij?hs=122&authuser=0&auth%75ser=1#details'
+  const event = { meetingUrl, googleAccount: 'work+calendar@example.com' }
+  const joined = 'https://meet.google.com/abc-defg-hij?hs=122&authuser=work%2Bcalendar%40example.com#details'
+  assert.equal(Model.meetingJoinUrlFor(event), joined)
+  assert.equal(Model.blindJoinUrl(event), joined)
+  assert.equal(Model.meetingUrlFor(event), meetingUrl)
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl }), meetingUrl)
+})
+
+test('a Meet account hint is only added to the exact HTTPS Google Meet host', () => {
+  const googleAccount = 'work@example.com'
+  const meetingUrl = 'https://meet.google.com/abc-defg-hij'
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl, googleAccount }), meetingUrl + '?authuser=work%40example.com')
+  for (const other of [
+    'https://zoom.us/j/123',
+    'https://meet.google.com.example.net/abc-defg-hij',
+    'https://meet.google.com@other.example/abc-defg-hij',
+    'https://meet.google.com:8080/abc-defg-hij'
+  ]) {
+    assert.equal(Model.meetingJoinUrlFor({ meetingUrl: other, googleAccount }), other)
+  }
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl, googleAccount: 'invalid account' }), meetingUrl)
+})
+
 const meeting = (start, end, extra = {}) => ({
   id: 's', title: 'Standup', allDay: false, dateKey: '2026-08-10',
   start, end, meetingUrl: 'https://meet.google.com/x', ...extra
@@ -574,6 +599,30 @@ test('otherGuests leaves out the calendar owner', () => {
     { email: 'me@example.com' }, { email: 'Ana@example.com' }] }
   assert.deepEqual(Model.otherGuests(form).map(g => g.email), ['Ana@example.com'])
   assert.deepEqual(Model.otherGuests({ calendarId: 'me@example.com', guests: [] }), [])
+})
+
+test('otherGuests excludes the owner of a calendar from an added Google account', () => {
+  const form = { calendarId: 'gws:work%40example.com:work@example.com', guests: [
+    { email: 'WORK@example.com' }, { email: 'Ana@example.com' }
+  ] }
+  assert.deepEqual(Model.otherGuests(form).map(g => g.email), ['Ana@example.com'])
+})
+
+test('eventIdentity distinguishes calendars and survives across days', () => {
+  const original = { id: 'shared-id', calendarId: 'shared@example.com', dateKey: '2026-08-10' }
+  const added = { ...original, calendarId: 'gws:work%40example.com:work@example.com' }
+  assert.notEqual(Model.eventIdentity(original), Model.eventIdentity(added))
+  assert.equal(Model.eventIdentity(original), Model.eventIdentity({ ...original, dateKey: '2026-08-11' }))
+})
+
+test('hidden shared calendars stay hidden when the account route changes', () => {
+  const original = { id: 'shared-id', calendarId: 'shared@example.com' }
+  const qualified = { ...original, calendarId: 'gws:work%40example.com:shared@example.com' }
+  assert.equal(Model.calendarIdentity(qualified.calendarId), original.calendarId)
+  assert.equal(Model.eventIdentity(original), Model.eventIdentity(qualified))
+  assert.deepEqual(Model.visibleEvents([original, qualified], [qualified.calendarId]), [])
+  assert.deepEqual(Model.toggleHiddenCalendar([qualified.calendarId], original.calendarId), [])
+  assert.deepEqual(Model.calendarsInDocument({ events: [qualified, original] }).map(c => c.id), [original.calendarId])
 })
 
 test('otherGuests leaves out an attendee with no address', () => {

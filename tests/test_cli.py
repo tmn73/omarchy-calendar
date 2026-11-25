@@ -171,6 +171,13 @@ class TestOccurrenceKey(unittest.TestCase):
         b = gevent("shared@google.com", "2026-08-10T19:15:00-05:00", event_id="other")
         self.assertEqual(cli.occurrence_key(a), cli.occurrence_key(b))
 
+    def test_same_occurrence_with_different_calendar_time_zones_shares_a_key(self):
+        a = gevent("shared@google.com", "2026-08-10T10:30:00-06:00")
+        b = gevent("shared@google.com", "2026-08-10T11:30:00-05:00")
+        c = gevent("shared@google.com", "2026-08-10T16:30:00Z")
+        self.assertEqual(cli.occurrence_key(a), cli.occurrence_key(b))
+        self.assertEqual(cli.occurrence_key(a), cli.occurrence_key(c))
+
     def test_two_instances_of_a_series_have_different_keys(self):
         # A recurring series shares one iCalUID across every instance. Live
         # data confirmed this: a daily standup returned five events with five

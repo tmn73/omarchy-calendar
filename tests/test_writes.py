@@ -94,6 +94,13 @@ class TestSplice(unittest.TestCase):
         doc = writes.splice(self.doc(row("a", "2026-09-26")), ME, "new1", reply, BOGOTA, WINDOW)
         self.assertEqual(sorted(r["id"] for r in doc["events"]), ["a", "new1"])
 
+    def test_a_saved_meet_event_keeps_its_connected_google_account(self):
+        reply = resource("new1", "2026-09-26T12:00:00-05:00", "2026-09-26T12:30:00-05:00")
+        reply["hangoutLink"] = "https://meet.google.com/abc-defg-hij"
+        calendar = {**ME, "googleAccount": "work@example.com"}
+        doc = writes.splice(self.doc(), calendar, "new1", reply, BOGOTA, WINDOW)
+        self.assertEqual(doc["events"][0]["googleAccount"], "work@example.com")
+
     def test_update_replaces_every_row_of_the_event(self):
         old = self.doc(row("m", "2026-09-26"), row("m", "2026-09-27"))
         reply = resource("m", "2026-09-28T09:00:00-05:00", "2026-09-28T10:00:00-05:00", "New")

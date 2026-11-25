@@ -26,6 +26,14 @@ test('barState is soon inside the lead time', () => {
   assert.equal(state.extra, 0)
 })
 
+test('barState counts simultaneous events whose IDs overlap across calendars', () => {
+  const events = [
+    meeting('overlap', 13, 0, { calendarId: 'personal@example.com' }),
+    meeting('overlap', 13, 0, { calendarId: 'gws:work%40example.com:work@example.com' }),
+  ]
+  assert.equal(Model.barState(events, START - MIN, 30).extra, 1)
+})
+
 test('barState is imminent in the last 10 minutes', () => {
   assert.equal(Model.barState(EVENTS, START - 10 * MIN, 30).phase, 'imminent')
   assert.equal(Model.barState(EVENTS, START - 10 * MIN - 1, 30).phase, 'soon')

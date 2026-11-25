@@ -49,6 +49,18 @@ WRITE_SCOPE="https://www.googleapis.com/auth/calendar.events"
 
 step() { printf '\n==> %s\n' "$1"; }
 
+open_setup_page() {
+  local url=$1
+  if [ -t 1 ]; then
+    printf '  \033]8;;%s\033\\%s\033]8;;\033\\\n\n' "$url" "$url"
+  else
+    printf '  %s\n\n' "$url"
+  fi
+  if [ -t 0 ] && command -v xdg-open >/dev/null; then
+    xdg-open "$url" >/dev/null 2>&1 </dev/null &
+  fi
+}
+
 install_timer_and_sync() {
   step "Installing the systemd timer"
   mkdir -p "$HOME/.config/systemd/user"
@@ -74,6 +86,30 @@ Done. Events land in ~/.local/state/omarchy/calendar-events.json every 5 minutes
   Logs:    journalctl --user -u omarchy-calendar-sync -f
   Choose which calendars to show: click the clock, then the gear icon.
 EOF
+}
+
+# Keep settings written by another setup while this one tested its source.
+commit_setup_candidate() {
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" python3 - "$CONFIG" "$@" <<'PYEOF'
+import sys
+
+from omarchy_calendar_sync import config
+from omarchy_calendar_sync.cli import write_atomic
+
+destination, candidate = sys.argv[1:3]
+identity = sys.argv[3] if len(sys.argv) > 3 else ""
+tested = config.read(candidate)
+backend = tested["backend"]
+with config.locked_path(destination) as path:
+    current = config.read(path, recover_invalid_json=True)
+    current.update({key: tested[key] for key in ("backend", "write", backend)})
+    if backend == "caldav" and not current.get("identity"):
+        username = tested["caldav"]["username"]
+        identity = username if "@" in username else ""
+    if identity:
+        current["identity"] = identity
+    write_atomic(path, current)
+PYEOF
 }
 
 setup_ics() {
@@ -122,12 +158,11 @@ EOF
   mkdir -p "$(dirname "$CONFIG")"
   # The new config replaces the current one only after a test sync passes.
   # A wrong address must not break a setup that works today.
-  local candidate
-  candidate=$(mktemp "$CONFIG.XXXXXX")
-  trap 'rm -f "$candidate"' EXIT
+  SETUP_CANDIDATE=$(mktemp "$CONFIG.XXXXXX")
+  trap 'rm -f "$SETUP_CANDIDATE"' EXIT
   # The addresses go in on file descriptor 3 and the program on stdin. As
   # arguments, they would show to every user on the machine through ps.
-  python3 - "$CONFIG" "$candidate" "$identity" 3< <(printf '%s\n' "${urls[@]}") <<'PYEOF'
+  python3 - "$CONFIG" "$SETUP_CANDIDATE" "$identity" 3< <(printf '%s\n' "${urls[@]}") <<'PYEOF'
 import json, os, pathlib, sys
 
 path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
@@ -153,11 +188,11 @@ os.chmod(candidate, 0o600)
 PYEOF
 
   step "Testing the feeds"
-  "$SYNC_BIN" --config "$candidate" || {
+  "$SYNC_BIN" --config "$SETUP_CANDIDATE" || {
     echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
-  mv -f "$candidate" "$CONFIG"
+  commit_setup_candidate "$SETUP_CANDIDATE" "$identity"
   echo "  backend set to ics with ${#urls[@]} feed(s) in $CONFIG"
 
   install_timer_and_sync
@@ -267,30 +302,28 @@ EOF
 
   mkdir -p "$(dirname "$CONFIG")"
   # The new config replaces the current one only after a test sync passes.
-  local candidate
-  candidate=$(mktemp "$CONFIG.XXXXXX")
-  # :- because the trap runs after this function's locals are gone.
-  trap 'rm -f "${candidate:-}"; [ -z "${SETUP_NONCE:-}" ] || secret-tool clear service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"' EXIT
+  SETUP_CANDIDATE=$(mktemp "$CONFIG.XXXXXX")
+  trap 'rm -f "$SETUP_CANDIDATE"; [ -z "${SETUP_NONCE:-}" ] || secret-tool clear service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"' EXIT
 
   if [ "$in_keyring" = 1 ]; then
-    write_caldav_config "$candidate" "$url" "$username" "$password" \
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password" \
       service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"
   else
-    write_caldav_config "$candidate" "$url" "$username" "$password"
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password"
   fi
 
   step "Testing the account"
-  "$SYNC_BIN" --config "$candidate" || {
+  "$SYNC_BIN" --config "$SETUP_CANDIDATE" || {
     echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
   if [ "$in_keyring" = 1 ]; then
     printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
       service omarchy-calendar-caldav-account url "$url" username "$username"
-    write_caldav_config "$candidate" "$url" "$username" "$password" \
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password" \
       service omarchy-calendar-caldav-account url "$url" username "$username"
   fi
-  mv -f "$candidate" "$CONFIG"
+  commit_setup_candidate "$SETUP_CANDIDATE"
   echo "  backend set to caldav for $username in $CONFIG"
 
   install_timer_and_sync
@@ -433,10 +466,8 @@ step "Enabling the Calendar API"
 gcloud services enable calendar-json.googleapis.com --project="$PROJECT_ID"
 
 step "Manual step 1 of 4: configure the OAuth consent screen"
+open_setup_page "https://console.cloud.google.com/auth/overview?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/overview?project=$PROJECT_ID
-
   If you land on a "Get started" form, fill it in:
     App name:            Omarchy Calendar
     User support email:  your own address
@@ -449,10 +480,8 @@ EOF
 pause
 
 step "Manual step 2 of 4: declare the calendar scope"
+open_setup_page "https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/scopes?project=$PROJECT_ID
-
   Click "Add or remove scopes"
   Filter for:  calendar.readonly
   Tick:        $SCOPE
@@ -480,10 +509,8 @@ EOF
 pause
 
 step "Manual step 3 of 4: publish the app"
+open_setup_page "https://console.cloud.google.com/auth/audience?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/audience?project=$PROJECT_ID
-
   Under "Publishing status", click "Publish app"
 
   If it already reads "In production" there is nothing to do. The button
@@ -496,10 +523,8 @@ EOF
 pause
 
 step "Manual step 4 of 4: create a Desktop OAuth client"
+open_setup_page "https://console.cloud.google.com/auth/clients?project=$PROJECT_ID"
 cat <<EOF
-Open:
-  https://console.cloud.google.com/auth/clients?project=$PROJECT_ID
-
   Create client
   Application type:  Desktop app
   Name:              Omarchy Calendar Sync
@@ -509,7 +534,9 @@ that dialog.
 EOF
 pause
 
-mkdir -p "$PROFILE"
+mkdir -p -m 700 "$PROFILE/accounts"
+exec {calendar_sign_in_lock}>"$PROFILE/accounts/.sign-in.lock"
+flock -n "$calendar_sign_in_lock" || { echo "A Google sign-in is already in progress."; exit 1; }
 if [ -f "$PROFILE/client_secret.json" ]; then
   step "Client secret is already installed at $PROFILE/client_secret.json, skipping"
 else
@@ -540,7 +567,7 @@ fi
 # the calendar scope was granted keeps being served afterwards, and every
 # call fails with 403 insufficient scopes until it is cleared.
 rm -f "$PROFILE/token_cache.json"
-GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth login --scopes "$SCOPES"
+"$SCRIPT_DIR/omarchy-calendar-google" login "$GWS" "$PROFILE" "$SCOPES"
 
 step "Checking the calendar scope was actually granted"
 granted=$(GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$PROFILE" "$GWS" auth status 2>/dev/null || true)
@@ -615,28 +642,35 @@ EOF
   fi
 fi
 mkdir -p "$(dirname "$CONFIG")"
-python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" <<'PYEOF'
-import json, pathlib, sys
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" \
+  python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" 3<<<"$granted" <<'PYEOF'
+import json, os, pathlib, sys
+from omarchy_calendar_sync import config
+from omarchy_calendar_sync.cli import write_atomic
+from omarchy_calendar_sync.google_setup import account_email, retire_profiles, without_primary
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 write = sys.argv[4] == "1"
-config = {}
-if path.exists():
+with os.fdopen(3) as stream:
     try:
-        config = json.loads(path.read_text())
+        primary = account_email(json.load(stream))
     except ValueError:
-        config = {}
-# This flow sets up the Google Cloud sync, so it must also select it.
-# Without this line, a config left by setup --ics keeps reading the feeds.
-config["backend"] = "gws"
-config["gwsPath"] = gws_path
-config["profile"] = profile
-config["write"] = write
-path.write_text(json.dumps(config, indent=2) + "\n")
+        primary = ""
+with config.locked_path(path) as destination:
+    current = config.read(destination, recover_invalid_json=True)
+    former_profile = current.get("profile") or config.DEFAULTS["profile"]
+    previous_accounts = current.get("googleAccounts")
+    current.update(backend="gws", gwsPath=gws_path, profile=profile, write=write, googlePrimaryEmail=primary)
+    if primary and isinstance(previous_accounts, list):
+        current["googleAccounts"] = without_primary(previous_accounts, primary)
+    write_atomic(destination, current)
+    if isinstance(previous_accounts, list) and current["googleAccounts"] != previous_accounts:
+        retire_profiles(previous_accounts, current["googleAccounts"], profile, former_profile)
 print("  backend set to gws")
 print("  gwsPath set to", gws_path)
 print("  profile set to", profile)
 print("  write set to", write)
 PYEOF
 
+exec {calendar_sign_in_lock}>&-
 install_timer_and_sync
