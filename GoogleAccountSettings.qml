@@ -16,6 +16,7 @@ Column {
 
   property bool available: false
   property var accounts: []
+  property bool statusRefreshPending: false
   property string signInUrl: ""
   property string message: ""
   property bool finished: false
@@ -31,7 +32,11 @@ Column {
   }
 
   function readStatus() {
-    if (!statusProcess.running) statusProcess.running = true
+    if (statusProcess.running) {
+      root.statusRefreshPending = true
+      return
+    }
+    statusProcess.running = true
   }
 
   function startSignIn() {
@@ -67,21 +72,27 @@ Column {
     root.readStatus()
   }
 
-  onActiveChanged: if (active) readStatus()
-  Component.onCompleted: if (active) readStatus()
+  onActiveChanged: if (active) Qt.callLater(root.readStatus)
+  Component.onCompleted: if (active) Qt.callLater(root.readStatus)
 
   Process {
     id: statusProcess
     command: [root.commandPath, "status"]
-    stdout: StdioCollector {
-      onStreamFinished: {
+    stdout: SplitParser {
+      onRead: function(line) {
         try {
-          var status = JSON.parse(text)
+          var status = JSON.parse(line)
           root.available = status.available === true
           root.accounts = status.primary ? [status.primary].concat(status.accounts) : status.accounts
         } catch (error) {
           root.available = false
         }
+      }
+    }
+    onExited: {
+      if (root.statusRefreshPending) {
+        root.statusRefreshPending = false
+        Qt.callLater(root.readStatus)
       }
     }
   }

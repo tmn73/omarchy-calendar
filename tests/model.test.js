@@ -576,6 +576,20 @@ test('otherGuests leaves out the calendar owner', () => {
   assert.deepEqual(Model.otherGuests({ calendarId: 'me@example.com', guests: [] }), [])
 })
 
+test('otherGuests excludes the owner of a calendar from an added Google account', () => {
+  const form = { calendarId: 'gws:work%40example.com:work@example.com', guests: [
+    { email: 'WORK@example.com' }, { email: 'Ana@example.com' }
+  ] }
+  assert.deepEqual(Model.otherGuests(form).map(g => g.email), ['Ana@example.com'])
+})
+
+test('eventIdentity distinguishes calendars and survives across days', () => {
+  const original = { id: 'shared-id', calendarId: 'shared@example.com', dateKey: '2026-08-10' }
+  const added = { ...original, calendarId: 'gws:work%40example.com:shared@example.com' }
+  assert.notEqual(Model.eventIdentity(original), Model.eventIdentity(added))
+  assert.equal(Model.eventIdentity(original), Model.eventIdentity({ ...original, dateKey: '2026-08-11' }))
+})
+
 test('otherGuests leaves out an attendee with no address', () => {
   const form = { calendarId: 'https://caldav.example.com/home/', guests: [{ email: '', responseStatus: 'accepted' }] }
   assert.deepEqual(Model.otherGuests(form), [])

@@ -88,6 +88,30 @@ Done. Events land in ~/.local/state/omarchy/calendar-events.json every 5 minutes
 EOF
 }
 
+# Keep settings written by another setup while this one tested its source.
+commit_setup_candidate() {
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" python3 - "$CONFIG" "$@" <<'PYEOF'
+import sys
+
+from omarchy_calendar_sync import config
+from omarchy_calendar_sync.cli import write_atomic
+
+destination, candidate = sys.argv[1:3]
+identity = sys.argv[3] if len(sys.argv) > 3 else ""
+tested = config.read(candidate)
+backend = tested["backend"]
+with config.locked_path(destination) as path:
+    current = config.read(path, recover_invalid_json=True)
+    current.update({key: tested[key] for key in ("backend", "write", backend)})
+    if backend == "caldav" and not current.get("identity"):
+        username = tested["caldav"]["username"]
+        identity = username if "@" in username else ""
+    if identity:
+        current["identity"] = identity
+    write_atomic(path, current)
+PYEOF
+}
+
 setup_ics() {
   step "Reading your calendar from its secret iCal address"
   if ! python3 -c 'import icalendar, recurring_ical_events' 2>/dev/null; then
@@ -134,12 +158,11 @@ EOF
   mkdir -p "$(dirname "$CONFIG")"
   # The new config replaces the current one only after a test sync passes.
   # A wrong address must not break a setup that works today.
-  local candidate
-  candidate=$(mktemp "$CONFIG.XXXXXX")
-  trap 'rm -f "$candidate"' EXIT
+  SETUP_CANDIDATE=$(mktemp "$CONFIG.XXXXXX")
+  trap 'rm -f "$SETUP_CANDIDATE"' EXIT
   # The addresses go in on file descriptor 3 and the program on stdin. As
   # arguments, they would show to every user on the machine through ps.
-  python3 - "$CONFIG" "$candidate" "$identity" 3< <(printf '%s\n' "${urls[@]}") <<'PYEOF'
+  python3 - "$CONFIG" "$SETUP_CANDIDATE" "$identity" 3< <(printf '%s\n' "${urls[@]}") <<'PYEOF'
 import json, os, pathlib, sys
 
 path, candidate = pathlib.Path(sys.argv[1]), sys.argv[2]
@@ -165,11 +188,11 @@ os.chmod(candidate, 0o600)
 PYEOF
 
   step "Testing the feeds"
-  "$SYNC_BIN" --config "$candidate" || {
+  "$SYNC_BIN" --config "$SETUP_CANDIDATE" || {
     echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
-  mv -f "$candidate" "$CONFIG"
+  commit_setup_candidate "$SETUP_CANDIDATE" "$identity"
   echo "  backend set to ics with ${#urls[@]} feed(s) in $CONFIG"
 
   install_timer_and_sync
@@ -279,30 +302,28 @@ EOF
 
   mkdir -p "$(dirname "$CONFIG")"
   # The new config replaces the current one only after a test sync passes.
-  local candidate
-  candidate=$(mktemp "$CONFIG.XXXXXX")
-  # :- because the trap runs after this function's locals are gone.
-  trap 'rm -f "${candidate:-}"; [ -z "${SETUP_NONCE:-}" ] || secret-tool clear service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"' EXIT
+  SETUP_CANDIDATE=$(mktemp "$CONFIG.XXXXXX")
+  trap 'rm -f "$SETUP_CANDIDATE"; [ -z "${SETUP_NONCE:-}" ] || secret-tool clear service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"' EXIT
 
   if [ "$in_keyring" = 1 ]; then
-    write_caldav_config "$candidate" "$url" "$username" "$password" \
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password" \
       service omarchy-calendar-caldav-setup nonce "$SETUP_NONCE"
   else
-    write_caldav_config "$candidate" "$url" "$username" "$password"
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password"
   fi
 
   step "Testing the account"
-  "$SYNC_BIN" --config "$candidate" || {
+  "$SYNC_BIN" --config "$SETUP_CANDIDATE" || {
     echo "  The sync failed, see above. $CONFIG is unchanged."
     exit 1
   }
   if [ "$in_keyring" = 1 ]; then
     printf '%s' "$password" | secret-tool store --label="Omarchy Calendar CalDAV ($username)" \
       service omarchy-calendar-caldav-account url "$url" username "$username"
-    write_caldav_config "$candidate" "$url" "$username" "$password" \
+    write_caldav_config "$SETUP_CANDIDATE" "$url" "$username" "$password" \
       service omarchy-calendar-caldav-account url "$url" username "$username"
   fi
-  mv -f "$candidate" "$CONFIG"
+  commit_setup_candidate "$SETUP_CANDIDATE"
   echo "  backend set to caldav for $username in $CONFIG"
 
   install_timer_and_sync
@@ -622,29 +643,23 @@ mkdir -p "$(dirname "$CONFIG")"
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$SCRIPT_DIR" \
   python3 - "$CONFIG" "$gws_path" "$PROFILE" "$WRITE" 3<<<"$granted" <<'PYEOF'
 import json, os, pathlib, sys
+from omarchy_calendar_sync import config
 from omarchy_calendar_sync.cli import write_atomic
-from omarchy_calendar_sync.google_setup import account_email
+from omarchy_calendar_sync.google_setup import account_email, without_primary
 
 path, gws_path, profile = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 write = sys.argv[4] == "1"
-config = {}
-if path.exists():
-    try:
-        config = json.loads(path.read_text())
-    except ValueError:
-        config = {}
-# This flow sets up the Google Cloud sync, so it must also select it.
-# Without this line, a config left by setup --ics keeps reading the feeds.
-config["backend"] = "gws"
-config["gwsPath"] = gws_path
-config["profile"] = profile
-config["write"] = write
 with os.fdopen(3) as stream:
     try:
-        config["googlePrimaryEmail"] = account_email(json.load(stream))
+        primary = account_email(json.load(stream))
     except ValueError:
-        config.pop("googlePrimaryEmail", None)
-write_atomic(path, config)
+        primary = ""
+with config.locked_path(path) as destination:
+    current = config.read(destination, recover_invalid_json=True)
+    current.update(backend="gws", gwsPath=gws_path, profile=profile, write=write, googlePrimaryEmail=primary)
+    if primary and isinstance(current.get("googleAccounts"), list):
+        current["googleAccounts"] = without_primary(current["googleAccounts"], primary)
+    write_atomic(destination, current)
 print("  backend set to gws")
 print("  gwsPath set to", gws_path)
 print("  profile set to", profile)

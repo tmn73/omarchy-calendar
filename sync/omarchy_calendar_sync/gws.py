@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import budget
 from .bounded import MAX_ERROR_BYTES, ResponseTooLarge, read_at_most, read_body
-from .errors import EventNotFound, SyncError
+from .errors import CalendarUnavailable, EventNotFound, SyncError
 
 MINIMUM_VERSION = (0, 13, 2)
 FALLBACK_COLOR = "#9e9e9e"
@@ -31,6 +31,7 @@ WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SIGN_IN_EXPIRED = "Your Google sign-in expired. Run sync/setup --write."
 NO_SIGN_IN = "No Google sign-in to write with. Run sync/setup --write."
+RECONNECT = "Reconnect this Google account in Calendar settings."
 MASKED_SIGN_IN = "gws did not hand over the sign-in. Update gws, then try again."
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 HTTP_TIMEOUT_SECONDS = 30
@@ -257,7 +258,9 @@ class Gws:
         except json.JSONDecodeError:
             payload = None
         if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-            _raise_api_error(payload["error"])
+            _raise_api_error(payload["error"], self.isolated)
+        if self.isolated and status == 401:
+            raise GwsSignInError(RECONNECT)
         if not 200 <= status < 300:
             raise GwsApiError(f"Google answered HTTP {status}")
         if payload is None and text.strip():
@@ -306,17 +309,12 @@ class Gws:
 
     def _signin_message(self, primary_message):
         if self.isolated:
-            return "Reconnect this Google account in Calendar settings."
+            return RECONNECT
         return primary_message
 
     def _json(self, args):
         """Run gws and parse stdout."""
-        try:
-            return self._parse(*self._run(args))
-        except GwsAuthError as error:
-            if self.isolated and str(error).startswith("401:"):
-                raise GwsSignInError(self._signin_message(SIGN_IN_EXPIRED)) from error
-            raise
+        return self._parse(*self._run(args))
 
     def _parse(self, exit_code, stdout, stderr):
         """Parse one gws reply, or raise the error it carries.
@@ -335,7 +333,7 @@ class Gws:
             decode_error = error
 
         if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-            _raise_api_error(payload["error"])
+            _raise_api_error(payload["error"], self.isolated)
 
         if exit_code != 0:
             excerpt = stderr.strip()[:200] or "no stderr output"
@@ -385,6 +383,8 @@ class GwsAccounts:
         for key, account, client in sources:
             try:
                 found = client.calendars()
+            except budget.TookTooLong:
+                raise
             except SyncError as error:
                 label = account.get("email", "the original account")
                 print(f"skipping Google calendars for {label}: {error}", file=sys.stderr)
@@ -396,7 +396,7 @@ class GwsAccounts:
                         **calendar,
                         "id": f"{self.PREFIX}{key}:{calendar['id']}",
                         "originalId": calendar["id"],
-                        "account": account["email"],
+                        "qualifiedName": f"{calendar['name']} ({account['email']})",
                         "writable": calendar["writable"] and account.get("write") is True,
                     }
                 calendars.append(calendar)
@@ -405,9 +405,9 @@ class GwsAccounts:
         names = Counter(calendar["name"].casefold() for calendar in calendars)
         for calendar in calendars:
             name = calendar["name"]
-            if calendar.get("account") and names[name.casefold()] > 1:
+            if calendar.get("qualifiedName") and names[name.casefold()] > 1:
                 calendar["originalName"] = name
-                calendar["name"] = f"{name} ({calendar['account']})"
+                calendar["name"] = calendar["qualifiedName"]
         return sorted(calendars, key=lambda calendar: calendar["name"])
 
     def _route(self, calendar_id):
@@ -420,7 +420,12 @@ class GwsAccounts:
 
     def events(self, calendar_id, time_min, time_max):
         client, original_id = self._route(calendar_id)
-        return client.events(original_id, time_min, time_max)
+        try:
+            return client.events(original_id, time_min, time_max)
+        except (budget.TookTooLong, budget.TooManyEvents):
+            raise
+        except SyncError as error:
+            raise CalendarUnavailable(str(error)) from error
 
     def get(self, calendar_id, event_id):
         client, original_id = self._route(calendar_id)
@@ -451,7 +456,7 @@ def _events_path(calendar_id, event_id=None):
     return path if event_id is None else f"{path}/{_quote(event_id)}"
 
 
-def _raise_api_error(error):
+def _raise_api_error(error, isolated=False):
     """Raise what one Google error object means, the same for gws and HTTPS."""
     error_code = error.get("code")
     if error_code is None:
@@ -462,6 +467,9 @@ def _raise_api_error(error):
     if error_code == 403 and reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
         raise GwsApiError(f"{error_code}: {message}")
     if error_code in (401, 403):
+        lowered = str(message).lower()
+        if isolated and (error_code == 401 or "insufficient" in lowered and "scope" in lowered):
+            raise GwsSignInError(RECONNECT)
         raise GwsAuthError(f"{error_code}: {message}")
     # 410 is what Google answers for an event that was deleted.
     if error_code in (404, 410):

@@ -1,12 +1,16 @@
 import json
 import os
+import shutil
 import subprocess
 import tempfile
+import time
 import unittest
+from datetime import datetime, timezone
+from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import Mock
 
-from omarchy_calendar_sync import config, gws
+from omarchy_calendar_sync import budget, cli, config, gws
 
 GOOGLE_COMMAND = Path(__file__).resolve().parents[1] / "sync" / "omarchy-calendar-google"
 
@@ -48,14 +52,76 @@ class TestGoogleAccounts(unittest.TestCase):
         work.calendars.side_effect = gws.GwsAuthError("expired")
         self.assertEqual(client.calendars(), [shared])
 
+        work.calendars.side_effect = None
+        client.primary.calendars.return_value = []
+        exclude = {"calendars": {"exclude": [work_calendar["name"]]}}
+        self.assertEqual(config.select_calendars(client.calendars(), exclude), [])
+
+    def test_overall_deadline_stops_before_listing_another_account(self):
+        account = {"email": "work@example.com", "profile": "/work"}
+        client = gws.GwsAccounts("/personal", "gws", [account])
+        client.primary = Mock()
+        work = Mock()
+        client.additional["work%40example.com"] = (account, work)
+        client.primary.calendars.side_effect = budget.TookTooLong("deadline")
+        with self.assertRaises(budget.TookTooLong):
+            client.calendars()
+        work.calendars.assert_not_called()
+
+    def test_sync_keeps_healthy_calendars_when_one_calendar_cannot_list_events(self):
+        account = {"email": "work@example.com", "profile": "/work", "write": True}
+        client = gws.GwsAccounts("/personal", "gws", [account])
+        client.primary = Mock()
+        work = Mock()
+        client.additional["work%40example.com"] = (account, work)
+        client.primary.version.return_value = (0, 22, 5)
+        client.primary.auth_hint.return_value = ""
+        client.primary.calendars.return_value = [
+            {"id": "personal", "name": "Personal", "color": "#123456", "writable": True},
+        ]
+        work.calendars.return_value = [
+            {"id": "work", "name": "Work", "color": "#123456", "writable": True},
+        ]
+        client.primary.events.return_value = [{
+            "id": "event", "summary": "Personal event",
+            "start": {"date": "2026-08-10"}, "end": {"date": "2026-08-11"},
+        }]
+        work.events.side_effect = gws.GwsAuthError("403: forbidden")
+        now = datetime(2026, 8, 10, tzinfo=timezone.utc)
+        cfg = {**config.DEFAULTS, "write": True}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "events.json"
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_OK)
+            snapshot = out.read_bytes()
+            doc = json.loads(snapshot)
+            self.assertEqual([event["title"] for event in doc["events"]], ["Personal event"])
+            self.assertEqual([cal["id"] for cal in doc["writableCalendars"]], ["personal"])
+
+            client.primary.events.side_effect = gws.GwsAuthError("403: forbidden")
+            self.assertEqual(cli.run(client, cfg, now, out, timezone.utc), cli.EXIT_SYNC_FAILED)
+            self.assertEqual(out.read_bytes(), snapshot)
+
+    def test_added_account_write_errors_suggest_reconnecting_that_account(self):
+        client = gws.Gws("/work", http=Mock(), isolated=True)
+        client._access_token = "test"
+        for code, message in ((401, "Invalid credentials"), (403, "insufficient authentication scopes")):
+            with self.subTest(code=code):
+                client._http.return_value = (code, json.dumps({"error": {"code": code, "message": message}}))
+                with self.assertRaisesRegex(gws.GwsSignInError, "Reconnect this Google account"):
+                    client.delete("work@example.com", "event")
+        client._http.return_value = (403, json.dumps({"error": {"code": 403, "message": "Forbidden"}}))
+        with self.assertRaisesRegex(gws.GwsAuthError, "403: Forbidden"):
+            client.delete("work@example.com", "event")
+
 
 class TestGoogleSignIn(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        self.profile = self.root / "original"
-        self.profile.mkdir()
+        self.profile = self.root / ".config/gws-omarchy-calendar"
+        self.profile.mkdir(parents=True)
         (self.profile / "client_secret.json").write_text("original client")
         (self.profile / "credentials.enc").write_text("original credentials")
         self.config_path = self.root / ".config/omarchy/calendar-sync.json"
@@ -68,9 +134,9 @@ from pathlib import Path
 env = os.environ
 profile = Path(env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"])
 args = sys.argv[1:]
-if profile.name == "original":
+if profile.name == "gws-omarchy-calendar":
     assert args == ["auth", "status"]
-    print(json.dumps({"user": "original@example.com"}))
+    print(json.dumps({"user": env.get("TEST_PRIMARY_USER", "original@example.com")}))
 else:
     assert env["GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND"] == "file"
     assert "GOOGLE_WORKSPACE_CLI_TOKEN" not in env
@@ -141,6 +207,80 @@ else:
         self.assertEqual(self.config_path.read_bytes(), before)
         self.assertEqual(list((self.profile / "accounts").glob("account-*")), [])
         self.assertFalse((self.root / "sync-requests").exists())
+
+    def test_add_can_create_the_config_when_the_original_profile_uses_defaults(self):
+        self.config_path.unlink()
+        self.assertTrue(self.command("status")[0]["available"])
+        self.assertEqual(self.command("add")[-1]["result"], "added")
+        account, = json.loads(self.config_path.read_text())["googleAccounts"]
+        self.assertFalse(account["write"])
+        self.assertEqual(self.command("status")[0]["accounts"], ["work@example.com"])
+
+    def test_add_updates_the_target_of_a_managed_config_symlink(self):
+        target = self.root / "managed-calendar.json"
+        self.config_path.rename(target)
+        self.config_path.symlink_to(target)
+        self.assertEqual(self.command("add")[-1]["result"], "added")
+        self.assertTrue(self.config_path.is_symlink())
+        self.assertEqual(json.loads(target.read_text())["googleAccounts"][0]["email"], "work@example.com")
+
+    def test_primary_identity_is_verified_even_with_a_cached_address(self):
+        original = json.loads(self.config_path.read_text())
+        original["googlePrimaryEmail"] = "original@example.com"
+        self.config_path.write_text(json.dumps(original))
+        self.assertEqual(
+            self.command("status", TEST_PRIMARY_USER="work@example.com")[-1]["primary"], "work@example.com",
+        )
+        self.assertEqual(self.command("add", TEST_PRIMARY_USER="work@example.com")[-1]["result"], "existing")
+        self.assertEqual(
+            self.command("add", TEST_PRIMARY_USER="work@example.com", TEST_GOOGLE_USER="original@example.com")[-1],
+            {"result": "added", "email": "original@example.com", "syncing": True},
+        )
+        self.assertEqual(json.loads(self.config_path.read_text())["googlePrimaryEmail"], "work@example.com")
+
+    @unittest.skipUnless(shutil.which("script") and find_spec("icalendar"), "needs script and iCalendar")
+    def test_ics_setup_keeps_a_google_account_added_while_testing_the_feed(self):
+        source = GOOGLE_COMMAND.parent
+        sync = self.root / "sync"
+        sync.mkdir()
+        shutil.copy(source / "setup", sync)
+        shutil.copytree(source / "systemd", sync / "systemd")
+        (sync / "omarchy_calendar_sync").symlink_to(source / "omarchy_calendar_sync")
+        validator = sync / "omarchy-calendar-sync"
+        validator.write_text("""#!/usr/bin/env python3
+import time
+from pathlib import Path
+
+home = Path.home()
+(home / "validating").touch()
+deadline = time.monotonic() + 10
+while not (home / "validated").exists():
+    if time.monotonic() >= deadline:
+        raise SystemExit(1)
+    time.sleep(0.02)
+""")
+        validator.chmod(0o700)
+        with subprocess.Popen(
+            ["script", "-qec", f"{sync / 'setup'} --ics", "/dev/null"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            env=self.env, text=True,
+        ) as wizard:
+            wizard.stdin.write("https://example.com/calendar.ics\n\n\n")
+            wizard.stdin.flush()
+            try:
+                deadline = time.monotonic() + 5
+                while not (self.root / "validating").exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue((self.root / "validating").exists())
+                self.assertEqual(self.command("add")[-1]["result"], "added")
+            finally:
+                (self.root / "validated").touch()
+                output, _ = wizard.communicate(timeout=15)
+            self.assertEqual(wizard.returncode, 0, output)
+
+        current = json.loads(self.config_path.read_text())
+        self.assertEqual(current["backend"], "ics")
+        self.assertEqual(current["googleAccounts"][0]["email"], "work@example.com")
 
 
 if __name__ == "__main__":

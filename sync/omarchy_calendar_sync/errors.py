@@ -9,5 +9,9 @@ class SyncError(Exception):
     """A calendar source could not be read."""
 
 
+class CalendarUnavailable(SyncError):
+    """One calendar could not be read, while other calendars may still sync."""
+
+
 class EventNotFound(SyncError):
     """The event a write names is no longer at its source."""

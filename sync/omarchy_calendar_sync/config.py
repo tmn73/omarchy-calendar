@@ -5,7 +5,9 @@ with no file at all.
 """
 
 import copy
+import fcntl
 import json
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -53,21 +55,41 @@ class ConfigError(Exception):
     """Raised when the config file exists but cannot be used."""
 
 
-def load(path=None):
-    """Load config, filling in defaults for anything absent."""
+def read(path=None, *, recover_invalid_json=False):
+    """Read the configured values, including keys this version does not use."""
     path = Path(path) if path is not None else CONFIG_PATH
-
-    if not path.exists():
-        return _merge(copy.deepcopy(DEFAULTS), {})
-
     try:
         raw = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError) as error:
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as error:
+        if recover_invalid_json:
+            return {}
+        raise ConfigError(f"cannot read {path}: {error}") from error
+    except OSError as error:
         raise ConfigError(f"cannot read {path}: {error}") from error
 
     if not isinstance(raw, dict):
         raise ConfigError(f"{path} must contain a JSON object")
+    return raw
 
+
+@contextmanager
+def locked_path(path=None):
+    """Serialize setup commits against the destination, including symlink targets."""
+    path = (CONFIG_PATH if path is None else Path(path)).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_name(path.name + ".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield path
+
+
+def load(path=None):
+    """Load config, filling in defaults for anything absent."""
+    return with_defaults(read(path))
+
+
+def with_defaults(raw):
     merged = _merge(copy.deepcopy(DEFAULTS), raw)
 
     _validate_calendars(merged.get("calendars"))
@@ -155,7 +177,8 @@ def select_calendars(calendars, config):
     for calendar in calendars:
         keys = {calendar["id"], calendar["name"],
                 calendar.get("originalId", calendar["id"]),
-                calendar.get("originalName", calendar["name"])}
+                calendar.get("originalName", calendar["name"]),
+                calendar.get("qualifiedName", calendar["name"])}
         if keys & exclude:
             continue
         if include and not (keys & include):

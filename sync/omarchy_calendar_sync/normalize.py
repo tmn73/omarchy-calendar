@@ -146,8 +146,8 @@ def normalize_all(gevents, calendar, tz, window=None):
 def normalize_event(gevent, calendar, tz, window=None):
     """Return one contract row per local day this event covers.
 
-    Rows produced from a single Google event share its id, so consumers must
-    key on id plus dateKey, never on id alone.
+    Consumers can identify an event by calendarId and id, and an individual
+    row by including dateKey for events that span days.
 
     `window` is the (first, last) local dates the sync fetched. Days outside
     it get no row: the widget never shows them, and an event that ends in the

@@ -92,9 +92,18 @@ def setup_profile(cfg):
 
 def send_status():
     cfg = config.load()
-    emit(available=setup_profile(cfg) is not None,
-         primary=cfg["googlePrimaryEmail"],
-         accounts=[account["email"] for account in cfg["googleAccounts"]])
+    profile = setup_profile(cfg)
+    primary = cfg["googlePrimaryEmail"]
+
+    def status(email):
+        emit(available=profile is not None, primary=email,
+             accounts=[account["email"] for account in without_primary(cfg["googleAccounts"], email)])
+
+    status(primary)
+    if profile:
+        verified = verified_primary_email(cfg, profile)
+        if verified and verified != primary:
+            status(verified)
 
 
 def account_email(auth):
@@ -102,14 +111,20 @@ def account_email(auth):
     return email.strip() if isinstance(email, str) and "@" in email else ""
 
 
-def configured_primary_email(cfg, profile):
-    if cfg["googlePrimaryEmail"]:
-        return cfg["googlePrimaryEmail"]
-    # Older setups recorded only the profile path.
+def verified_primary_email(cfg, profile):
     try:
         return account_email(Gws(profile, binary=cfg["gwsPath"]).auth_status())
     except SyncError:
         return ""
+
+
+def without_primary(accounts, email):
+    """Keep accounts other than the one using the primary profile."""
+    key = email.casefold()
+    return [
+        account for account in accounts
+        if not isinstance(account, dict) or str(account.get("email", "")).casefold() != key
+    ]
 
 
 def request_sync():
@@ -157,36 +172,38 @@ def connect(cfg, base_profile, profiles):
         if not email or not client.calendars():
             raise SignInError("Google did not return an account with calendars.")
 
-        primary = configured_primary_email(cfg, base_profile)
-        current = config.load()
-        if setup_profile(current) != base_profile or any(
-            current[key] != cfg[key] for key in ("write", "gwsPath")
-        ):
-            raise SignInError("Calendar setup changed during sign-in. Try adding the account again.")
-        primary = current["googlePrimaryEmail"] or primary
-        if primary.casefold() == email.casefold():
-            emit(result="existing", email=email)
-            return
+        primary = verified_primary_email(cfg, base_profile)
+        with config.locked_path() as path:
+            raw = config.read(path)
+            current = config.with_defaults(raw)
+            if setup_profile(current) != base_profile or any(
+                current[key] != cfg[key] for key in ("write", "gwsPath")
+            ):
+                raise SignInError("Calendar setup changed during sign-in. Try adding the account again.")
+            if primary.casefold() == email.casefold():
+                emit(result="existing", email=email)
+                return
 
-        accounts = current["googleAccounts"]
-        previous = next((a for a in accounts if a["email"].casefold() == email.casefold()), None)
-        entry = {"email": email, "profile": str(profile), "write": bool(cfg["write"])}
-        if previous:
-            accounts[accounts.index(previous)] = entry
-        else:
-            accounts.append(entry)
-        raw = json.loads(config.CONFIG_PATH.read_text())
-        raw.update(googleAccounts=accounts, googlePrimaryEmail=primary)
-        # Keep cancellation from deleting a profile after the config points to it.
-        with on_cancel(signal.SIG_IGN):
-            cli.write_atomic(config.CONFIG_PATH, raw)
-            saved = True
-            syncing = request_sync()
+            accounts = current["googleAccounts"]
+            if primary:
+                accounts = without_primary(accounts, primary)
+            previous = next((a for a in accounts if a["email"].casefold() == email.casefold()), None)
+            entry = {"email": email, "profile": str(profile), "write": bool(cfg["write"])}
             if previous:
-                old_profile = Path(previous["profile"]).expanduser()
-                if old_profile.parent == profiles and old_profile.name.startswith("account-"):
-                    shutil.rmtree(old_profile, ignore_errors=True)
-            emit(result="reconnected" if previous else "added", email=email, syncing=syncing)
+                accounts[accounts.index(previous)] = entry
+            else:
+                accounts.append(entry)
+            raw.update(googleAccounts=accounts, googlePrimaryEmail=primary or current["googlePrimaryEmail"])
+            # Keep cancellation from deleting a profile after the config points to it.
+            with on_cancel(signal.SIG_IGN):
+                cli.write_atomic(path, raw)
+                saved = True
+                syncing = request_sync()
+                if previous:
+                    old_profile = Path(previous["profile"]).expanduser()
+                    if old_profile.parent == profiles and old_profile.name.startswith("account-"):
+                        shutil.rmtree(old_profile, ignore_errors=True)
+                emit(result="reconnected" if previous else "added", email=email, syncing=syncing)
     finally:
         if not saved:
             shutil.rmtree(profile, ignore_errors=True)

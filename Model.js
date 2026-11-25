@@ -412,8 +412,8 @@ function monthGrid(year, month, weekStart, todayKey, eventIndex, showLunarDates,
 
 // ---- Events and calendars. The widget renders whatever the sync wrote;
 //      none of this knows where the events came from. A multi-day event is
-//      one row per day it covers, all sharing its id, so rows are told
-//      apart by id plus dateKey (or id plus start, for the event itself).
+//      one row per day it covers. The event shares a calendar ID and event
+//      ID across rows, and each row has its own dateKey.
 
 // The events file as text, read into { doc, mismatch }. `doc` is the parsed
 // document, or null when there is nothing to show: no file, text that is not
@@ -509,12 +509,16 @@ function calendarEventCounts(doc) {
   for (var i = 0; i < events.length; i++) {
     var event = events[i]
     if (!event) continue
-    var key = event.calendarId + "|" + event.id
+    var key = eventIdentity(event)
     if (seen[key]) continue
     seen[key] = true
     counts[event.calendarId] = (counts[event.calendarId] || 0) + 1
   }
   return counts
+}
+
+function eventIdentity(event) {
+  return JSON.stringify([text(event.calendarId), text(event.id)])
 }
 
 function isCalendarHidden(hidden, calendarId) {
@@ -1507,7 +1511,10 @@ function isValidEmail(address) {
 // An attendee with no address cannot get one: an iCalendar source can
 // report only your own answer, with no email beside it.
 function otherGuests(form) {
-  var me = normalizeEmail(form.calendarId)
+  // Added Google accounts qualify the calendar ID for routing. Google
+  // still uses the original ID for the calendar's address.
+  var calendarId = text(form.calendarId).replace(/^gws:[^:]+:/, "")
+  var me = normalizeEmail(calendarId)
   var out = []
   var guests = form.guests || []
   for (var i = 0; i < guests.length; i++) {

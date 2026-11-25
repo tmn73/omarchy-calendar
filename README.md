@@ -498,7 +498,7 @@ Rules a writer has to follow:
 - `dateKey` is `YYYY-MM-DD` in local time, and it is what the grid keys on.
 - A multi-day event is emitted **once per day it covers**, each row with its own
   `dateKey`. Those rows share an `id`, so the unique key for a row is
-  `id + dateKey`.
+  `calendarId + id + dateKey`.
 - `allDay` events are excluded from the countdown, since counting down to
   midnight tells you nothing.
 - Write the file atomically, temp file then rename. The widget watches it.
