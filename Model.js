@@ -611,6 +611,23 @@ function meetingUrlFor(event) {
   return event ? safeUrl(event.meetingUrl) : ""
 }
 
+// Give Meet the account that supplied this event, including for shared
+// calendars. Keep the invitation link itself available for copying.
+function meetingJoinUrlFor(event) {
+  var url = meetingUrlFor(event)
+  var account = text(event && event.googleAccount).trim()
+  var meet = url.match(/^(https:\/\/meet\.google\.com(?::443)?(?:\/[^?#]*)?)(?:\?([^#]*))?(#.*)?$/i)
+  if (!meet || !isValidEmail(account)) return url
+
+  var params = (meet[2] || "").split("&").filter(function(param) {
+    var name = param.split("=", 1)[0]
+    try { return name !== "" && decodeURIComponent(name).toLowerCase() !== "authuser" }
+    catch (error) { return true }
+  })
+  params.push("authuser=" + encodeQuery(account))
+  return meet[1] + "?" + params.join("&") + (meet[3] || "")
+}
+
 // The event's own page, used when there is nothing to join. Older files and
 // third-party writers have no such field, which is why this is never assumed.
 function eventUrlFor(event) {
@@ -649,7 +666,7 @@ function meetingService(url) {
 // clock, or a keybinding. Whoever sends an invitation sets its link, so only
 // a known video service opens blind; any other link is shown in the panel.
 function blindJoinUrl(event) {
-  var url = meetingUrlFor(event)
+  var url = meetingJoinUrlFor(event)
   var service = meetingService(url)
   return service && !service.anyoneCanHost ? url : ""
 }
@@ -1323,12 +1340,14 @@ function pruneRecentReminders(recent, nowMs) {
 
 // Only what a snoozed reminder needs to be rebuilt after a shell reload.
 function slimReminderEvent(event) {
-  return {
+  var saved = {
     id: event.id, calendarId: event.calendarId,
     start: event.start, end: event.end, allDay: event.allDay === true,
     dateKey: event.dateKey, title: event.title, location: event.location,
     meetingUrl: event.meetingUrl, eventUrl: event.eventUrl
   }
+  if (event.googleAccount) saved.googleAccount = event.googleAccount
+  return saved
 }
 
 function capitalized(value) {

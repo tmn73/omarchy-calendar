@@ -176,6 +176,11 @@ class Gws:
 
     def calendars(self):
         payload = self._json(["calendar", "calendarList", "list"])
+        items = payload.get("items", [])
+        account_email = next(
+            (item["id"] for item in items if item.get("primary") is True and "@" in item["id"]),
+            "",
+        )
         calendars = [
             {
                 "id": item["id"],
@@ -189,11 +194,12 @@ class Gws:
                 "primary": item.get("primary") is True,
                 "accessRole": item.get("accessRole"),
                 "writable": item.get("accessRole") in ("owner", "writer"),
+                "googleAccount": account_email,
                 # An event with reminders.useDefault names no minutes of its
                 # own; these are what it means.
                 "defaultReminders": item.get("defaultReminders") or [],
             }
-            for item in payload.get("items", [])
+            for item in items
         ]
         return sorted(calendars, key=lambda calendar: calendar["name"])
 
@@ -399,6 +405,7 @@ class GwsAccounts:
                         "id": f"{self.PREFIX}{key}:{calendar['id']}",
                         "originalId": calendar["id"],
                         "qualifiedName": f"{calendar['name']} ({account['email']})",
+                        "googleAccount": calendar.get("googleAccount") or account["email"],
                         "writable": calendar["writable"] and account.get("write") is True,
                     }
                 calendars.append(calendar)

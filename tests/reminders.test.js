@@ -234,6 +234,13 @@ test('slimReminderEvent keeps what a snoozed reminder needs', () => {
   assert.equal(slim.meetingUrl, 'https://meet.google.com/x')
 })
 
+test('snoozed Meet reminders keep the connected account', () => {
+  const saved = Model.slimReminderEvent(event({
+    meetingUrl: 'https://meet.google.com/x', googleAccount: 'work@example.com'
+  }))
+  assert.equal(Model.meetingJoinUrlFor(saved), 'https://meet.google.com/x?authuser=work%40example.com')
+})
+
 test('reminderHeadline counts down, then says it is starting', () => {
   assert.equal(Model.reminderHeadline(event(), START - 10 * MIN, 'en', true), 'Design review in 10 min')
   assert.equal(Model.reminderHeadline(event(), START - 9.5 * MIN, 'pt', true), 'Design review em 10 min')

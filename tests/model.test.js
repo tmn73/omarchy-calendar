@@ -317,6 +317,31 @@ test('meetingUrlFor is empty rather than undefined when absent', () => {
   assert.equal(Model.meetingUrlFor({ meetingUrl: 'https://z.com/1' }), 'https://z.com/1')
 })
 
+test('joining Google Meet uses the connected account and keeps the original invitation link', () => {
+  const meetingUrl = 'https://meet.google.com/abc-defg-hij?hs=122&authuser=0&auth%75ser=1#details'
+  const event = { meetingUrl, googleAccount: 'work+calendar@example.com' }
+  const joined = 'https://meet.google.com/abc-defg-hij?hs=122&authuser=work%2Bcalendar%40example.com#details'
+  assert.equal(Model.meetingJoinUrlFor(event), joined)
+  assert.equal(Model.blindJoinUrl(event), joined)
+  assert.equal(Model.meetingUrlFor(event), meetingUrl)
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl }), meetingUrl)
+})
+
+test('a Meet account hint is only added to the exact HTTPS Google Meet host', () => {
+  const googleAccount = 'work@example.com'
+  const meetingUrl = 'https://meet.google.com/abc-defg-hij'
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl, googleAccount }), meetingUrl + '?authuser=work%40example.com')
+  for (const other of [
+    'https://zoom.us/j/123',
+    'https://meet.google.com.example.net/abc-defg-hij',
+    'https://meet.google.com@other.example/abc-defg-hij',
+    'https://meet.google.com:8080/abc-defg-hij'
+  ]) {
+    assert.equal(Model.meetingJoinUrlFor({ meetingUrl: other, googleAccount }), other)
+  }
+  assert.equal(Model.meetingJoinUrlFor({ meetingUrl, googleAccount: 'invalid account' }), meetingUrl)
+})
+
 const meeting = (start, end, extra = {}) => ({
   id: 's', title: 'Standup', allDay: false, dateKey: '2026-08-10',
   start, end, meetingUrl: 'https://meet.google.com/x', ...extra

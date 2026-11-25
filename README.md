@@ -179,6 +179,9 @@ account**. Pick the account in your browser and grant calendar access. The
 plugin reuses the OAuth client from setup, then syncs calendars from both
 accounts. If you enabled event editing, grant that permission too.
 
+Google Meet opens with an account hint for the Google account that synced
+the event. Sign into that account in your browser to join as that account.
+
 To reconnect an added account, use the same button and select that account
 again. If your OAuth app is still in Testing, add the account as a test user
 in Google Cloud first.
@@ -482,6 +485,7 @@ These extra fields are optional. Omit them and everything still works:
 | Field | Effect |
 |---|---|
 | `meetingUrl` | Shows the **Join** button around the event's time. Must be `https`, anything else is dropped |
+| `googleAccount` | Email address to use as the browser account hint when opening a Google Meet link |
 | `eventUrl` | Opens the event in its calendar. Must be `https` |
 | `eventType` | `workingLocation` is hidden by default, `outOfOffice` is labelled |
 | `responseStatus` | `declined` is struck through, and can be hidden entirely |

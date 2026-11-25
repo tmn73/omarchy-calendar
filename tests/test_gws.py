@@ -90,9 +90,10 @@ class TestCalendars(unittest.TestCase):
             calendars,
             [
                 {"id": "a@example.com", "name": "Personal", "color": "#f83a22", "primary": True, "writable": False,
-                 "accessRole": None, "defaultReminders": [{"method": "popup", "minutes": 10}, {"method": "email", "minutes": 1440}]},
+                 "accessRole": None, "googleAccount": "a@example.com",
+                 "defaultReminders": [{"method": "popup", "minutes": 10}, {"method": "email", "minutes": 1440}]},
                 {"id": "b@example.com", "name": "Phases of the Moon", "color": "#fad165", "primary": False, "writable": False,
-                 "accessRole": None, "defaultReminders": []},
+                 "accessRole": None, "googleAccount": "a@example.com", "defaultReminders": []},
             ],
         )
 

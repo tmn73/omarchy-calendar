@@ -200,6 +200,8 @@ def run(client, cfg, now, out_path, local_tz):
                 continue
             offered.add(original_id)
             entry = {"id": c["id"], "name": c["name"], "color": c["color"]}
+            if c.get("googleAccount"):
+                entry["googleAccount"] = c["googleAccount"]
             # What the form offers that this calendar cannot store.
             if c.get("lacks"):
                 entry["lacks"] = list(c["lacks"])

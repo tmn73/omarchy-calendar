@@ -182,6 +182,8 @@ def normalize_event(gevent, calendar, tz, window=None):
     end_iso = end_dt.isoformat()
 
     meeting_url = _meeting_url(gevent)
+    account = calendar.get("googleAccount")
+    meeting_account = {"googleAccount": account} if meeting_url and account else {}
     event_url = _https_only(gevent.get("htmlLink"))
     event_type = str(gevent.get("eventType") or "")
     response_status = _response_status(gevent)
@@ -201,6 +203,7 @@ def normalize_event(gevent, calendar, tz, window=None):
             "title": title,
             "location": location,
             "meetingUrl": meeting_url,
+            **meeting_account,
             "eventUrl": event_url,
             "eventType": event_type,
             "responseStatus": response_status,

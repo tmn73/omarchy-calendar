@@ -134,11 +134,14 @@ class TestGoogleAccounts(unittest.TestCase):
         client.additional["work%40example.com"] = (account, work)
         client.primary.version.return_value = (0, 22, 5)
         shared = {"id": "shared", "name": "Projects", "color": "#123456"}
-        client.primary.calendars.return_value = [{**shared, "accessRole": "reader", "writable": False}]
+        client.primary.calendars.return_value = [
+            {**shared, "accessRole": "reader", "writable": False, "googleAccount": "personal@example.com"},
+        ]
         work.calendars.return_value = [{**shared, "accessRole": "owner", "writable": True}]
         event = {
             "id": "event", "iCalUID": "event@example.com", "summary": "Shared project",
             "start": {"date": "2026-08-10"}, "end": {"date": "2026-08-11"},
+            "hangoutLink": "https://meet.google.com/abc-defg-hij",
         }
         client.primary.events.return_value = [{**event, "summary": "Busy"}]
         work.events.return_value = [event]
@@ -151,6 +154,8 @@ class TestGoogleAccounts(unittest.TestCase):
             doc = json.loads(out.read_text())
             saved, = doc["events"]
             self.assertEqual(saved["calendarId"], doc["writableCalendars"][0]["id"])
+            self.assertEqual(saved["googleAccount"], "work@example.com")
+            self.assertEqual(doc["writableCalendars"][0]["googleAccount"], "work@example.com")
             client.primary.events.assert_not_called()
 
             cfg["write"] = False
@@ -164,6 +169,7 @@ class TestGoogleAccounts(unittest.TestCase):
             saved, = json.loads(out.read_text())["events"]
             self.assertEqual(saved["title"], "Busy")
             self.assertEqual(saved["calendarId"], shared["id"])
+            self.assertEqual(saved["googleAccount"], "personal@example.com")
 
 
 class TestGoogleSignIn(unittest.TestCase):
